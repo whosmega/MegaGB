@@ -254,6 +254,9 @@ static void sbcR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     TEST_C_FLAG_SUB8(vm, old, toSub - carry);
 }
 
+static void andR8(VM* vm, GP_REG R8, GP_REG R8) {
+    uint8_t 
+}
 
 static void cpl(VM* vm) {
     vm->GPR[R8_A] = ~vm->GPR[R8_A];
@@ -566,6 +569,7 @@ void runVM(VM* vm) {
             case 0x9D: sbcR8(vm, R8_A, R8_L); break;
             case 0x9E: sbcR8R16(vm, R8_A, R16_HL); break;
             case 0x9F: sbcR8(vm, R8_A, R8_A); break;
+            case 0xA0: 
             case 0xC3: JUMP(vm); break;
         }
     }    
