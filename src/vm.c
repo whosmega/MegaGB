@@ -4,22 +4,40 @@
 #include "../include/vm.h"
 #include "../include/debug.h"
 
+#define PORT_ADDR 0xFF00
+
 #define LOAD_RR_D16(vm, RR) set_reg16(vm, RR, READ_16BIT(vm))
 #define LOAD_RR_R(vm, RR, R) set_reg16(vm, RR, vm->GPR[R])
 #define LOAD_R_D8(vm, R) vm->GPR[R] = READ_BYTE(vm) 
 #define LOAD_R_RR(vm, R, RR) vm->GPR[R] = (uint8_t)get_reg16(vm, RR)
 #define LOAD_RR_D8(vm, RR) set_reg16(vm, RR, (uint16_t)READ_BYTE(vm))
 #define LOAD_R_R(vm, R1, R2) vm->GPR[R1] = vm->GPR[R2]
+#define LOAD_RR_RR(vm, RR1, RR2) set_reg16(vm, RR1, get_reg16(vm, RR2))
+/* Load instructions from reading into and writing into main memory */
+#define LOAD_MEM_R(vm, R) writeAddr(vm, READ_16BIT(vm), vm->GPR[R])
+#define LOAD_R_MEM(vm, R) vm->GPR[R] = vm->MEM[READ_16BIT(vm)]
+/* Load 'R' into '(PORT_ADDR + D8)' */
+#define LOAD_R_D8PORT(vm, R) writeAddr(vm, PORT_ADDR + READ_BYTE(vm), vm->GPR[R])
+/* Load '(PORT_ADDR + D8) into 'R' */
+#define LOAD_D8PORT_R(vm, R) vm->GPR[R] = vm->MEM[PORT_ADDR + READ_BYTE(vm)]
+/* Load 'R1' into '(PORT_ADDR + R2)' */
+#define LOAD_RPORT_R(vm, R1, R2) writeAddr(vm, PORT_ADDR + vm->GPR[R2], vm->GPR[R1])
+/* Load '(PORT_ADDR + R2)' into 'R1' */
+#define LOAD_R_RPORT(vm, R1, R2) vm->GPR[R1] = vm->MEM[PORT_ADDR + vm->GPR[R2]]
+
 #define INC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) + 1))
 #define DEC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) - 1)) 
 
 /* Direct Jump */
-#define JUMP(vm) vm->PC = READ_16BIT(vm)
+#define JUMP(vm, a16) vm->PC = a16
 /* Relative Jump */
-#define JUMP_RL(vm) vm->PC += (int8_t)READ_BYTE(vm)
+#define JUMP_RL(vm, i8) vm->PC += (int8_t)i8
 
 #define PUSH_R16(vm, RR) push16(vm, get_reg16(vm, RR))
 #define POP_R16(vm, RR) set_reg16(vm, RR, pop16(vm))
+#define RST(vm, a16) call(vm, a16)
+#define INTERRUPT_MASTER_ENABLE(vm) vm->IME = true
+#define INTERRUPT_MASTER_DISABLE(vm) vm->IME = false
 #define CCF(vm) set_flag(vm, FLAG_C, get_flag(vm, FLAG_C) ^ 1)
 /* Flag utility macros */
 #define TEST_Z_FLAG(vm, r) set_flag(vm, FLAG_Z, r == 0 ? 1 : 0)
@@ -33,7 +51,8 @@
 /* Test for integer overloads and set carry flags */
 #define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, (uint32_t)x + (uint32_t)y > 0xFFFF ? 1 : 0)
 #define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, (uint16_t)x + (uint16_t)y > 0xFF ? 1 : 0)
-#define TEST_C_FLAG_SUB8(vm, x, y) set_flag(vm, FLAG_C, (int32_t)x - (int32_t)y < 0 ? 1 : 0)
+/* Works for both 8 bit and 16 bit */
+#define TEST_C_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_C, (int32_t)x - (int32_t)y < 0 ? 1 : 0)
 
 static inline void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
 
@@ -150,6 +169,31 @@ static void addR16(VM* vm, GP_REG RR1, GP_REG RR2) {
     TEST_C_FLAG_ADD16(vm, old, toAdd);
 }
 
+/* Adding a signed 8 bit integer to a 16 bit register */
+
+static void addR16I8(VM* vm, GP_REG RR1, GP_REG RR_STORE) {
+    /* This function is a little bit special because it provides an extra parameter 
+     * for a 16 bit register, which is where the final result is stored. 
+     *
+     * This comes in handy for another instruction */
+    uint16_t old = get_reg16(vm, RR1); 
+    int8_t toAdd = (int8_t)READ_BYTE(vm);
+    uint16_t result = set_reg16(vm, RR_STORE, old + toAdd);
+    set_flag(vm, FLAG_Z, 0);
+    set_flag(vm, FLAG_N, 0);
+
+    if (toAdd < 0) {
+        /* Negative integer addition means, subtraction so we
+         * do subtraction tests */
+        TEST_H_FLAG_SUB(vm, old, result);
+        TEST_C_FLAG_SUB(vm, old, -toAdd);
+    } else {
+        /* Normal addition with a number being 0 or greater */
+        TEST_H_FLAG_ADD(vm, old, result);
+        TEST_C_FLAG_ADD16(vm, old, toAdd);
+    }
+}
+
 static void addR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t old = vm->GPR[R1];
     uint8_t toAdd = vm->GPR[R2];
@@ -161,6 +205,19 @@ static void addR8(VM* vm, GP_REG R1, GP_REG R2) {
     set_flag(vm, FLAG_N, 0);
     TEST_H_FLAG_ADD(vm, old, result);
     TEST_C_FLAG_ADD8(vm, old, toAdd);
+}
+
+static void addR8D8(VM* vm, GP_REG R) {
+    uint8_t data = READ_BYTE(vm);
+    uint8_t old = vm->GPR[R];
+    uint8_t result = old + data;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    TEST_H_FLAG_ADD(vm, old, result);
+    TEST_C_FLAG_ADD8(vm, old, data);
 }
 
 static void addR8R16(VM* vm, GP_REG R8, GP_REG R16) {
@@ -193,6 +250,20 @@ static void adcR8(VM* vm, GP_REG R1, GP_REG R2) {
     TEST_C_FLAG_ADD8(vm, old, toAdd + carry);
 }
 
+static void adcR8D8(VM* vm, GP_REG R) {
+    uint16_t data = (uint16_t)READ_BYTE(vm);
+    uint8_t old = vm->GPR[R];
+    uint8_t carry = get_flag(vm, FLAG_C);
+    uint8_t result = old + data + carry;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    TEST_H_FLAG_ADD(vm, old, result);
+    TEST_C_FLAG_ADD8(vm, old, data + carry);
+}
+
 static void adcR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
     uint16_t toAdd = get_reg16(vm, R16);
@@ -217,7 +288,20 @@ static void subR8(VM* vm, GP_REG R1, GP_REG R2) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
     TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB8(vm, old, toSub);
+    TEST_C_FLAG_SUB(vm, old, toSub);
+}
+
+static void subR8D8(VM* vm, GP_REG R) {
+    uint8_t data = READ_BYTE(vm);
+    uint8_t old = vm->GPR[R];
+    uint8_t result = old - data;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 1);
+    TEST_H_FLAG_SUB(vm, old, result);
+    TEST_C_FLAG_SUB(vm, old, data);
 }
 
 static void subR8R16(VM* vm, GP_REG R8, GP_REG R16) {
@@ -230,35 +314,49 @@ static void subR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
     TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB8(vm, old, toSub);
+    TEST_C_FLAG_SUB(vm, old, toSub);
 }
 
 static void sbcR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t old = vm->GPR[R1];
     int32_t toSub = (int32_t)vm->GPR[R2];
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old - toSub;
+    uint8_t result = old - toSub - carry;
 
     vm->GPR[R1] = result;
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
     TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB8(vm, old, toSub - carry);
+    TEST_C_FLAG_SUB(vm, old, toSub - carry);
+}
+
+static void sbcR8D8(VM* vm, GP_REG R) {
+    uint16_t data = (uint16_t)READ_BYTE(vm);
+    uint8_t old = vm->GPR[R];
+    uint8_t carry = get_flag(vm, FLAG_C);
+    uint8_t result = old - data - carry;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 1);
+    TEST_H_FLAG_SUB(vm, old, result);
+    TEST_C_FLAG_SUB(vm, old, data - carry);
 }
 
 static void sbcR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
     int32_t toSub = (int32_t)get_reg16(vm, R16);
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old - toSub;
+    uint8_t result = old - toSub - carry;
 
     vm->GPR[R8] = result;
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
     TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB8(vm, old, toSub - carry);
+    TEST_C_FLAG_SUB(vm, old, toSub - carry);
 }
 
 static void andR8(VM* vm, GP_REG R1, GP_REG R2) {
@@ -267,6 +365,19 @@ static void andR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t result = old & operand;
 
     vm->GPR[R1] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 1);
+    set_flag(vm, FLAG_C, 0);
+}
+
+static void andR8D8(VM* vm, GP_REG R) {
+    uint8_t old = vm->GPR[R];
+    uint8_t operand = READ_BYTE(vm);
+    uint8_t result = old & operand;
+
+    vm->GPR[R] = result;
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
@@ -300,6 +411,19 @@ static void xorR8(VM* vm, GP_REG R1, GP_REG R2) {
     set_flag(vm, FLAG_C, 0);
 }
 
+static void xorR8D8(VM* vm, GP_REG R) {
+    uint8_t old = vm->GPR[R];
+    uint8_t operand = READ_BYTE(vm);
+    uint8_t result = old ^ operand;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_C, 0);
+}
+
 static void xorR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
     uint8_t operand = (uint8_t)get_reg16(vm, R16);
@@ -326,6 +450,19 @@ static void orR8(VM* vm, GP_REG R1, GP_REG R2) {
     set_flag(vm, FLAG_C, 0);   
 }
 
+static void orR8D8(VM* vm, GP_REG R) {
+    uint8_t old = vm->GPR[R];
+    uint8_t operand = READ_BYTE(vm);
+    uint8_t result = old | operand;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_C, 0);   
+}
+
 static void orR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
     uint8_t operand = (uint8_t)get_reg16(vm, R16);
@@ -342,6 +479,16 @@ static void orR8R16(VM* vm, GP_REG R8, GP_REG R16) {
 static void compareR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t operand1 = vm->GPR[R1];
     uint8_t operand2 = vm->GPR[R2];
+
+    set_flag(vm, FLAG_Z, operand1 == operand2);
+    set_flag(vm, FLAG_C, operand2 > operand1);
+    set_flag(vm, FLAG_H, operand1 > operand2);
+    set_flag(vm, FLAG_N, 1);
+}
+
+static void compareR8D8(VM* vm, GP_REG R) {
+    uint8_t operand1 = vm->GPR[R];
+    uint8_t operand2 = READ_BYTE(vm);
 
     set_flag(vm, FLAG_Z, operand1 == operand2);
     set_flag(vm, FLAG_C, operand2 > operand1);
@@ -389,6 +536,12 @@ static void call(VM* vm) {
     push16(vm, vm->PC);
 
     vm->PC = callAddress;
+}
+
+static void rst(VM* vm, uint16_t addr) {
+    /* RST are calls to fixed addresses */
+    push16(vm, vm->PC);
+    vm->PC = addr;
 }
 
 static void callCondition(VM* vm, bool isTrue) {
@@ -532,6 +685,12 @@ static void bootROM(VM* vm) {
     memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
 }
 
+static void prefixCB(VM* vm) {
+    /* This function contains opcode interpretations for
+     * all the instruction prefixed by opcode CB */
+
+}
+
 void runVM(VM* vm) {
     for (;;) {
 #ifdef REALTIME_PRINTING
@@ -570,7 +729,7 @@ void runVM(VM* vm) {
             case 0x15: decrementR8(vm, R8_D); break;
             case 0x16: LOAD_R_D8(vm, R8_D); break;
             case 0x17: rotateLeft(vm, R8_A); break;
-            case 0x18: JUMP_RL(vm); break;
+            case 0x18: JUMP_RL(vm, READ_BYTE(vm)); break;
             case 0x19: addR16(vm, R16_HL, R16_DE); break;
             case 0x1A: LOAD_R_RR(vm, R8_A, R16_DE); break;
             case 0x1B: DEC_RR(vm, R16_DE); break;
@@ -767,9 +926,56 @@ void runVM(VM* vm) {
             case 0xC0: retCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC1: POP_R16(vm, R16_BC); break;
             case 0xC2: jumpCondition(vm, CONDITION_NZ(vm)); break;
-            case 0xC3: JUMP(vm); break;
+            case 0xC3: JUMP(vm, READ_16BIT(vm)); break;
             case 0xC4: callCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC5: PUSH_R16(vm, R16_BC); break;
+            case 0xC6: addR8D8(vm, R8_A); break;
+            case 0xC7: rst(vm, 0x00); break;
+            case 0xC8: retCondition(vm, CONDITION_Z(vm)); break;
+            case 0xC9: ret(vm); break;
+            case 0xCA: jumpCondition(vm, CONDITION_Z(vm)); break;
+            case 0xCB: prefixCB(vm); break;
+            case 0xCC: callCondition(vm, CONDITION_Z(vm)); break;
+            case 0xCD: call(vm); break;
+            case 0xCE: adcR8D8(vm, R8_A); break;
+            case 0xCF: rst(vm, 0x08); break;
+            case 0xD0: retCondition(vm, CONDITION_NC(vm)); break;
+            case 0xD1: POP_R16(vm, R16_DE); break;
+            case 0xD2: jumpCondition(vm, CONDITION_NC(vm)); break;
+            case 0xD4: callCondition(vm, CONDITION_NC(vm)); break;
+            case 0xD5: PUSH_R16(vm, R16_DE); break;
+            case 0xD6: subR8D8(vm, R8_A); break;
+            case 0xD7: rst(vm, 0x10); break;
+            case 0xD8: retCondition(vm, CONDITION_C(vm)); break;
+            case 0xD9: ret(vm); INTERRUPT_MASTER_ENABLE(vm); break;
+            case 0xDA: jumpCondition(vm, CONDITION_C(vm)); break;
+            case 0xDC: callCondition(vm, CONDITION_C(vm)); break;
+            case 0xDE: sbcR8D8(vm, R8_A); break;
+            case 0xDF: rst(vm, 0x18); break;
+            case 0xE0: LOAD_D8PORT_R(vm, R8_A); break;
+            case 0xE1: POP_R16(vm, R16_HL); break;
+            case 0xE2: LOAD_RPORT_R(vm, R8_A, R8_C); break;
+            case 0xE5: PUSH_R16(vm, R16_HL); break;
+            case 0xE6: andR8D8(vm, R8_A); break;
+            case 0xE7: rst(vm, 0x20); break;
+            case 0xE8: addR16I8(vm, R16_SP, R16_SP); break;
+            case 0xE9: JUMP(vm, get_reg16(vm, R16_HL)); break; 
+            case 0xEA: LOAD_MEM_R(vm, R8_A); break;
+            case 0xEE: xorR8D8(vm, R8_A); break;
+            case 0xEF: rst(vm, 0x28); break;
+            case 0xF0: LOAD_R_D8PORT(vm, R8_A); break;
+            case 0xF1: POP_R16(vm, R16_AF); break;
+            case 0xF2: LOAD_R_RPORT(vm, R8_A, R8_C); break;
+            case 0xF3: INTERRUPT_MASTER_DISABLE(vm); break;
+            case 0xF5: PUSH_R16(vm, R16_AF); break;
+            case 0xF6: orR8D8(vm, R8_A); break;
+            case 0xF7: rst(vm, 0x30); break;
+            case 0xF8: addR16I8(vm, R16_SP, R16_HL); break;
+            case 0xF9: LOAD_RR_RR(vm, R16_SP, R16_HL); break;
+            case 0xFA: LOAD_R_MEM(vm, R8_A); break;
+            case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;
+            case 0xFE: compareR8D8(vm, R8_A); break;
+            case 0xFF: rst(vm, 0x38); break;
         }
     }
 }
