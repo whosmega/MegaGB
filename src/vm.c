@@ -18,6 +18,8 @@
 /* Relative Jump */
 #define JUMP_RL(vm) vm->PC += (int8_t)READ_BYTE(vm)
 
+#define PUSH_R16(vm, RR) push16(vm, get_reg16(vm, RR))
+#define POP_R16(vm, RR) set_reg16(vm, RR, pop16(vm))
 #define CCF(vm) set_flag(vm, FLAG_C, get_flag(vm, FLAG_C) ^ 1)
 /* Flag utility macros */
 #define TEST_Z_FLAG(vm, r) set_flag(vm, FLAG_Z, r == 0 ? 1 : 0)
@@ -32,6 +34,8 @@
 #define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, (uint32_t)x + (uint32_t)y > 0xFFFF ? 1 : 0)
 #define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, (uint16_t)x + (uint16_t)y > 0xFF ? 1 : 0)
 #define TEST_C_FLAG_SUB8(vm, x, y) set_flag(vm, FLAG_C, (int32_t)x - (int32_t)y < 0 ? 1 : 0)
+
+static inline void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
 
 static inline void set_flag(VM* vm, FLAG flag, uint8_t bit) {
     /* Since the flags are enums and in order, their numeric value
@@ -133,6 +137,9 @@ static void rotateRight(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_N, 0);
     set_flag(vm, FLAG_C, bit1); 
 }
+
+/* The following functions form the most of the arithmetic and logical
+ * operations of the CPU */
 
 static void addR16(VM* vm, GP_REG RR1, GP_REG RR2) {
     uint16_t old = get_reg16(vm, RR1); 
@@ -254,8 +261,157 @@ static void sbcR8R16(VM* vm, GP_REG R8, GP_REG R16) {
     TEST_C_FLAG_SUB8(vm, old, toSub - carry);
 }
 
-static void andR8(VM* vm, GP_REG R8, GP_REG R8) {
-    uint8_t 
+static void andR8(VM* vm, GP_REG R1, GP_REG R2) {
+    uint8_t old = vm->GPR[R1];
+    uint8_t operand = vm->GPR[R2];
+    uint8_t result = old & operand;
+
+    vm->GPR[R1] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 1);
+    set_flag(vm, FLAG_C, 0);
+}
+
+static void andR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+    uint8_t old = vm->GPR[R8];
+    uint8_t operand = (uint8_t)get_reg16(vm, R16);
+    uint8_t result = old & operand;
+
+    vm->GPR[R8] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 1);
+    set_flag(vm, FLAG_C, 0);
+}
+
+static void xorR8(VM* vm, GP_REG R1, GP_REG R2) {
+    uint8_t old = vm->GPR[R1];
+    uint8_t operand = vm->GPR[R2];
+    uint8_t result = old ^ operand;
+
+    vm->GPR[R1] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_C, 0);
+}
+
+static void xorR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+    uint8_t old = vm->GPR[R8];
+    uint8_t operand = (uint8_t)get_reg16(vm, R16);
+    uint8_t result = old ^ operand;
+
+    vm->GPR[R8] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_C, 0);
+}
+
+static void orR8(VM* vm, GP_REG R1, GP_REG R2) {
+    uint8_t old = vm->GPR[R1];
+    uint8_t operand = vm->GPR[R2];
+    uint8_t result = old | operand;
+
+    vm->GPR[R1] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_C, 0);   
+}
+
+static void orR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+    uint8_t old = vm->GPR[R8];
+    uint8_t operand = (uint8_t)get_reg16(vm, R16);
+    uint8_t result = old | operand;
+
+    vm->GPR[R8] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_C, 0);
+}
+
+static void compareR8(VM* vm, GP_REG R1, GP_REG R2) {
+    uint8_t operand1 = vm->GPR[R1];
+    uint8_t operand2 = vm->GPR[R2];
+
+    set_flag(vm, FLAG_Z, operand1 == operand2);
+    set_flag(vm, FLAG_C, operand2 > operand1);
+    set_flag(vm, FLAG_H, operand1 > operand2);
+    set_flag(vm, FLAG_N, 1);
+}
+
+static void compareR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+    uint8_t operand1 = vm->GPR[R8];
+    uint16_t operand2 = get_reg16(vm, R16);
+
+    set_flag(vm, FLAG_Z, operand1 == operand2);
+    set_flag(vm, FLAG_C, operand2 > operand1);
+    set_flag(vm, FLAG_H, operand1 > operand2);
+    set_flag(vm, FLAG_N, 1);       
+}
+
+/* The following functions are responsible for returning, calling & stack manipulation*/
+
+static inline void push16(VM* vm, uint16_t u16) {
+    /* Pushes a 2 byte value to the stack */
+    uint16_t stackPointer = get_reg16(vm, R16_SP);
+
+    /* Write the high byte */
+    writeAddr(vm, stackPointer - 1, u16 >> 8);
+    /* Write the low byte */
+    writeAddr(vm, stackPointer - 2, u16 & 0xFF);
+
+    /* Update the stack pointer */
+    set_reg16(vm, R16_SP, stackPointer - 2);
+}
+
+static inline uint16_t pop16(VM* vm) {
+    uint16_t stackPointer = get_reg16(vm, R16_SP);
+    uint8_t lowByte = vm->MEM[stackPointer];
+    uint8_t highByte = vm->MEM[stackPointer + 1];
+
+    set_reg16(vm, R16_SP, stackPointer + 2);
+
+    return (uint16_t)((highByte << 8) | lowByte);
+}
+
+static void call(VM* vm) {
+    uint16_t callAddress = READ_16BIT(vm);
+    push16(vm, vm->PC);
+
+    vm->PC = callAddress;
+}
+
+static void callCondition(VM* vm, bool isTrue) {
+    vm->conditionFalse = !isTrue;
+
+    uint16_t callAddress = READ_16BIT(vm);
+
+    if (isTrue) {
+        push16(vm, vm->PC);
+        vm->PC = callAddress;
+    }
+}
+
+static inline void ret(VM* vm) {
+    vm->PC = pop16(vm);
+}
+
+static void retCondition(VM* vm, bool isTrue) {
+    vm->conditionFalse = !isTrue;
+
+    if (isTrue) {
+        vm->PC = pop16(vm);
+    }
 }
 
 static void cpl(VM* vm) {
@@ -270,6 +426,13 @@ static void cpl(VM* vm) {
 #define CONDITION_NC(vm) (get_flag(vm, FLAG_C) != 0)
 #define CONDITION_Z(vm)  (get_flag(vm, FLAG_Z) == 0)
 #define CONDITION_C(vm)  (get_flag(vm, FLAG_C) == 0)
+
+static void jumpCondition(VM* vm, bool isTrue) {
+    vm->conditionFalse = !isTrue;
+
+    uint16_t address = READ_16BIT(vm);
+    if (isTrue) vm->PC = address;
+}
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
     vm->conditionFalse = !isTrue;
@@ -569,10 +732,46 @@ void runVM(VM* vm) {
             case 0x9D: sbcR8(vm, R8_A, R8_L); break;
             case 0x9E: sbcR8R16(vm, R8_A, R16_HL); break;
             case 0x9F: sbcR8(vm, R8_A, R8_A); break;
-            case 0xA0: 
+            case 0xA0: andR8(vm, R8_A, R8_B); break;
+            case 0xA1: andR8(vm, R8_A, R8_C); break;
+            case 0xA2: andR8(vm, R8_A, R8_D); break;
+            case 0xA3: andR8(vm, R8_A, R8_E); break;
+            case 0xA4: andR8(vm, R8_A, R8_H); break;
+            case 0xA5: andR8(vm, R8_A, R8_L); break;
+            case 0xA6: andR8R16(vm, R8_A, R16_HL); break;
+            case 0xA7: andR8(vm, R8_A, R8_A); break;
+            case 0xA8: xorR8(vm, R8_A, R8_B); break;
+            case 0xA9: xorR8(vm, R8_A, R8_C); break;
+            case 0xAA: xorR8(vm, R8_A, R8_D); break;
+            case 0xAB: xorR8(vm, R8_A, R8_E); break;
+            case 0xAC: xorR8(vm, R8_A, R8_H); break;
+            case 0xAD: xorR8(vm, R8_A, R8_L); break;
+            case 0xAE: xorR8R16(vm, R8_A, R16_HL); break;
+            case 0xAF: xorR8(vm, R8_A, R8_A); break;
+            case 0xB0: orR8(vm, R8_A, R8_B); break;
+            case 0xB1: orR8(vm, R8_A, R8_C); break;
+            case 0xB2: orR8(vm, R8_A, R8_D); break;
+            case 0xB3: orR8(vm, R8_A, R8_E); break;
+            case 0xB4: orR8(vm, R8_A, R8_H); break;
+            case 0xB5: orR8(vm, R8_A, R8_L); break;
+            case 0xB6: orR8R16(vm, R8_A, R16_HL); break;
+            case 0xB7: orR8(vm, R8_A, R8_A); break;
+            case 0xB8: compareR8(vm, R8_A, R8_B); break;
+            case 0xB9: compareR8(vm, R8_A, R8_C); break;
+            case 0xBA: compareR8(vm, R8_A, R8_D); break;
+            case 0xBB: compareR8(vm, R8_A, R8_E); break;
+            case 0xBC: compareR8(vm, R8_A, R8_H); break;
+            case 0xBD: compareR8(vm, R8_A, R8_L); break;
+            case 0xBE: compareR8R16(vm, R8_A, R16_HL); break;
+            case 0xBF: compareR8(vm, R8_A, R8_A); break;
+            case 0xC0: retCondition(vm, CONDITION_NZ(vm)); break;
+            case 0xC1: POP_R16(vm, R16_BC); break;
+            case 0xC2: jumpCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC3: JUMP(vm); break;
+            case 0xC4: callCondition(vm, CONDITION_NZ(vm)); break;
+            case 0xC5: PUSH_R16(vm, R16_BC); break;
         }
-    }    
+    }
 }
 
 void loadCartridge(VM *vm, Cartridge *cartridge) {
