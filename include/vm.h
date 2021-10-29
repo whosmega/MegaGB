@@ -1,6 +1,7 @@
 #ifndef MGBC_VM_H
 #define MGBC_VM_H
 #include <stdint.h>
+#include <unistd.h>
 #include "../include/cartridge.h"
 
 typedef enum {
@@ -59,6 +60,7 @@ typedef enum {
 
 typedef struct {
     Cartridge* cartridge;
+    bool IME;                           /* Interrupt Master Enable Flag */
     bool conditionFalse;                /* If a condition was false for the previous
                                            instruction, this flag is set, it is used to
                                            append the proper cycle count and is reset every

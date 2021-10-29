@@ -131,30 +131,210 @@ static void decrementR8(VM* vm, GP_REG R) {
 /* The folloing functions are used for all 8 bit rotation 
  * operations */ 
 
-static void rotateLeft(VM* vm, GP_REG R) {
+static void rotateLeft(VM* vm, GP_REG R, bool setZFlag) {
     uint8_t toModify = vm->GPR[R];
     uint8_t bit7 = toModify >> 7;
 
     toModify <<= 1;
     toModify |= bit7;
 
-    set_flag(vm, FLAG_Z, 0);
+    vm->GPR[R] = toModify;
+    if (setZFlag) {
+        TEST_Z_FLAG(vm, toModify);
+    } else {
+        set_flag(vm, FLAG_Z, 0);
+    }
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit7); 
+    set_flag(vm, FLAG_C, bit7);  
 }
 
-static void rotateRight(VM* vm, GP_REG R) {
+static void rotateLeftR16(VM* vm, GP_REG R16, bool setZFlag) {
+    uint16_t toModify = get_reg16(vm, R16);
+    uint8_t bit15 = toModify >> 15;
+
+    toModify <<= 1;
+    toModify |= bit15;
+
+    set_reg16(vm, R16, toModify);
+    if (setZFlag) {
+        TEST_Z_FLAG(vm, toModify);
+    } else {
+        set_flag(vm, FLAG_Z, 0);
+    }
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit15);  
+}
+
+static void rotateRight(VM* vm, GP_REG R, bool setZFlag) {
     uint8_t toModify = vm->GPR[R];
     uint8_t bit1 = toModify & 1;
 
     toModify >>= 1;
     toModify |= bit1 << 7;
 
-    set_flag(vm, FLAG_Z, 0);
+    vm->GPR[R] = toModify;
+
+    if (setZFlag) {
+        TEST_Z_FLAG(vm, toModify);
+    } else {
+        set_flag(vm, FLAG_Z, 0);
+    }
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
     set_flag(vm, FLAG_C, bit1); 
+}
+
+static void rotateRightR16(VM* vm, GP_REG R16, bool setZFlag) {
+    uint16_t toModify = get_reg16(vm, R16);
+    uint8_t bit1 = toModify & 1;
+
+    toModify >>= 1;
+    toModify |= bit1 << 15;
+
+    set_reg16(vm, R16, toModify);
+
+    if (setZFlag) {
+        TEST_Z_FLAG(vm, toModify);
+    } else {
+        set_flag(vm, FLAG_Z, 0);
+    }
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit1); 
+}
+
+static void shiftLeftArithmeticR8(VM* vm, GP_REG R) {
+    uint8_t value = vm->GPR[R];
+    uint8_t bit7 = value >> 7;
+    uint8_t result = value << 1;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit7);
+}
+
+static void shiftLeftArithmeticR16(VM* vm, GP_REG R16) {
+    uint16_t value = get_reg16(vm, R16);
+    uint8_t bit15 = value >> 15;
+    uint8_t result = value << 1;
+
+    set_reg16(vm, R16, result);
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit15);
+}
+
+static void shiftRightLogicalR8(VM* vm, GP_REG R) {
+    uint8_t value = vm->GPR[R];
+    uint8_t bit1 = value & 0x1;
+    uint8_t result = value >> 1;
+
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit1);
+}
+
+static void shiftRightLogicalR16(VM* vm, GP_REG R16) {
+    uint16_t value = get_reg16(vm, R16);
+    uint8_t bit1 = value & 0x1;
+    uint8_t result = value >> 1;
+
+    set_reg16(vm, R16, result);
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit1);
+}
+
+static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
+    uint8_t value = vm->GPR[R];
+    uint8_t bit1 = value & 0x1;
+    uint8_t bit7 = value >> 7;
+    uint8_t result = value >> 1;
+    
+    /* Copy the 7th bit to its original location after the shift */
+    result |= bit7 << 7;
+    vm->GPR[R] = result;
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit1);
+}
+
+static void shiftRightArithmeticR16(VM* vm, GP_REG R16) {
+    uint16_t value = get_reg16(vm, R16);
+    uint8_t bit1 = value & 0x1;
+    uint8_t bit15 = value >> 15;
+    uint8_t result = value >> 1;
+    
+    /* Copy the 15th bit to its original location after the shift */
+    result |= bit15 << 15;
+    set_reg16(vm, R16, result);
+
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit1);
+}
+
+static void swapR8(VM* vm, GP_REG R8) {
+     uint8_t value = vm->GPR[R8];
+     uint8_t highNibble = value >> 4;
+     uint8_t lowNibble = value & 0xF;
+
+     uint8_t newValue = (lowNibble << 4) | highNibble;
+
+     vm->GPR[R8] = newValue;
+
+     TEST_Z_FLAG(vm, newValue);
+     set_flag(vm, FLAG_H, 0);
+     set_flag(vm, FLAG_N, 0);
+     set_flag(vm, FLAG_C, 0);
+}
+
+static void swapR16(VM* vm, GP_REG R16) {
+     uint8_t value = (uint8_t)get_reg16(vm, R16);
+     uint8_t highNibble = value >> 4;
+     uint8_t lowNibble = value & 0xF;
+
+     uint8_t newValue = (lowNibble << 4) | highNibble;
+
+     set_reg16(vm, R16, (uint16_t)newValue);
+
+     TEST_Z_FLAG(vm, newValue);
+     set_flag(vm, FLAG_H, 0);
+     set_flag(vm, FLAG_N, 0);
+     set_flag(vm, FLAG_C, 0);
+}
+
+static void testBitR8(VM* vm, GP_REG R8, uint8_t bit) {
+    uint8_t value = vm->GPR[R8];
+    uint8_t bitValue = (value >> bit) & 0x1;
+
+    TEST_Z_FLAG(vm, bitValue);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 1);
+}
+
+static void testBitR16(VM* vm, GP_REG R16, uint8_t bit) {
+    uint8_t value = get_reg16(vm, R16);
+    uint8_t bitValue = (value >> bit) & 0x1;
+
+    TEST_Z_FLAG(vm, bitValue);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_H, 1);
 }
 
 /* The following functions form the most of the arithmetic and logical
@@ -438,7 +618,7 @@ static void xorR8R16(VM* vm, GP_REG R8, GP_REG R16) {
 }
 
 static void orR8(VM* vm, GP_REG R1, GP_REG R2) {
-    uint8_t old = vm->GPR[R1];
+uint8_t old = vm->GPR[R1];
     uint8_t operand = vm->GPR[R2];
     uint8_t result = old | operand;
 
@@ -688,13 +868,49 @@ static void bootROM(VM* vm) {
 static void prefixCB(VM* vm) {
     /* This function contains opcode interpretations for
      * all the instruction prefixed by opcode CB */
+    uint8_t byte = READ_BYTE(vm);
 
+    switch (byte) {
+        case 0x00: rotateLeft(vm, R8_B, true); break;
+        case 0x01: rotateLeft(vm, R8_C, true); break;
+        case 0x02: rotateLeft(vm, R8_D, true); break;
+        case 0x03: rotateLeft(vm, R8_E, true); break;
+        case 0x04: rotateLeft(vm, R8_H, true); break;
+        case 0x05: rotateLeft(vm, R8_L, true); break;
+        case 0x06: rotateLeftR16(vm, R16_HL, true); break;
+        case 0x07: rotateLeft(vm, R8_A, true); break;
+        case 0x08: rotateRight(vm, R8_B, true); break;
+        case 0x09: rotateRight(vm, R8_C, true); break;
+        case 0x0A: rotateRight(vm, R8_D, true); break;
+        case 0x0B: rotateRight(vm, R8_E, true); break;
+        case 0x0C: rotateRight(vm, R8_H, true); break;
+        case 0x0D: rotateRight(vm, R8_L, true); break;
+        case 0x0E: rotateRightR16(vm, R16_HL, true); break;
+        case 0x0F: rotateRight(vm, R8_A, true); break;
+        case 0x10: rotateLeft(vm, R8_B, true); break;
+        case 0x11: rotateLeft(vm, R8_C, true); break;
+        case 0x12: rotateLeft(vm, R8_D, true); break;
+        case 0x13: rotateLeft(vm, R8_E, true); break;
+        case 0x14: rotateLeft(vm, R8_H, true); break;
+        case 0x15: rotateLeft(vm, R8_L, true); break;
+        case 0x16: rotateLeftR16(vm, R16_HL, true); break;
+        case 0x17: rotateLeft(vm, R8_A, true); break;
+        case 0x18: rotateRight(vm, R8_B, true); break;
+        case 0x19: rotateRight(vm, R8_C, true); break;
+        case 0x1A: rotateRight(vm, R8_D, true); break;
+        case 0x1B: rotateRight(vm, R8_E, true); break;
+        case 0x1C: rotateRight(vm, R8_H, true); break;
+        case 0x1D: rotateRight(vm, R8_L, true); break;
+        case 0x1E: rotateRightR16(vm, R16_HL, true); break;
+        case 0x1F: rotateRight(vm, R8_A, true); break;
+    }
 }
 
 void runVM(VM* vm) {
     for (;;) {
 #ifdef REALTIME_PRINTING
-        if (vm->PC < 0x200) printInstruction(vm);
+        usleep(10000);
+        printInstruction(vm);
 #endif
         uint8_t byte = READ_BYTE(vm);
         switch (byte) {
@@ -706,7 +922,7 @@ void runVM(VM* vm) {
             case 0x04: incrementR8(vm, R8_B); break;
             case 0x05: decrementR8(vm, R8_B); break;
             case 0x06: LOAD_R_D8(vm, R8_B); break;
-            case 0x07: rotateLeft(vm, R8_A); break;
+            case 0x07: rotateLeft(vm, R8_A, false); break;
             case 0x08: {
                 uint16_t a = READ_16BIT(vm);
                 writeAddr(vm, a, vm->GPR[R16_SP] & 0xFF);
@@ -719,7 +935,7 @@ void runVM(VM* vm) {
             case 0x0C: incrementR8(vm, R8_C); break;
             case 0x0D: decrementR8(vm, R8_C); break;
             case 0x0E: LOAD_R_D8(vm, R8_C); break;
-            case 0x0F: rotateRight(vm, R8_A); break;
+            case 0x0F: rotateRight(vm, R8_A, false); break;
             /* OPCODE : STOP, for testing only */
             case 0x10: return;
             case 0x11: LOAD_RR_D16(vm, R16_DE); break;
@@ -728,7 +944,7 @@ void runVM(VM* vm) {
             case 0x14: incrementR8(vm, R8_D); break;
             case 0x15: decrementR8(vm, R8_D); break;
             case 0x16: LOAD_R_D8(vm, R8_D); break;
-            case 0x17: rotateLeft(vm, R8_A); break;
+            case 0x17: rotateLeft(vm, R8_A, false); break;
             case 0x18: JUMP_RL(vm, READ_BYTE(vm)); break;
             case 0x19: addR16(vm, R16_HL, R16_DE); break;
             case 0x1A: LOAD_R_RR(vm, R8_A, R16_DE); break;
@@ -736,7 +952,7 @@ void runVM(VM* vm) {
             case 0x1C: incrementR8(vm, R8_E); break;
             case 0x1D: decrementR8(vm, R8_E); break;
             case 0x1E: LOAD_R_D8(vm, R8_E); break;
-            case 0x1F: rotateRight(vm, R8_A); break;
+            case 0x1F: rotateRight(vm, R8_A, false); break;
             case 0x20: jumpRelativeCondition(vm, CONDITION_NZ(vm)); break;
             case 0x21: LOAD_RR_D16(vm, R16_HL); break;
             case 0x22: LOAD_RR_R(vm, R16_HL, R8_A); INC_RR(vm, R16_HL); break;
