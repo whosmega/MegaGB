@@ -355,7 +355,40 @@ static void testBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
     set_flag(vm, FLAG_H, 1);
 }
 
+static void setBitR8(VM* vm, GP_REG R8, uint8_t bit) {
+    uint8_t value = vm->GPR[R8];
+    uint8_t orValue = 0b10000000 >> bit;
+    uint8_t result = value | orValue;
 
+    vm->GPR[R8] = result;
+}
+
+static void setBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t value = vm->MEM[addr];
+    uint8_t orValue = 0b10000000 >> bit;
+    uint8_t result = value | orValue;
+
+    writeAddr(vm, addr, result);
+}
+
+static void resetBitR8(VM* vm, GP_REG R8, uint8_t bit) {
+    uint8_t value = vm->GPR[R8];
+    /* Converts 00010000 to 11101111 for the andValue when bit 3 has to be reset for ex */
+    uint8_t andValue = ~(0b10000000 >> bit);
+    uint8_t result = value & andValue;
+
+    vm->GPR[R8] = result;
+}
+
+static void resetBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t value = vm->MEM[addr];
+    uint8_t andValue = ~(0b10000000 >> bit);
+    uint8_t result = value & andValue;
+
+    writeAddr(vm, addr, result);
+}
 
 /* The following functions form the most of the arithmetic and logical
  * operations of the CPU */
