@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,15 +7,24 @@
 
 #define PORT_ADDR 0xFF00
 
+/* Load 16 bit data into an R16 Register */
 #define LOAD_RR_D16(vm, RR) set_reg16(vm, RR, READ_16BIT(vm))
-#define LOAD_RR_R(vm, RR, R) set_reg16(vm, RR, vm->GPR[R])
-#define LOAD_R_D8(vm, R) vm->GPR[R] = READ_BYTE(vm) 
-#define LOAD_R_RR(vm, R, RR) vm->GPR[R] = (uint8_t)get_reg16(vm, RR)
-#define LOAD_RR_D8(vm, RR) set_reg16(vm, RR, (uint16_t)READ_BYTE(vm))
+/* Load contents of R8 Register into address at R16 register (dereferencing) */
+#define LOAD_ARR_R(vm, RR, R) writeAddr(vm, get_reg16(vm, RR), vm->GPR[R])
+/* Load 8 bit data into R8 Register */
+#define LOAD_R_D8(vm, R) vm->GPR[R] = READ_BYTE(vm)
+/* Dereference the address contained in the R16 register and set it's value 
+ * to the R8 register */
+#define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = vm->MEM[get_reg16(vm, RR)]
+/* Load 8 bit data into address at R16 register (dereferencing) */
+#define LOAD_ARR_D8(vm, RR) vm->MEM[get_reg16(vm, RR)] = READ_BYTE(vm)
+/* Load contents of R8 register into another R8 register */
 #define LOAD_R_R(vm, R1, R2) vm->GPR[R1] = vm->GPR[R2]
+/* Load contents of R16 register into another R16 register */
 #define LOAD_RR_RR(vm, RR1, RR2) set_reg16(vm, RR1, get_reg16(vm, RR2))
 /* Load instructions from reading into and writing into main memory */
 #define LOAD_MEM_R(vm, R) writeAddr(vm, READ_16BIT(vm), vm->GPR[R])
+/* Load what's at the address specified by the 16 bit data into the R8 register */
 #define LOAD_R_MEM(vm, R) vm->GPR[R] = vm->MEM[READ_16BIT(vm)]
 /* Load 'R' into '(PORT_ADDR + D8)' */
 #define LOAD_R_D8PORT(vm, R) writeAddr(vm, PORT_ADDR + READ_BYTE(vm), vm->GPR[R])
@@ -25,7 +35,9 @@
 /* Load '(PORT_ADDR + R2)' into 'R1' */
 #define LOAD_R_RPORT(vm, R1, R2) vm->GPR[R1] = vm->MEM[PORT_ADDR + vm->GPR[R2]]
 
+/* Increment contents of R16 register */
 #define INC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) + 1))
+/* Decrement contents of R16 register */
 #define DEC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) - 1)) 
 
 /* Direct Jump */
@@ -49,10 +61,10 @@
                                         (((int)(x & 0xf) - (int)(y & 0xf) < 0) ? 1 : 0))
 
 /* Test for integer overloads and set carry flags */
-#define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, (uint32_t)x + (uint32_t)y > 0xFFFF ? 1 : 0)
-#define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, (uint16_t)x + (uint16_t)y > 0xFF ? 1 : 0)
+#define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, (uint32_t)(x) + (uint32_t)(y) > 0xFFFF ? 1 : 0)
+#define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, (uint16_t)(x) + (uint16_t)(y) > 0xFF ? 1 : 0)
 /* Works for both 8 bit and 16 bit */
-#define TEST_C_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_C, (int32_t)x - (int32_t)y < 0 ? 1 : 0)
+#define TEST_C_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_C, (int32_t)(x) - (int32_t)(y) < 0 ? 1 : 0)
 
 static inline void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
 
@@ -149,14 +161,15 @@ static void rotateLeft(VM* vm, GP_REG R, bool setZFlag) {
     set_flag(vm, FLAG_C, bit7);  
 }
 
-static void rotateLeftR16(VM* vm, GP_REG R16, bool setZFlag) {
-    uint16_t toModify = get_reg16(vm, R16);
-    uint8_t bit15 = toModify >> 15;
+static void rotateLeftAR16(VM* vm, GP_REG R16, bool setZFlag) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t toModify = vm->MEM[addr];
+    uint8_t bit7 = toModify >> 7;
 
     toModify <<= 1;
-    toModify |= bit15;
+    toModify |= bit7;
 
-    set_reg16(vm, R16, toModify);
+    writeAddr(vm, addr, toModify);
     if (setZFlag) {
         TEST_Z_FLAG(vm, toModify);
     } else {
@@ -164,7 +177,7 @@ static void rotateLeftR16(VM* vm, GP_REG R16, bool setZFlag) {
     }
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit15);  
+    set_flag(vm, FLAG_C, bit7);  
 }
 
 static void rotateRight(VM* vm, GP_REG R, bool setZFlag) {
@@ -186,14 +199,15 @@ static void rotateRight(VM* vm, GP_REG R, bool setZFlag) {
     set_flag(vm, FLAG_C, bit1); 
 }
 
-static void rotateRightR16(VM* vm, GP_REG R16, bool setZFlag) {
-    uint16_t toModify = get_reg16(vm, R16);
+static void rotateRightAR16(VM* vm, GP_REG R16, bool setZFlag) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t toModify = vm->MEM[addr];
     uint8_t bit1 = toModify & 1;
 
     toModify >>= 1;
-    toModify |= bit1 << 15;
+    toModify |= bit1 << 7;
 
-    set_reg16(vm, R16, toModify);
+    writeAddr(vm, addr, toModify);
 
     if (setZFlag) {
         TEST_Z_FLAG(vm, toModify);
@@ -218,17 +232,18 @@ static void shiftLeftArithmeticR8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_C, bit7);
 }
 
-static void shiftLeftArithmeticR16(VM* vm, GP_REG R16) {
-    uint16_t value = get_reg16(vm, R16);
-    uint8_t bit15 = value >> 15;
+static void shiftLeftArithmeticAR16(VM* vm, GP_REG R16) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t value = vm->MEM[addr];
+    uint8_t bit7 = value >> 7;
     uint8_t result = value << 1;
 
-    set_reg16(vm, R16, result);
+    writeAddr(vm, addr, result);
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit15);
+    set_flag(vm, FLAG_C, bit7);
 }
 
 static void shiftRightLogicalR8(VM* vm, GP_REG R) {
@@ -244,12 +259,13 @@ static void shiftRightLogicalR8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_C, bit1);
 }
 
-static void shiftRightLogicalR16(VM* vm, GP_REG R16) {
-    uint16_t value = get_reg16(vm, R16);
+static void shiftRightLogicalAR16(VM* vm, GP_REG R16) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t value = vm->MEM[addr];
     uint8_t bit1 = value & 0x1;
     uint8_t result = value >> 1;
 
-    set_reg16(vm, R16, result);
+    writeAddr(vm, addr, result);
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_H, 0);
@@ -273,15 +289,16 @@ static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_C, bit1);
 }
 
-static void shiftRightArithmeticR16(VM* vm, GP_REG R16) {
-    uint16_t value = get_reg16(vm, R16);
+static void shiftRightArithmeticAR16(VM* vm, GP_REG R16) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t value = vm->MEM[addr]; 
     uint8_t bit1 = value & 0x1;
-    uint8_t bit15 = value >> 15;
+    uint8_t bit7 = value >> 7;
     uint8_t result = value >> 1;
     
-    /* Copy the 15th bit to its original location after the shift */
-    result |= bit15 << 15;
-    set_reg16(vm, R16, result);
+    /* Copy the 7th bit to its original location after the shift */
+    result |= bit7 << 7;
+    writeAddr(vm, addr, result);
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_H, 0);
@@ -304,14 +321,15 @@ static void swapR8(VM* vm, GP_REG R8) {
      set_flag(vm, FLAG_C, 0);
 }
 
-static void swapR16(VM* vm, GP_REG R16) {
-     uint8_t value = (uint8_t)get_reg16(vm, R16);
+static void swapAR16(VM* vm, GP_REG R16) {
+     uint16_t addr = get_reg16(vm, R16);
+     uint8_t value = vm->MEM[addr]; 
      uint8_t highNibble = value >> 4;
      uint8_t lowNibble = value & 0xF;
 
      uint8_t newValue = (lowNibble << 4) | highNibble;
 
-     set_reg16(vm, R16, (uint16_t)newValue);
+     writeAddr(vm, addr, newValue);
 
      TEST_Z_FLAG(vm, newValue);
      set_flag(vm, FLAG_H, 0);
@@ -328,14 +346,16 @@ static void testBitR8(VM* vm, GP_REG R8, uint8_t bit) {
     set_flag(vm, FLAG_H, 1);
 }
 
-static void testBitR16(VM* vm, GP_REG R16, uint8_t bit) {
-    uint8_t value = get_reg16(vm, R16);
+static void testBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
+    uint8_t value = vm->MEM[get_reg16(vm, R16)];
     uint8_t bitValue = (value >> bit) & 0x1;
 
     TEST_Z_FLAG(vm, bitValue);
     set_flag(vm, FLAG_N, 0);
     set_flag(vm, FLAG_H, 1);
 }
+
+
 
 /* The following functions form the most of the arithmetic and logical
  * operations of the CPU */
@@ -400,9 +420,9 @@ static void addR8D8(VM* vm, GP_REG R) {
     TEST_C_FLAG_ADD8(vm, old, data);
 }
 
-static void addR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void addR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint16_t toAdd = get_reg16(vm, R16);
+    uint8_t toAdd = vm->MEM[get_reg16(vm, R16)];
     uint8_t result = old + toAdd;
 
     vm->GPR[R8] = result;
@@ -444,9 +464,9 @@ static void adcR8D8(VM* vm, GP_REG R) {
     TEST_C_FLAG_ADD8(vm, old, data + carry);
 }
 
-static void adcR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void adcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint16_t toAdd = get_reg16(vm, R16);
+    uint8_t toAdd = vm->MEM[get_reg16(vm, R16)];
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old + toAdd + carry;
 
@@ -484,9 +504,9 @@ static void subR8D8(VM* vm, GP_REG R) {
     TEST_C_FLAG_SUB(vm, old, data);
 }
 
-static void subR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void subR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint16_t toSub = get_reg16(vm, R16);
+    uint8_t toSub = vm->MEM[get_reg16(vm, R16)];
     uint8_t result = old - toSub;
 
     vm->GPR[R8] = result;
@@ -525,9 +545,9 @@ static void sbcR8D8(VM* vm, GP_REG R) {
     TEST_C_FLAG_SUB(vm, old, data - carry);
 }
 
-static void sbcR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void sbcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    int32_t toSub = (int32_t)get_reg16(vm, R16);
+    int32_t toSub = vm->MEM[get_reg16(vm, R16)];
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old - toSub - carry;
 
@@ -565,9 +585,9 @@ static void andR8D8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_C, 0);
 }
 
-static void andR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void andR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t operand = (uint8_t)get_reg16(vm, R16);
+    uint8_t operand = vm->MEM[get_reg16(vm, R16)];
     uint8_t result = old & operand;
 
     vm->GPR[R8] = result;
@@ -604,9 +624,9 @@ static void xorR8D8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_C, 0);
 }
 
-static void xorR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void xorR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t operand = (uint8_t)get_reg16(vm, R16);
+    uint8_t operand = vm->MEM[get_reg16(vm, R16)];
     uint8_t result = old ^ operand;
 
     vm->GPR[R8] = result;
@@ -618,7 +638,7 @@ static void xorR8R16(VM* vm, GP_REG R8, GP_REG R16) {
 }
 
 static void orR8(VM* vm, GP_REG R1, GP_REG R2) {
-uint8_t old = vm->GPR[R1];
+    uint8_t old = vm->GPR[R1];
     uint8_t operand = vm->GPR[R2];
     uint8_t result = old | operand;
 
@@ -643,9 +663,9 @@ static void orR8D8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_C, 0);   
 }
 
-static void orR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void orR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t operand = (uint8_t)get_reg16(vm, R16);
+    uint8_t operand = vm->MEM[get_reg16(vm, R16)];
     uint8_t result = old | operand;
 
     vm->GPR[R8] = result;
@@ -676,9 +696,9 @@ static void compareR8D8(VM* vm, GP_REG R) {
     set_flag(vm, FLAG_N, 1);
 }
 
-static void compareR8R16(VM* vm, GP_REG R8, GP_REG R16) {
+static void compareR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t operand1 = vm->GPR[R8];
-    uint16_t operand2 = get_reg16(vm, R16);
+    uint8_t operand2 = vm->MEM[get_reg16(vm, R16)];
 
     set_flag(vm, FLAG_Z, operand1 == operand2);
     set_flag(vm, FLAG_C, operand2 > operand1);
@@ -877,7 +897,7 @@ static void prefixCB(VM* vm) {
         case 0x03: rotateLeft(vm, R8_E, true); break;
         case 0x04: rotateLeft(vm, R8_H, true); break;
         case 0x05: rotateLeft(vm, R8_L, true); break;
-        case 0x06: rotateLeftR16(vm, R16_HL, true); break;
+        case 0x06: rotateLeftAR16(vm, R16_HL, true); break;
         case 0x07: rotateLeft(vm, R8_A, true); break;
         case 0x08: rotateRight(vm, R8_B, true); break;
         case 0x09: rotateRight(vm, R8_C, true); break;
@@ -885,7 +905,7 @@ static void prefixCB(VM* vm) {
         case 0x0B: rotateRight(vm, R8_E, true); break;
         case 0x0C: rotateRight(vm, R8_H, true); break;
         case 0x0D: rotateRight(vm, R8_L, true); break;
-        case 0x0E: rotateRightR16(vm, R16_HL, true); break;
+        case 0x0E: rotateRightAR16(vm, R16_HL, true); break;
         case 0x0F: rotateRight(vm, R8_A, true); break;
         case 0x10: rotateLeft(vm, R8_B, true); break;
         case 0x11: rotateLeft(vm, R8_C, true); break;
@@ -893,7 +913,7 @@ static void prefixCB(VM* vm) {
         case 0x13: rotateLeft(vm, R8_E, true); break;
         case 0x14: rotateLeft(vm, R8_H, true); break;
         case 0x15: rotateLeft(vm, R8_L, true); break;
-        case 0x16: rotateLeftR16(vm, R16_HL, true); break;
+        case 0x16: rotateLeftAR16(vm, R16_HL, true); break;
         case 0x17: rotateLeft(vm, R8_A, true); break;
         case 0x18: rotateRight(vm, R8_B, true); break;
         case 0x19: rotateRight(vm, R8_C, true); break;
@@ -901,7 +921,7 @@ static void prefixCB(VM* vm) {
         case 0x1B: rotateRight(vm, R8_E, true); break;
         case 0x1C: rotateRight(vm, R8_H, true); break;
         case 0x1D: rotateRight(vm, R8_L, true); break;
-        case 0x1E: rotateRightR16(vm, R16_HL, true); break;
+        case 0x1E: rotateRightAR16(vm, R16_HL, true); break;
         case 0x1F: rotateRight(vm, R8_A, true); break;
     }
 }
@@ -917,7 +937,7 @@ void runVM(VM* vm) {
             // nop
             case 0x00: break;
             case 0x01: LOAD_RR_D16(vm, R16_BC); break;
-            case 0x02: LOAD_RR_R(vm, R16_BC, R8_A); break;
+            case 0x02: LOAD_ARR_R(vm, R16_BC, R8_A); break;
             case 0x03: INC_RR(vm, R16_BC); break;
             case 0x04: incrementR8(vm, R8_B); break;
             case 0x05: decrementR8(vm, R8_B); break;
@@ -930,7 +950,7 @@ void runVM(VM* vm) {
                 break;
             }
             case 0x09: addR16(vm, R16_HL, R16_BC); break;
-            case 0x0A: LOAD_R_RR(vm, R8_A, R16_BC); break;
+            case 0x0A: LOAD_R_ARR(vm, R8_A, R16_BC); break;
             case 0x0B: DEC_RR(vm, R16_BC); break;
             case 0x0C: incrementR8(vm, R8_C); break;
             case 0x0D: decrementR8(vm, R8_C); break;
@@ -939,7 +959,7 @@ void runVM(VM* vm) {
             /* OPCODE : STOP, for testing only */
             case 0x10: return;
             case 0x11: LOAD_RR_D16(vm, R16_DE); break;
-            case 0x12: LOAD_RR_R(vm, R16_DE, R8_A); break;
+            case 0x12: LOAD_ARR_R(vm, R16_DE, R8_A); break;
             case 0x13: INC_RR(vm, R16_DE); break;
             case 0x14: incrementR8(vm, R8_D); break;
             case 0x15: decrementR8(vm, R8_D); break;
@@ -947,7 +967,7 @@ void runVM(VM* vm) {
             case 0x17: rotateLeft(vm, R8_A, false); break;
             case 0x18: JUMP_RL(vm, READ_BYTE(vm)); break;
             case 0x19: addR16(vm, R16_HL, R16_DE); break;
-            case 0x1A: LOAD_R_RR(vm, R8_A, R16_DE); break;
+            case 0x1A: LOAD_R_ARR(vm, R8_A, R16_DE); break;
             case 0x1B: DEC_RR(vm, R16_DE); break;
             case 0x1C: incrementR8(vm, R8_E); break;
             case 0x1D: decrementR8(vm, R8_E); break;
@@ -955,7 +975,9 @@ void runVM(VM* vm) {
             case 0x1F: rotateRight(vm, R8_A, false); break;
             case 0x20: jumpRelativeCondition(vm, CONDITION_NZ(vm)); break;
             case 0x21: LOAD_RR_D16(vm, R16_HL); break;
-            case 0x22: LOAD_RR_R(vm, R16_HL, R8_A); INC_RR(vm, R16_HL); break;
+            case 0x22: LOAD_ARR_R(vm, R16_HL, R8_A); 
+                       INC_RR(vm, R16_HL); 
+                       break;
             case 0x23: INC_RR(vm, R16_SP); break;
             case 0x24: incrementR8(vm, R8_H); break;
             case 0x25: decrementR8(vm, R8_H); break;
@@ -963,7 +985,9 @@ void runVM(VM* vm) {
             case 0x27: decimalAdjust(vm); break;
             case 0x28: jumpRelativeCondition(vm, CONDITION_Z(vm)); break;
             case 0x29: addR16(vm, R16_HL, R16_HL); break;
-            case 0x2A: LOAD_R_RR(vm, R8_A, R16_HL); INC_RR(vm, R16_HL); break;
+            case 0x2A: LOAD_R_ARR(vm, R8_A, R16_HL); 
+                       INC_RR(vm, R16_HL); 
+                       break;
             case 0x2B: DEC_RR(vm, R16_HL); break;
             case 0x2C: incrementR8(vm, R8_L); break;
             case 0x2D: decrementR8(vm, R8_L); break;
@@ -971,27 +995,35 @@ void runVM(VM* vm) {
             case 0x2F: cpl(vm); break;
             case 0x30: jumpRelativeCondition(vm, CONDITION_NC(vm)); break;
             case 0x31: LOAD_RR_D16(vm, R16_SP); break;
-            case 0x32: LOAD_RR_R(vm, R16_HL, R8_A); DEC_RR(vm, R16_HL); break;
+            case 0x32: LOAD_ARR_R(vm, R16_HL, R8_A); 
+                       DEC_RR(vm, R16_HL); 
+                       break;
             case 0x33: INC_RR(vm, R16_SP); break;
             case 0x34: {
-                uint16_t old = get_reg16(vm, R16_HL);
-                uint16_t new = INC_RR(vm, R16_HL); 
+                /* Increment what is at the address in HL */
+                uint16_t address = get_reg16(vm, R16_HL);
+                uint8_t old = vm->MEM[address];
+                uint8_t new = old + 1; 
                 
+                vm->MEM[address] += 1;
+
                 TEST_Z_FLAG(vm, new);
                 TEST_H_FLAG_ADD(vm, old, new);
                 set_flag(vm, FLAG_N, 0);
                 break;
             }
             case 0x35: {
-                uint16_t old = get_reg16(vm, R16_HL);
-                uint16_t new = INC_RR(vm, R16_HL); 
+                /* Decrement what is at the address in HL */
+                uint16_t address = get_reg16(vm, R16_HL);
+                uint8_t old = vm->MEM[address];
+                uint8_t new = old - 1; 
                 
                 TEST_Z_FLAG(vm, new);
                 TEST_H_FLAG_SUB(vm, old, new);
                 set_flag(vm, FLAG_N, 1);
                 break;
             }
-            case 0x36: LOAD_RR_D8(vm, R16_HL); break;
+            case 0x36: LOAD_ARR_D8(vm, R16_HL); break;
             case 0x37: {
                 set_flag(vm, FLAG_C, 1);
                 set_flag(vm, FLAG_N, 0);
@@ -1001,7 +1033,7 @@ void runVM(VM* vm) {
             case 0x38: jumpRelativeCondition(vm, CONDITION_C(vm)); break;
             case 0x39: addR16(vm, R16_HL, R16_SP); break;
             case 0x3A: {
-                LOAD_R_RR(vm, R8_A, R16_HL);
+                LOAD_R_ARR(vm, R8_A, R16_HL);
                 DEC_RR(vm, R16_HL);
                 break;
             }
@@ -1016,7 +1048,7 @@ void runVM(VM* vm) {
             case 0x43: LOAD_R_R(vm, R8_B, R8_E); break;
             case 0x44: LOAD_R_R(vm, R8_B, R8_H); break;
             case 0x45: LOAD_R_R(vm, R8_B, R8_L); break;
-            case 0x46: LOAD_R_RR(vm, R8_B, R16_HL); break;
+            case 0x46: LOAD_R_ARR(vm, R8_B, R16_HL); break;
             case 0x47: LOAD_R_R(vm, R8_B, R8_A); break;
             case 0x48: LOAD_R_R(vm, R8_C, R8_B); break;
             case 0x49: LOAD_R_R(vm, R8_C, R8_C); break;
@@ -1024,7 +1056,7 @@ void runVM(VM* vm) {
             case 0x4B: LOAD_R_R(vm, R8_C, R8_E); break;
             case 0x4C: LOAD_R_R(vm, R8_C, R8_H); break;
             case 0x4D: LOAD_R_R(vm, R8_C, R8_L); break;
-            case 0x4E: LOAD_R_RR(vm, R8_C, R16_HL); break;
+            case 0x4E: LOAD_R_ARR(vm, R8_C, R16_HL); break;
             case 0x4F: LOAD_R_R(vm, R8_C, R8_A); break;
             case 0x50: LOAD_R_R(vm, R8_D, R8_B); break;
             case 0x51: LOAD_R_R(vm, R8_D, R8_C); break;
@@ -1032,7 +1064,7 @@ void runVM(VM* vm) {
             case 0x53: LOAD_R_R(vm, R8_D, R8_E); break;
             case 0x54: LOAD_R_R(vm, R8_D, R8_H); break;
             case 0x55: LOAD_R_R(vm, R8_D, R8_L); break;
-            case 0x56: LOAD_R_RR(vm, R8_D, R16_HL); break;
+            case 0x56: LOAD_R_ARR(vm, R8_D, R16_HL); break;
             case 0x57: LOAD_R_R(vm, R8_D, R8_A); break;
             case 0x58: LOAD_R_R(vm, R8_E, R8_B); break;
             case 0x59: LOAD_R_R(vm, R8_E, R8_C); break;
@@ -1040,7 +1072,7 @@ void runVM(VM* vm) {
             case 0x5B: LOAD_R_R(vm, R8_E, R8_E); break;
             case 0x5C: LOAD_R_R(vm, R8_E, R8_H); break;
             case 0x5D: LOAD_R_R(vm, R8_E, R8_L); break;
-            case 0x5E: LOAD_R_RR(vm, R8_E, R16_HL); break;
+            case 0x5E: LOAD_R_ARR(vm, R8_E, R16_HL); break;
             case 0x5F: LOAD_R_R(vm, R8_E, R8_A); break;
             case 0x60: LOAD_R_R(vm, R8_H, R8_B); break;
             case 0x61: LOAD_R_R(vm, R8_H, R8_C); break;
@@ -1048,7 +1080,7 @@ void runVM(VM* vm) {
             case 0x63: LOAD_R_R(vm, R8_H, R8_E); break;
             case 0x64: LOAD_R_R(vm, R8_H, R8_H); break;
             case 0x65: LOAD_R_R(vm, R8_H, R8_L); break;
-            case 0x66: LOAD_R_RR(vm, R8_H, R16_HL); break;
+            case 0x66: LOAD_R_ARR(vm, R8_H, R16_HL); break;
             case 0x67: LOAD_R_R(vm, R8_H, R8_A); break;
             case 0x68: LOAD_R_R(vm, R8_L, R8_B); break;
             case 0x69: LOAD_R_R(vm, R8_L, R8_C); break;
@@ -1056,24 +1088,24 @@ void runVM(VM* vm) {
             case 0x6B: LOAD_R_R(vm, R8_L, R8_E); break;
             case 0x6C: LOAD_R_R(vm, R8_L, R8_H); break;
             case 0x6D: LOAD_R_R(vm, R8_L, R8_L); break;
-            case 0x6E: LOAD_R_RR(vm, R8_L, R16_HL); break;
+            case 0x6E: LOAD_R_ARR(vm, R8_L, R16_HL); break;
             case 0x6F: LOAD_R_R(vm, R8_L, R8_A); break;
-            case 0x70: LOAD_RR_R(vm, R16_HL, R8_B); break;
-            case 0x71: LOAD_RR_R(vm, R16_HL, R8_C); break;
-            case 0x72: LOAD_RR_R(vm, R16_HL, R8_D); break;
-            case 0x73: LOAD_RR_R(vm, R16_HL, R8_E); break;
-            case 0x74: LOAD_RR_R(vm, R16_HL, R8_H); break;
-            case 0x75: LOAD_RR_R(vm, R16_HL, R8_L); break;
+            case 0x70: LOAD_ARR_R(vm, R16_HL, R8_B); break;
+            case 0x71: LOAD_ARR_R(vm, R16_HL, R8_C); break;
+            case 0x72: LOAD_ARR_R(vm, R16_HL, R8_D); break;
+            case 0x73: LOAD_ARR_R(vm, R16_HL, R8_E); break;
+            case 0x74: LOAD_ARR_R(vm, R16_HL, R8_H); break;
+            case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break;
             /* TODO: HALT */ 
             case 0x76: break;
-            case 0x77: LOAD_RR_R(vm, R16_HL, R8_A); break;
+            case 0x77: LOAD_ARR_R(vm, R16_HL, R8_A); break;
             case 0x78: LOAD_R_R(vm, R8_A, R8_B); break;
             case 0x79: LOAD_R_R(vm, R8_A, R8_C); break;
             case 0x7A: LOAD_R_R(vm, R8_A, R8_D); break;
             case 0x7B: LOAD_R_R(vm, R8_A, R8_E); break;
             case 0x7C: LOAD_R_R(vm, R8_A, R8_H); break;
             case 0x7D: LOAD_R_R(vm, R8_A, R8_L); break;
-            case 0x7E: LOAD_R_RR(vm, R8_A, R16_HL); break;
+            case 0x7E: LOAD_R_ARR(vm, R8_A, R16_HL); break;
             case 0x7F: LOAD_R_R(vm, R8_A, R8_A); break;
             case 0x80: addR8(vm, R8_A, R8_B); break;
             case 0x81: addR8(vm, R8_A, R8_C); break;
@@ -1081,7 +1113,7 @@ void runVM(VM* vm) {
             case 0x83: addR8(vm, R8_A, R8_E); break;
             case 0x84: addR8(vm, R8_A, R8_H); break;
             case 0x85: addR8(vm, R8_A, R8_L); break;
-            case 0x86: addR8R16(vm, R8_A, R16_HL); break;
+            case 0x86: addR8_AR16(vm, R8_A, R16_HL); break;
             case 0x87: addR8(vm, R8_A, R8_A); break;
             case 0x88: adcR8(vm, R8_A, R8_B); break;
             case 0x89: adcR8(vm, R8_A, R8_C); break;
@@ -1089,7 +1121,7 @@ void runVM(VM* vm) {
             case 0x8B: adcR8(vm, R8_A, R8_E); break;
             case 0x8C: adcR8(vm, R8_A, R8_H); break;
             case 0x8D: adcR8(vm, R8_A, R8_L); break;
-            case 0x8E: adcR8R16(vm, R8_A, R16_HL); break;
+            case 0x8E: adcR8_AR16(vm, R8_A, R16_HL); break;
             case 0x8F: adcR8(vm, R8_A, R8_A); break;
             case 0x90: subR8(vm, R8_A, R8_B); break;
             case 0x91: subR8(vm, R8_A, R8_C); break;
@@ -1097,7 +1129,7 @@ void runVM(VM* vm) {
             case 0x93: subR8(vm, R8_A, R8_E); break;
             case 0x94: subR8(vm, R8_A, R8_H); break;
             case 0x95: subR8(vm, R8_A, R8_L); break;
-            case 0x96: subR8R16(vm, R8_A, R16_HL); break;
+            case 0x96: subR8_AR16(vm, R8_A, R16_HL); break;
             case 0x97: subR8(vm, R8_A, R8_A); break;
             case 0x98: sbcR8(vm, R8_A, R8_B); break;
             case 0x99: sbcR8(vm, R8_A, R8_C); break;
@@ -1105,7 +1137,7 @@ void runVM(VM* vm) {
             case 0x9B: sbcR8(vm, R8_A, R8_E); break;
             case 0x9C: sbcR8(vm, R8_A, R8_H); break;
             case 0x9D: sbcR8(vm, R8_A, R8_L); break;
-            case 0x9E: sbcR8R16(vm, R8_A, R16_HL); break;
+            case 0x9E: sbcR8_AR16(vm, R8_A, R16_HL); break;
             case 0x9F: sbcR8(vm, R8_A, R8_A); break;
             case 0xA0: andR8(vm, R8_A, R8_B); break;
             case 0xA1: andR8(vm, R8_A, R8_C); break;
@@ -1113,7 +1145,7 @@ void runVM(VM* vm) {
             case 0xA3: andR8(vm, R8_A, R8_E); break;
             case 0xA4: andR8(vm, R8_A, R8_H); break;
             case 0xA5: andR8(vm, R8_A, R8_L); break;
-            case 0xA6: andR8R16(vm, R8_A, R16_HL); break;
+            case 0xA6: andR8_AR16(vm, R8_A, R16_HL); break;
             case 0xA7: andR8(vm, R8_A, R8_A); break;
             case 0xA8: xorR8(vm, R8_A, R8_B); break;
             case 0xA9: xorR8(vm, R8_A, R8_C); break;
@@ -1121,7 +1153,7 @@ void runVM(VM* vm) {
             case 0xAB: xorR8(vm, R8_A, R8_E); break;
             case 0xAC: xorR8(vm, R8_A, R8_H); break;
             case 0xAD: xorR8(vm, R8_A, R8_L); break;
-            case 0xAE: xorR8R16(vm, R8_A, R16_HL); break;
+            case 0xAE: xorR8_AR16(vm, R8_A, R16_HL); break;
             case 0xAF: xorR8(vm, R8_A, R8_A); break;
             case 0xB0: orR8(vm, R8_A, R8_B); break;
             case 0xB1: orR8(vm, R8_A, R8_C); break;
@@ -1129,7 +1161,7 @@ void runVM(VM* vm) {
             case 0xB3: orR8(vm, R8_A, R8_E); break;
             case 0xB4: orR8(vm, R8_A, R8_H); break;
             case 0xB5: orR8(vm, R8_A, R8_L); break;
-            case 0xB6: orR8R16(vm, R8_A, R16_HL); break;
+            case 0xB6: orR8_AR16(vm, R8_A, R16_HL); break;
             case 0xB7: orR8(vm, R8_A, R8_A); break;
             case 0xB8: compareR8(vm, R8_A, R8_B); break;
             case 0xB9: compareR8(vm, R8_A, R8_C); break;
@@ -1137,7 +1169,7 @@ void runVM(VM* vm) {
             case 0xBB: compareR8(vm, R8_A, R8_E); break;
             case 0xBC: compareR8(vm, R8_A, R8_H); break;
             case 0xBD: compareR8(vm, R8_A, R8_L); break;
-            case 0xBE: compareR8R16(vm, R8_A, R16_HL); break;
+            case 0xBE: compareR8_AR16(vm, R8_A, R16_HL); break;
             case 0xBF: compareR8(vm, R8_A, R8_A); break;
             case 0xC0: retCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC1: POP_R16(vm, R16_BC); break;
