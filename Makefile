@@ -20,7 +20,7 @@ main.o : include/vm.h include/cartridge.h \
 		 src/main.c
 	$(CC) $(CFLAGS) -c src/main.c
 
-display.o : include/display.h
+display.o : include/display.h \
 			src/display.c
 	$(CC) $(CFLAGS) -c src/display.c
 
