@@ -76,4 +76,5 @@ typedef struct {
 void initVM(VM* vm);
 void freeVM(VM* vm);
 void loadCartridge(VM* vm, Cartridge* cartridge);
+
 #endif

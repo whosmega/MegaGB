@@ -4,6 +4,7 @@
 #include <string.h>
 #include "../include/vm.h"
 #include "../include/debug.h"
+#include "../include/display.h"
 
 #define PORT_ADDR 0xFF00
 
@@ -871,7 +872,7 @@ static inline void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         /* Pass over control to an MBC, maybe this is a call for 
          * bank switch 
          * TODO */
-        printf("Error : Attempt to write to address 0x%x\n", addr);
+        printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
     }
     vm->MEM[addr] = byte; 
@@ -893,12 +894,11 @@ static void bootROM(VM* vm) {
                           0xD9, 0x99, 0xBB, 0xBB, 0x67, 0x64,
                           0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC,
                           0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E};
-#ifndef NO_CARTRIDGE_VERIFICATION    
+#ifndef DEBUG_NO_CARTRIDGE_VERIFICATION    
     bool logoVerified = memcmp(&vm->cartridge->logoChecksum, &logo, 0x18) == 0;
     
     if (!logoVerified) {
-        printf("FATAL : Logo Verification Failed\n");
-        exit(5);
+        log_fatal(vm, "Logo Verification Failed");
     }
     
     int checksum = 0;
@@ -907,19 +907,22 @@ static void bootROM(VM* vm) {
     }
 
     if ((checksum & 0xFF) != vm->cartridge->headerChecksum) {
-        printf("FATAL : Header Checksum Doesn't Match, it is possibly corrupted\n");
-        exit(5);
+        log_fatal(vm, "Header Checksum Doesn't Match, it is possibly corrupted");
     }
 #endif   
     /* Map the cartridge rom to the GBC rom space 
      * occupying bank 0 and 1, a total of 32 KB*/
-    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
+    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);   
 }
 
 static void prefixCB(VM* vm) {
     /* This function contains opcode interpretations for
      * all the instruction prefixed by opcode CB */
     uint8_t byte = READ_BYTE(vm);
+    
+#ifdef DEBUG_REALTIME_PRINTING
+    print_
+#endif
 
     switch (byte) {
         case 0x00: rotateLeft(vm, R8_B, true); break;
@@ -1183,8 +1186,7 @@ static void prefixCB(VM* vm) {
 
 void runVM(VM* vm) {
     for (;;) {
-#ifdef REALTIME_PRINTING
-        usleep(10000);
+#ifdef DEBUG_REALTIME_PRINTING
         printInstruction(vm);
 #endif
         uint8_t byte = READ_BYTE(vm);
@@ -1450,7 +1452,7 @@ void runVM(VM* vm) {
             case 0xD6: subR8D8(vm, R8_A); break;
             case 0xD7: rst(vm, 0x10); break;
             case 0xD8: retCondition(vm, CONDITION_C(vm)); break;
-            case 0xD9: ret(vm); INTERRUPT_MASTER_ENABLE(vm); break;
+            case 0xD9: INTERRUPT_MASTER_ENABLE(vm); ret(vm); break;
             case 0xDA: jumpCondition(vm, CONDITION_C(vm)); break;
             case 0xDC: callCondition(vm, CONDITION_C(vm)); break;
             case 0xDE: sbcR8D8(vm, R8_A); break;
@@ -1486,12 +1488,29 @@ void runVM(VM* vm) {
 void loadCartridge(VM *vm, Cartridge *cartridge) {
     vm->cartridge = cartridge;
     cartridge->inserted = true;
-#ifdef PRINT_CARTRIDGE_INFO 
+#ifdef DEBUG_PRINT_CARTRIDGE_INFO 
     printCartridge(cartridge);
 #endif
     /* Cartridge is now in inserted state */
+#ifdef DEBUG_LOGGING
+    printf("Booting ROM\n");
+#endif
     bootROM(vm);
+#ifdef DEBUG_LOGGING
+    printf("Successfully Booted ROM\n");
+    printf("Starting Emulated Display\n");
+#endif
+    startDisplay(vm);
+#ifdef DEBUG_LOGGING
+    printf("Successfully Started Emulated Display\n");
+    printf("Starting CPU execution\n");
+#endif
+    /* We provide a 1 second delay to ensure other hardware threads have started up */
+    sleep(1);
     runVM(vm);
+#ifdef DEBUG_LOGGING
+    printf("Finished CPU execution\n");
+#endif
 }
 
 
