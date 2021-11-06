@@ -921,7 +921,7 @@ static void prefixCB(VM* vm) {
     uint8_t byte = READ_BYTE(vm);
     
 #ifdef DEBUG_REALTIME_PRINTING
-    print_
+    printCBInstruction(vm, byte);
 #endif
 
     switch (byte) {
