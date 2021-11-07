@@ -6,7 +6,7 @@ void log_fatal(VM* vm, const char* string) {
     printf("%s", string);
     printf("\n");
 
-    freeVM(vm);
+    stopEmulator(vm);
     exit(99);
 }
 
@@ -572,3 +572,9 @@ void printInstruction(VM* vm) {
     }
 }
 
+void printRegisters(VM* vm) {
+    printf("[");
+    printf("A%x B%x C%x D%x E%x H%x L%x]\n", vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C], 
+                                             vm->GPR[R8_D], vm->GPR[R8_E], vm->GPR[R8_H],
+                                             vm->GPR[R8_L]);
+}

@@ -2,6 +2,7 @@
 #define MGBC_VM_H
 #include <stdint.h>
 #include <unistd.h>
+#include <gtk/gtk.h>
 #include "../include/cartridge.h"
 
 typedef enum {
@@ -58,7 +59,21 @@ typedef enum {
 #define READ_BYTE(vm) (vm->MEM[vm->PC++])
 #define READ_16BIT(vm) ((vm->MEM[vm->PC++]) | (vm->MEM[vm->PC++] << 8))
 
+typedef enum {
+    THREAD_DEAD,
+    THREAD_RUNNING
+} THREAD_STATUS;
+
 typedef struct {
+    /* Threads */ 
+    pthread_t displayThreadID;
+    pthread_t cpuThreadID;
+    
+    /* Volatile atomic type variables for different threads to query and modify 
+     * as they change their status */
+    volatile sig_atomic_t displayThreadStatus;
+    volatile sig_atomic_t cpuThreadStatus;
+    /* ---------------------- */
     Cartridge* cartridge;
     bool IME;                           /* Interrupt Master Enable Flag */
     bool conditionFalse;                /* If a condition was false for the previous
@@ -67,14 +82,15 @@ typedef struct {
                                            new dispatch */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
-    
     uint16_t PC;                        /* Program Counter */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];    
 } VM;
 
-void initVM(VM* vm);
-void freeVM(VM* vm);
-void loadCartridge(VM* vm, Cartridge* cartridge);
-
+/* Loads in the cartridge into the VM and starts the overall emulator */
+void startEmulator(Cartridge* cartridge);
+/*
+ * will terminate CPU thread and other hardware threads then 
+ * perform a memory cleanup by freeing the VM state and then safely exiting */
+void stopEmulator(VM* vm);
 #endif

@@ -28,13 +28,10 @@ int main(int argc, char* argv[]) {
 
     fclose(file);
     
-    VM vm;
     Cartridge c;
-    initVM(&vm);
     bool result = initCartridge(&c, allocation, size);
     
     if (!result) exit(3);
 
-    loadCartridge(&vm, &c);
-    freeVM(&vm);
+    startEmulator(&c);
 }

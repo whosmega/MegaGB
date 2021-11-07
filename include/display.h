@@ -4,10 +4,11 @@
 #include <gtk/gtk.h>
 #include "../include/vm.h"
 
-typedef struct {
-    VM* vm;
-} Display;
+#define MIN_RES_HEIGHT_PX 144 
+#define MIN_RES_WIDTH_PX 160
 
-bool startDisplay(VM* vm);
+/* The display GUI is started by invoking this function in a new thread */
+
+void* startDisplay(void* arg);
 
 #endif
