@@ -110,7 +110,7 @@ void stopEmulator(VM* vm) {
     /* Wait till the cleanup handlers have finished */
     while (vm->displayThreadStatus == THREAD_RUNNING ||
            vm->cpuThreadStatus == THREAD_RUNNING) {
-        
+         
     }
     /* Reset VM */
     initVM(vm);

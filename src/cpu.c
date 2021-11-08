@@ -1184,7 +1184,7 @@ void* runCPU(void* arg) {
             case 0x0E: LOAD_R_D8(vm, R8_C); break;
             case 0x0F: rotateRight(vm, R8_A, false); break;
             /* OPCODE : STOP, for testing only */
-            case 0x10: return NULL;
+            case 0x10: goto exit_loop;
             case 0x11: LOAD_RR_D16(vm, R16_DE); break;
             case 0x12: LOAD_ARR_R(vm, R16_DE, R8_A); break;
             case 0x13: INC_RR(vm, R16_DE); break;
@@ -1454,8 +1454,10 @@ void* runCPU(void* arg) {
         }
     }
     
+exit_loop:
     /* We do the cleanup here incase the thread wasnt cancelled */
     pthread_cleanup_pop(1);
+    return NULL;
 }
 
 
