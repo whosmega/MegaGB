@@ -39,7 +39,7 @@ typedef enum {
 } CGB_CODE;
 
 typedef enum {
-    CARTRIDGE_ROM_ONLY = 0x00,
+    CARTRIDGE_NONE = 0x00,
     CARTRIDGE_MBC1 = 0x01,
     CARTRIDGE_MBC1_RAM = 0x02,
     CARTRIDGE_MBC1_RAM_BATTERY = 0x03,

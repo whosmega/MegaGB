@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <gtk/gtk.h>
 #include "../include/cartridge.h"
+#include "../include/mbc.h"
 
 typedef enum {
     /* General purpose Registers */
@@ -64,7 +65,7 @@ typedef enum {
     THREAD_RUNNING
 } THREAD_STATUS;
 
-typedef struct {
+struct VM {
     /* Threads */ 
     pthread_t displayThreadID;
     pthread_t cpuThreadID;
@@ -84,8 +85,12 @@ typedef struct {
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
     /* ------------- Memory ---------------- */
-    uint8_t MEM[0xFFFF + 1];    
-} VM;
+    uint8_t MEM[0xFFFF + 1];
+    void* memController;                 /* Memory Bank Controller */
+    MBC_TYPE memControllerType;
+};
+
+typedef struct VM VM;
 
 /* Loads in the cartridge into the VM and starts the overall emulator */
 void startEmulator(Cartridge* cartridge);

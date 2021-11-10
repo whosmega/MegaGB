@@ -3,6 +3,7 @@
 #include "../include/cpu.h"
 #include "../include/debug.h"
 #include "../include/display.h"
+#include "../include/mbc.h"
 #include <string.h>
 #include <pthread.h>
 
@@ -11,6 +12,8 @@ static void initVM(VM* vm) {
     vm->conditionFalse = false;
     vm->cpuThreadID = 0;
     vm->displayThreadID = 0;
+    vm->memController = NULL;
+    vm->memControllerType = MBC_NONE;
 
     vm->cpuThreadStatus = THREAD_DEAD;
     vm->displayThreadStatus = THREAD_DEAD;
@@ -70,6 +73,10 @@ void startEmulator(Cartridge* cartridge) {
     printf("Booting into ROM\n");
 #endif
     bootROM(&vm);
+#ifdef DEBUT_LOGGING
+    printf("Setting up Memory Bank Controller\n");
+#endif
+    mbc_allocate(&vm);
 #ifdef DEBUG_LOGGING
     printf("Starting Display Worker Thread\n");
 #endif
@@ -109,9 +116,12 @@ void stopEmulator(VM* vm) {
     
     /* Wait till the cleanup handlers have finished */
     while (vm->displayThreadStatus == THREAD_RUNNING ||
-           vm->cpuThreadStatus == THREAD_RUNNING) {
-         
-    }
+           vm->cpuThreadStatus == THREAD_RUNNING);
+
+#ifdef DEBUG_LOGGING
+    printf("Cleaning allocations\n");
+#endif
+    mbc_free(vm);
     /* Reset VM */
     initVM(vm);
 }

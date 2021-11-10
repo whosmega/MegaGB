@@ -101,7 +101,7 @@ static char* toStrCartridgeType(CARTRIDGE_TYPE code) {
         case CARTRIDGE_MBC1_RAM_BATTERY: return "MBC1 + RAM + Battery";
         case CARTRIDGE_MBC2: return "MBC2";
         case CARTRIDGE_MBC2_BATTERY: return "MBC2 + Battery";
-        case CARTRIDGE_ROM_ONLY: return "ROM Only";
+        case CARTRIDGE_NONE: return "None";
         case CARTRIDGE_ROM_RAM: return "ROM + RAM";
         case CARTRIDGE_ROM_RAM_BATTERY: return "ROM + RAM + BATTERY";
         case CARTRIDGE_MMM01: return "MMM01";
