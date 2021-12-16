@@ -49,7 +49,7 @@ typedef struct {
 
 void mbc_allocate(struct VM* vm);
 void mbc_free(struct VM* vm);
-void mbc_interceptRead(struct VM* vm);
-void mbc_interceptWrite(struct VM* vm);
+void mbc_writeExternalRAM(struct VM* vm, uint16_t addr, uint8_t byte);
+void mbc_interceptROMWrite(struct VM* vm, uint16_t addr, uint8_t byte);
 
 #endif

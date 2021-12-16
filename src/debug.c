@@ -328,7 +328,7 @@ void printInstruction(VM* vm) {
         case 0x02: return simpleInstruction(vm, "LD (BC), A");
         case 0x03: return simpleInstruction(vm, "INC BC");
         case 0x04: return simpleInstruction(vm, "INC B");
-        case 0x05: return simpleInstruction(vm, "DEB B");
+        case 0x05: return simpleInstruction(vm, "DEC B");
         case 0x06: return d8(vm, "LD B, d8");
         case 0x07: return simpleInstruction(vm, "RLCA");
         case 0x08: return a16(vm, "LD a16, SP");

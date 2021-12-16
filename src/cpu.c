@@ -18,9 +18,9 @@
 #define LOAD_R_D8(vm, R) vm->GPR[R] = READ_BYTE(vm)
 /* Dereference the address contained in the R16 register and set it's value 
  * to the R8 register */
-#define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = vm->MEM[get_reg16(vm, RR)]
+#define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = readAddr(vm, get_reg16(vm, RR))
 /* Load 8 bit data into address at R16 register (dereferencing) */
-#define LOAD_ARR_D8(vm, RR) vm->MEM[get_reg16(vm, RR)] = READ_BYTE(vm)
+#define LOAD_ARR_D8(vm, RR) writeAddr(vm, get_reg16(vm, RR), READ_BYTE(vm))
 /* Load contents of R8 register into another R8 register */
 #define LOAD_R_R(vm, R1, R2) vm->GPR[R1] = vm->GPR[R2]
 /* Load contents of R16 register into another R16 register */
@@ -28,15 +28,15 @@
 /* Load instructions from reading into and writing into main memory */
 #define LOAD_MEM_R(vm, R) writeAddr(vm, READ_16BIT(vm), vm->GPR[R])
 /* Load what's at the address specified by the 16 bit data into the R8 register */
-#define LOAD_R_MEM(vm, R) vm->GPR[R] = vm->MEM[READ_16BIT(vm)]
+#define LOAD_R_MEM(vm, R) vm->GPR[R] = readAddr(vm, READ_16BIT(vm))
 /* Load 'R' into '(PORT_ADDR + D8)' */
 #define LOAD_D8PORT_R(vm, R) writeAddr(vm, PORT_ADDR + READ_BYTE(vm), vm->GPR[R])
 /* Load '(PORT_ADDR + D8) into 'R' */
-#define LOAD_R_D8PORT(vm, R) vm->GPR[R] = vm->MEM[PORT_ADDR + READ_BYTE(vm)]
+#define LOAD_R_D8PORT(vm, R) vm->GPR[R] = readAddr(vm, PORT_ADDR + READ_BYTE(vm))
 /* Load 'R1' into '(PORT_ADDR + R2)' */
 #define LOAD_RPORT_R(vm, R1, R2) writeAddr(vm, PORT_ADDR + vm->GPR[R2], vm->GPR[R1])
 /* Load '(PORT_ADDR + R2)' into 'R1' */
-#define LOAD_R_RPORT(vm, R1, R2) vm->GPR[R1] = vm->MEM[PORT_ADDR + vm->GPR[R2]]
+#define LOAD_R_RPORT(vm, R1, R2) vm->GPR[R1] = readAddr(vm, PORT_ADDR + vm->GPR[R2])
 
 /* Increment contents of R16 register */
 #define INC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) + 1))
@@ -69,7 +69,8 @@
 /* Works for both 8 bit and 16 bit */
 #define TEST_C_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_C, (int32_t)(x) - (int32_t)(y) < 0 ? 1 : 0)
 
-static inline void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
+static void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
+static inline uint8_t readAddr(VM* vm, uint16_t addr);
 
 static inline void set_flag(VM* vm, FLAG flag, uint8_t bit) {
     /* Since the flags are enums and in order, their numeric value
@@ -152,7 +153,7 @@ static void rotateLeft(VM* vm, GP_REG R, bool setZFlag) {
 
 static void rotateLeftAR16(VM* vm, GP_REG R16, bool setZFlag) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t toModify = vm->MEM[addr];
+    uint8_t toModify = readAddr(vm, addr);
     uint8_t bit7 = toModify >> 7;
 
     toModify <<= 1;
@@ -190,7 +191,7 @@ static void rotateRight(VM* vm, GP_REG R, bool setZFlag) {
 
 static void rotateRightAR16(VM* vm, GP_REG R16, bool setZFlag) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t toModify = vm->MEM[addr];
+    uint8_t toModify = readAddr(vm, addr);
     uint8_t bit1 = toModify & 1;
 
     toModify >>= 1;
@@ -223,7 +224,7 @@ static void shiftLeftArithmeticR8(VM* vm, GP_REG R) {
 
 static void shiftLeftArithmeticAR16(VM* vm, GP_REG R16) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t value = vm->MEM[addr];
+    uint8_t value = readAddr(vm, addr);
     uint8_t bit7 = value >> 7;
     uint8_t result = value << 1;
 
@@ -250,7 +251,7 @@ static void shiftRightLogicalR8(VM* vm, GP_REG R) {
 
 static void shiftRightLogicalAR16(VM* vm, GP_REG R16) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t value = vm->MEM[addr];
+    uint8_t value = readAddr(vm, addr);
     uint8_t bit1 = value & 0x1;
     uint8_t result = value >> 1;
 
@@ -279,7 +280,7 @@ static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
 
 static void shiftRightArithmeticAR16(VM* vm, GP_REG R16) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t value = vm->MEM[addr]; 
+    uint8_t value = readAddr(vm, addr); 
     uint8_t bit7 = value >> 7;
     uint8_t result = value >> 1;
     
@@ -310,7 +311,7 @@ static void swapR8(VM* vm, GP_REG R8) {
 
 static void swapAR16(VM* vm, GP_REG R16) {
      uint16_t addr = get_reg16(vm, R16);
-     uint8_t value = vm->MEM[addr]; 
+     uint8_t value = readAddr(vm, addr); 
      uint8_t highNibble = value >> 4;
      uint8_t lowNibble = value & 0xF;
 
@@ -334,7 +335,7 @@ static void testBitR8(VM* vm, GP_REG R8, uint8_t bit) {
 }
 
 static void testBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
-    uint8_t value = vm->MEM[get_reg16(vm, R16)];
+    uint8_t value = readAddr(vm, get_reg16(vm, R16));
     uint8_t bitValue = (value >> bit) & 0x1;
 
     TEST_Z_FLAG(vm, bitValue);
@@ -352,7 +353,7 @@ static void setBitR8(VM* vm, GP_REG R8, uint8_t bit) {
 
 static void setBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t value = vm->MEM[addr];
+    uint8_t value = readAddr(vm, addr);
     uint8_t orValue = 0b10000000 >> bit;
     uint8_t result = value | orValue;
 
@@ -370,7 +371,7 @@ static void resetBitR8(VM* vm, GP_REG R8, uint8_t bit) {
 
 static void resetBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t value = vm->MEM[addr];
+    uint8_t value = readAddr(vm, addr);
     uint8_t andValue = ~(0b10000000 >> bit);
     uint8_t result = value & andValue;
 
@@ -442,7 +443,7 @@ static void addR8D8(VM* vm, GP_REG R) {
 
 static void addR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t toAdd = vm->MEM[get_reg16(vm, R16)];
+    uint8_t toAdd = readAddr(vm, get_reg16(vm, R16));
     uint8_t result = old + toAdd;
 
     vm->GPR[R8] = result;
@@ -486,7 +487,7 @@ static void adcR8D8(VM* vm, GP_REG R) {
 
 static void adcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t toAdd = vm->MEM[get_reg16(vm, R16)];
+    uint8_t toAdd = readAddr(vm, get_reg16(vm, R16));
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old + toAdd + carry;
 
@@ -526,7 +527,7 @@ static void subR8D8(VM* vm, GP_REG R) {
 
 static void subR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t toSub = vm->MEM[get_reg16(vm, R16)];
+    uint8_t toSub = readAddr(vm, get_reg16(vm, R16));
     uint8_t result = old - toSub;
 
     vm->GPR[R8] = result;
@@ -567,7 +568,7 @@ static void sbcR8D8(VM* vm, GP_REG R) {
 
 static void sbcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    int32_t toSub = vm->MEM[get_reg16(vm, R16)];
+    int32_t toSub = readAddr(vm, get_reg16(vm, R16));
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old - toSub - carry;
 
@@ -607,7 +608,7 @@ static void andR8D8(VM* vm, GP_REG R) {
 
 static void andR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t operand = vm->MEM[get_reg16(vm, R16)];
+    uint8_t operand = readAddr(vm, get_reg16(vm, R16));
     uint8_t result = old & operand;
 
     vm->GPR[R8] = result;
@@ -646,7 +647,7 @@ static void xorR8D8(VM* vm, GP_REG R) {
 
 static void xorR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t operand = vm->MEM[get_reg16(vm, R16)];
+    uint8_t operand = readAddr(vm, get_reg16(vm, R16));
     uint8_t result = old ^ operand;
 
     vm->GPR[R8] = result;
@@ -685,7 +686,7 @@ static void orR8D8(VM* vm, GP_REG R) {
 
 static void orR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    uint8_t operand = vm->MEM[get_reg16(vm, R16)];
+    uint8_t operand = readAddr(vm, get_reg16(vm, R16));
     uint8_t result = old | operand;
 
     vm->GPR[R8] = result;
@@ -718,7 +719,7 @@ static void compareR8D8(VM* vm, GP_REG R) {
 
 static void compareR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t operand1 = vm->GPR[R8];
-    uint8_t operand2 = vm->MEM[get_reg16(vm, R16)];
+    uint8_t operand2 = readAddr(vm, get_reg16(vm, R16));
 
     set_flag(vm, FLAG_Z, operand1 == operand2);
     set_flag(vm, FLAG_C, operand2 > operand1);
@@ -743,8 +744,8 @@ static inline void push16(VM* vm, uint16_t u16) {
 
 static inline uint16_t pop16(VM* vm) {
     uint16_t stackPointer = get_reg16(vm, R16_SP);
-    uint8_t lowByte = vm->MEM[stackPointer];
-    uint8_t highByte = vm->MEM[stackPointer + 1];
+    uint8_t lowByte = readAddr(vm, stackPointer);
+    uint8_t highByte = readAddr(vm, stackPointer + 1);
 
     set_reg16(vm, R16_SP, stackPointer + 2);
 
@@ -845,26 +846,31 @@ static void decimalAdjust(VM* vm) {
     /* Refer to 'https://ehaskins.com/2018-01-30%20Z80%20DAA/' */
 }
 
-/* This function prevents any code from writing into 
- * read only areas */ 
-
-static inline bool canWriteAddr(VM* vm, uint16_t addr) {
-    return !((addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) ||
-           (addr >= ECHO_N0_8KB && addr <= UNUSABLE_N0_END));
-}
-
 /* This function is responsible for writing 1 byte to a memory address */
 
-static inline void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
-    if (!canWriteAddr(vm, addr)) {
+static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
+    if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
+        /* External RAM write request */
+        mbc_writeExternalRAM(vm, addr, byte);
+        return;
+    } else if (addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) {
         /* Pass over control to an MBC, maybe this is a call for 
-         * bank switch 
-         * TODO */
+         * bank switch */
+        mbc_interceptROMWrite(vm, addr, byte); 
+        return;
+    } else if ((addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) || 
+            (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END)) {
+
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
     }
     vm->MEM[addr] = byte; 
 }
+
+static inline uint8_t readAddr(VM* vm, uint16_t addr) {
+    return vm->MEM[addr]; 
+}
+
 
 static void prefixCB(VM* vm) {
     /* This function contains opcode interpretations for
@@ -1145,6 +1151,8 @@ static void cpuCleanupHandler(void* arg) {
     vm->cpuThreadID = 0;
 }
 
+/* Instruction Set : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html */
+
 void* runCPU(void* arg) {
     VM* vm = (VM*)arg;
     /* Mark thread as 'running' */
@@ -1152,7 +1160,6 @@ void* runCPU(void* arg) {
     pthread_cleanup_push(cpuCleanupHandler, arg);
 
     for (;;) {
-        usleep(5000);
 #ifdef DEBUG_PRINT_REGISTERS
         printRegisters(vm);
 #endif
@@ -1229,10 +1236,10 @@ void* runCPU(void* arg) {
             case 0x34: {
                 /* Increment what is at the address in HL */
                 uint16_t address = get_reg16(vm, R16_HL);
-                uint8_t old = vm->MEM[address];
+                uint8_t old = readAddr(vm, address);
                 uint8_t new = old + 1; 
                 
-                vm->MEM[address] += 1;
+                writeAddr(vm, address, new);
 
                 TEST_Z_FLAG(vm, new);
                 TEST_H_FLAG_ADD(vm, old, new);
@@ -1242,7 +1249,7 @@ void* runCPU(void* arg) {
             case 0x35: {
                 /* Decrement what is at the address in HL */
                 uint16_t address = get_reg16(vm, R16_HL);
-                uint8_t old = vm->MEM[address];
+                uint8_t old = readAddr(vm, address);
                 uint8_t new = old - 1; 
                 
                 TEST_Z_FLAG(vm, new);

@@ -1,0 +1,4 @@
+MBC-1
+    -> Memory range 0000-1fff (ram enable register)
+    -> Memory range 2000-3fff (rom bank number register)
+

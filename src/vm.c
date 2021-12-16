@@ -9,11 +9,13 @@
 
 static void initVM(VM* vm) {
     vm->cartridge = NULL;
+    vm->gtkApp = NULL;
     vm->conditionFalse = false;
     vm->cpuThreadID = 0;
     vm->displayThreadID = 0;
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
+    vm->stopping = false;
 
     vm->cpuThreadStatus = THREAD_DEAD;
     vm->displayThreadStatus = THREAD_DEAD;
@@ -96,6 +98,8 @@ void startEmulator(Cartridge* cartridge) {
 }
 
 void stopEmulator(VM* vm) {
+    if (vm->stopping) return;
+    vm->stopping = true;
 #ifdef DEBUG_LOGGING
     printf("Stopping Emulator Now\n");
 #endif

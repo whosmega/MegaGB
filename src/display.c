@@ -20,9 +20,17 @@ static void displayCleanupHandler(void* arg) {
 #ifdef DEBUG_LOGGING
     printf("Cleaning Up Display Worker Thread\n");
 #endif
+    
     VM* vm = (VM*)arg;
     vm->displayThreadStatus = THREAD_DEAD;
     vm->displayThreadID = 0;
+
+    /* Free the GUI */
+
+    if (vm->gtkApp != NULL) {
+        g_object_unref((gpointer)vm->gtkApp);
+        vm->gtkApp = NULL;
+    } 
 }
 
 void* startDisplay(void* arg) {
@@ -31,12 +39,11 @@ void* startDisplay(void* arg) {
     pthread_cleanup_push(displayCleanupHandler, arg);
 
     GtkApplication* app = gtk_application_new("com.megagbc.display", G_APPLICATION_FLAGS_NONE);
+    vm->gtkApp = app;
 
     g_signal_connect(app, "activate", G_CALLBACK(app_activated), NULL);
     int status = g_application_run(G_APPLICATION(app), 0, NULL);
     
-    /* Free the GTK allocations */
-    g_object_unref(app);
 #ifdef DEBUG_LOGGING
     printf("[Exited GTK Application with status code %d]\n", status);
 #endif

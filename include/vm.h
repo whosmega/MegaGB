@@ -1,5 +1,6 @@
 #ifndef MGBC_VM_H
 #define MGBC_VM_H
+#include <signal.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <gtk/gtk.h>
@@ -67,13 +68,15 @@ typedef enum {
 
 struct VM {
     /* Threads */ 
-    pthread_t displayThreadID;
+    pthread_t displayThreadID; 
     pthread_t cpuThreadID;
     
     /* Volatile atomic type variables for different threads to query and modify 
      * as they change their status */
     volatile sig_atomic_t displayThreadStatus;
     volatile sig_atomic_t cpuThreadStatus;
+    volatile sig_atomic_t stopping;             /* Flag to prevent race conditions */
+    volatile GtkApplication* gtkApp;
     /* ---------------------- */
     Cartridge* cartridge;
     bool IME;                           /* Interrupt Master Enable Flag */
