@@ -46,7 +46,7 @@ static void bootROM(VM* vm) {
     if (!logoVerified) {
         log_fatal(vm, "Logo Verification Failed");
     }
-    
+        
     int checksum = 0;
     for (int i = 0x134; i <= 0x14C; i++) {
         checksum = checksum - vm->cartridge->allocated[i] - 1;
@@ -55,10 +55,11 @@ static void bootROM(VM* vm) {
     if ((checksum & 0xFF) != vm->cartridge->headerChecksum) {
         log_fatal(vm, "Header Checksum Doesn't Match, it is possibly corrupted");
     }
-#endif   
+#endif
+
     /* Map the cartridge rom to the GBC rom space 
      * occupying bank 0 and 1, a total of 32 KB*/
-    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);   
+    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
 }
 
 void startEmulator(Cartridge* cartridge) {

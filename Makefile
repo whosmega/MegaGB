@@ -38,5 +38,6 @@ debug.o : include/vm.h include/debug.h \
 
 clean:
 	rm bin/*.o
+	rm megagbc
 	
 
