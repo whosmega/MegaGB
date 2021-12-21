@@ -11,14 +11,12 @@ static void initVM(VM* vm) {
     vm->cartridge = NULL;
     vm->gtkApp = NULL;
     vm->conditionFalse = false;
-    vm->cpuThreadID = 0;
-    vm->displayThreadID = 0;
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
-    vm->stopping = false;
-
+    
     vm->cpuThreadStatus = THREAD_DEAD;
     vm->displayThreadStatus = THREAD_DEAD;
+    vm->runCPU = true;
     /* Set registers & flags to GBC specifics */
     resetGBC(vm);
 }
@@ -56,7 +54,6 @@ static void bootROM(VM* vm) {
         log_fatal(vm, "Header Checksum Doesn't Match, it is possibly corrupted");
     }
 #endif
-
     /* Map the cartridge rom to the GBC rom space 
      * occupying bank 0 and 1, a total of 32 KB*/
     memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
@@ -68,7 +65,10 @@ void startEmulator(Cartridge* cartridge) {
     /* Load the cartridge */
     vm.cartridge = cartridge;
     vm.cartridge->inserted = true;
-    
+   
+    pthread_t displayThreadID = 0;
+    pthread_t cpuThreadID = 0;
+
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge); 
 #endif
@@ -76,47 +76,41 @@ void startEmulator(Cartridge* cartridge) {
     printf("Booting into ROM\n");
 #endif
     bootROM(&vm);
-#ifdef DEBUT_LOGGING
+#ifdef DEBUG_LOGGING
     printf("Setting up Memory Bank Controller\n");
 #endif
     mbc_allocate(&vm);
 #ifdef DEBUG_LOGGING
     printf("Starting Display Worker Thread\n");
 #endif
-    pthread_create(&vm.displayThreadID, NULL, startDisplay, (void*)&vm);
+    pthread_create(&displayThreadID, NULL, startDisplay, (void*)&vm);
 #ifdef DEBUG_LOGGING
     printf("Starting CPU Worker Thread\n");
 #endif
     sleep(1);
-    pthread_create(&vm.cpuThreadID, NULL, runCPU, (void*)&vm);
+    pthread_create(&cpuThreadID, NULL, runCPU, (void*)&vm);
 
-    /* We wait till the window is closed then we shut down the emulator */
-    pthread_join(vm.displayThreadID, NULL);
-    /* Reset all fields to null and stop all running threads
+    /* We wait till the window is closed then we shut down the emulator 
      *
-     * We dont care about the cartridge */
+     * Display thread is the 'main' thread so we dont provide a way to kill it */
+    pthread_join(displayThreadID, NULL);
+    /* Reset all fields to null */
     stopEmulator(&vm);
 }
 
 void stopEmulator(VM* vm) {
-    if (vm->stopping) return;
-    vm->stopping = true;
 #ifdef DEBUG_LOGGING
     printf("Stopping Emulator Now\n");
 #endif
-    /* Stop the CPU and display */
-    if (vm->displayThreadStatus == THREAD_RUNNING) {
-#ifdef DEBUG_LOGGING
-        printf("Stopping Display Worker Thread\n");
-#endif
-        pthread_cancel(vm->displayThreadID);
-    }
+    /* Stop the CPU, we dont need to stop the display 
+     * because it is the main thread, the program wont stop 
+     * until the user closes the display */
 
     if (vm->cpuThreadStatus == THREAD_RUNNING) {
+        vm->runCPU = false;
 #ifdef DEBUG_LOGGING
         printf("Stopping CPU Worker Thread\n");
 #endif
-        pthread_cancel(vm->cpuThreadID);
     }
     
     /* Wait till the cleanup handlers have finished */

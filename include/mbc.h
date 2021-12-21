@@ -24,32 +24,13 @@ typedef enum {
     MBC_TYPE_7
 } MBC_TYPE;
 
-/* Memory Bank Controller structure */
-
-typedef struct {
-    /* External RAM Bank Storage 
-     *
-     * MBC1 supports 4 8kib banks for RAM */
-    uint8_t* ramBanks;
-    
-    /* Note : Selected RAM/ROM banks are kept in their 
-     * associated memory locations in the VM Memory.
-     * The cartridge structure located in VM contains 
-     * the entire rom as a continuous array and the MBC maps
-     * the correct bank from it */
-
-    /* Registers */
-    bool ramEnabled;
-    uint8_t romBankNumber;       /* Used to store lower 5 bits of bank number */
-    uint8_t secondaryBankNumber; /* Used to store upper 2 bits of rom bank number or 
-                                    ram bank number */
-    BANK_MODE bankMode;          /* Banking Mode */
-} MBC_1;
-
-
 void mbc_allocate(struct VM* vm);
 void mbc_free(struct VM* vm);
 void mbc_writeExternalRAM(struct VM* vm, uint16_t addr, uint8_t byte);
+uint8_t mbc_readExternalRAM(struct VM* vm, uint16_t addr);
 void mbc_interceptROMWrite(struct VM* vm, uint16_t addr, uint8_t byte);
+void switchROMBank(struct VM* vm, int bankNumber);
+void switchRestrictedROMBank(struct VM* vm, int bankNumber);
+
 
 #endif

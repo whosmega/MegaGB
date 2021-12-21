@@ -67,15 +67,11 @@ typedef enum {
 } THREAD_STATUS;
 
 struct VM {
-    /* Threads */ 
-    pthread_t displayThreadID; 
-    pthread_t cpuThreadID;
-    
-    /* Volatile atomic type variables for different threads to query and modify 
-     * as they change their status */
+    /* Thread stopping flags */
+    bool runCPU;
+   
     volatile sig_atomic_t displayThreadStatus;
     volatile sig_atomic_t cpuThreadStatus;
-    volatile sig_atomic_t stopping;             /* Flag to prevent race conditions */
     volatile GtkApplication* gtkApp;
     /* ---------------------- */
     Cartridge* cartridge;

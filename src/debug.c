@@ -3,7 +3,7 @@
 
 void log_fatal(VM* vm, const char* string) {
     printf("[FATAL]");
-    printf("%s", string);
+    printf(" %s", string);
     printf("\n");
 
     stopEmulator(vm);
@@ -12,7 +12,7 @@ void log_fatal(VM* vm, const char* string) {
 
 void log_warning(VM* vm, const char* string) {
     printf("[WARNING]");
-    printf("%s", string);
+    printf(" %s", string);
     printf("\n");
 }
 
@@ -37,15 +37,15 @@ static void simpleInstruction(VM* vm, char* ins) {
 }
 
 static void d16(VM* vm, char* ins) {
-    printf("%s (%d)\n", ins, read2Bytes(vm));
+    printf("%s (0x%04x)\n", ins, read2Bytes(vm));
 }
 
 static void d8(VM* vm, char* ins) {
-    printf("%s (%d)\n", ins, vm->MEM[vm->PC + 1]);
+    printf("%s (0x%02x)\n", ins, vm->MEM[vm->PC + 1]);
 }
 
 static void a16(VM* vm, char* ins) {
-    printf("%s (0x%x)\n", ins, read2Bytes(vm));
+    printf("%s (0x%04x)\n", ins, read2Bytes(vm));
 }
 
 static void r8(VM* vm, char* ins) {
@@ -55,6 +55,7 @@ static void r8(VM* vm, char* ins) {
 void printCBInstruction(VM* vm, uint8_t byte) {
     printf("[0x%04x]", vm->PC);
     printFlags(vm);
+    
     printf(" %10s", "");
 
     switch (byte) {
@@ -320,8 +321,9 @@ void printCBInstruction(VM* vm, uint8_t byte) {
 void printInstruction(VM* vm) {
     printf("[0x%04x]", vm->PC);
     printFlags(vm);
+    
     printf(" %10s", "");
- 
+  
     switch (vm->MEM[vm->PC]) {
         case 0x00: return simpleInstruction(vm, "NOP");
         case 0x01: return d16(vm, "LD BC, d16");
@@ -574,7 +576,7 @@ void printInstruction(VM* vm) {
 
 void printRegisters(VM* vm) {
     printf("[");
-    printf("A%x B%x C%x D%x E%x H%x L%x]\n", vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C], 
+    printf("A%02x B%02x C%02x D%02x E%02x H%02x L%02x]\n", vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C], 
                                              vm->GPR[R8_D], vm->GPR[R8_E], vm->GPR[R8_H],
                                              vm->GPR[R8_L]);
 }

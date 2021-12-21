@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -O2 `pkg-config --cflags --libs gtk4`
 EXE = megagbc
 
-BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o
+BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
 
 $(EXE): $(BIN)
 	$(CC) $(CFLAGS) $(BIN) -o $(EXE)
@@ -27,6 +27,14 @@ cpu.o : include/cpu.h \
 mbc.o : include/mbc.h \
 		src/mbc.c
 	$(CC) $(CFLAGS) -c src/mbc.c
+
+mbc1.o : include/mbc1.h \
+		src/mbc1.c
+	$(CC) $(CFLAGS) -c src/mbc1.c
+
+mbc2.o : include/mbc2.h \
+		src/mbc2.c
+	$(CC) $(CFLAGS) -c src/mbc2.c
 
 display.o : include/display.h \
 			src/display.c

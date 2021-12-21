@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "../include/vm.h"
 #include "../include/debug.h"
 #include "../include/display.h"
@@ -59,15 +60,16 @@
 /* We check if a carry over for the last 4 bits happened 
  * ref : https://www.reddit.com/r/EmuDev/comments/4ycoix/a_guide_to_the_gameboys_halfcarry_flag*/
 #define TEST_H_FLAG_ADD(vm, x, y) set_flag(vm, FLAG_H, \
-                                        ((x & 0xf) + (y & 0xf) > 0xf) ? 1 : 0)
+                                    (((uint32_t)x & 0xf) + ((uint32_t)y & 0xf) > 0xf) ? 1 : 0)
+
 #define TEST_H_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_H, \
-                                        (((int)(x & 0xf) - (int)(y & 0xf) < 0) ? 1 : 0))
+                                    (((x & 0xf) - (y & 0xf) & 0x10) ? 1 : 0))
 
 /* Test for integer overloads and set carry flags */
-#define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, (uint32_t)(x) + (uint32_t)(y) > 0xFFFF ? 1 : 0)
-#define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, (uint16_t)(x) + (uint16_t)(y) > 0xFF ? 1 : 0)
-/* Works for both 8 bit and 16 bit */
-#define TEST_C_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_C, (int32_t)(x) - (int32_t)(y) < 0 ? 1 : 0)
+#define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, ((uint32_t)(x) + (uint32_t)(y)) > 0xFFFF ? 1 : 0)
+#define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, ((uint16_t)(x) + (uint16_t)(y)) > 0xFF ? 1 : 0)
+#define TEST_C_FLAG_SUB16(vm, x, y) set_flag(vm, FLAG_C, ((int)(x) - (int)(y)) < 0 ? 1 : 0)
+#define TEST_C_FLAG_SUB8(vm, x, y) set_flag(vm, FLAG_C, ((int)(x) - (int)(y)) < 0 ? 1 : 0)
 
 static void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
 static inline uint8_t readAddr(VM* vm, uint16_t addr);
@@ -111,15 +113,41 @@ void resetGBC(VM* vm) {
     vm->GPR[R8_E] = 0x56;
     vm->GPR[R8_H] = 0x00;
     vm->GPR[R8_L] = 0x0D;
+
+    /* Set hardware registers and initialise empty areas */
+    
+    uint8_t hreg_defaults[80] = {
+        0xC7, 0x00, 0x7F, 0xFF, 0xFF, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xE1,                 // 0xFF08 - 0xFF0F
+        0x80, 0xBF, 0xF3, 0xFF, 0xBF, 0xFF, 0x3F, 0x00,                 // 0xFF10 - 0xFF17
+        0xFF, 0xBF, 0x7F, 0xFF, 0x9F, 0xFF, 0xBF, 0xFF,                 // 0xFF18 - 0xFF1F
+        0xFF, 0x00, 0x00, 0xBF, 0x77, 0xF3, 0xF1, 0xFF,                 // 0xFF20 - 0xFF27
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF28 - 0xFF2F
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF30 - 0xFF37
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF38 - 0xFF3F
+        0x91, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
+    };
+
+    /* 0xFF50 to 0xFFFE = 0xFF */
+
+    for (int i = 0x00; i < 0x50; i++) {
+        vm->MEM[0xFF00 + i] = hreg_defaults[i];
+    }
+
+    memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
+    INTERRUPT_MASTER_DISABLE(vm);
 }
 
 static void incrementR8(VM* vm, GP_REG R) {
     /* A utility function which does incrementing for 8 bit registers
      * it does all flag updates it needs to */
-    uint8_t old = vm->GPR[R]; uint8_t new = ++vm->GPR[R];
-    TEST_Z_FLAG(vm, new);
+    uint8_t old = vm->GPR[R];
+    vm->GPR[R]++;
+
+    TEST_Z_FLAG(vm, vm->GPR[R]);
+    TEST_H_FLAG_ADD(vm, old, 1);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, new);
 }
 
 static void decrementR8(VM* vm, GP_REG R) {
@@ -127,7 +155,7 @@ static void decrementR8(VM* vm, GP_REG R) {
     uint8_t old = vm->GPR[R]; uint8_t new = --vm->GPR[R];
     TEST_Z_FLAG(vm, new);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, new);
+    TEST_H_FLAG_SUB(vm, old, 1);
 }
 
 /* The folloing functions are used for all 8 bit rotation 
@@ -386,7 +414,7 @@ static void addR16(VM* vm, GP_REG RR1, GP_REG RR2) {
     uint16_t toAdd = get_reg16(vm, RR2);
     uint16_t result = set_reg16(vm, RR1, old + toAdd);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
+    TEST_H_FLAG_ADD(vm, old, toAdd);
     TEST_C_FLAG_ADD16(vm, old, toAdd);
 }
 
@@ -407,7 +435,7 @@ static void addR16I8(VM* vm, GP_REG RR1, GP_REG RR_STORE) {
         /* Negative integer addition means, subtraction so we
          * do subtraction tests */
         TEST_H_FLAG_SUB(vm, old, result);
-        TEST_C_FLAG_SUB(vm, old, -toAdd);
+        TEST_C_FLAG_SUB16(vm, old, toAdd);
     } else {
         /* Normal addition with a number being 0 or greater */
         TEST_H_FLAG_ADD(vm, old, result);
@@ -424,7 +452,7 @@ static void addR8(VM* vm, GP_REG R1, GP_REG R2) {
     
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
+    TEST_H_FLAG_ADD(vm, old, toAdd);
     TEST_C_FLAG_ADD8(vm, old, toAdd);
 }
 
@@ -437,7 +465,7 @@ static void addR8D8(VM* vm, GP_REG R) {
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
+    TEST_H_FLAG_ADD(vm, old, data);
     TEST_C_FLAG_ADD8(vm, old, data);
 }
 
@@ -450,53 +478,78 @@ static void addR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
+    TEST_H_FLAG_ADD(vm, old, toAdd);
     TEST_C_FLAG_ADD8(vm, old, toAdd);
+}
+
+static void test_adc_hcflags(VM* vm, uint8_t old, uint8_t toAdd, uint8_t result, uint8_t carry) {
+    /* ADC has a slightly different behaviour i.e it adds the
+     * carry flag to the result, the normal H & C flag tests 
+     * have edge cases if used with ADC, so we do a custom test here */
+
+    bool halfCarryOccurred = false;
+    bool carryOccured = false;
+
+    /* Half carry - It can occur either when:
+     * 1. The initial value is added to the value that has to be added 
+     * 2. The result of the above is added to the carry flag 
+     *
+     * We note if a half carry occured in both the cases */
+
+    if (((old & 0xF) + (toAdd & 0xF)) > 0xF) halfCarryOccurred = true;
+    if (((result & 0xF) + (carry & 0xF)) > 0xF) halfCarryOccurred = true;
+
+    /* Carry Flag - When theres an integer overflow for the 8 bit addition
+     * we set the carry flag, the overflow must also be calculated separately like
+     * we did for half carry */
+
+    if (((uint16_t)old + (uint16_t)toAdd) > 0xFF) carryOccured = true;
+    if (((uint16_t)result + (uint16_t)carry) > 0xFF) carryOccured = true;
+
+    set_flag(vm, FLAG_H, halfCarryOccurred);
+    set_flag(vm, FLAG_C, carryOccured);
 }
 
 static void adcR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t old = vm->GPR[R1];
-    /* To add is 16 bit so that in case if theres an integer overflow
-     * when adding carry (when passing it to test C flag), it can be 
-     * noticed as > 0xFF */
-    uint16_t toAdd = vm->GPR[R2];
+    uint8_t toAdd = vm->GPR[R2];
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old + toAdd + carry;
+    uint8_t result = old + toAdd;
+    uint8_t finalResult = result + carry;
 
-    vm->GPR[R1] = result;
+    vm->GPR[R1] = finalResult;
 
-    TEST_Z_FLAG(vm, result);
+    TEST_Z_FLAG(vm, finalResult);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
-    TEST_C_FLAG_ADD8(vm, old, toAdd + carry);
+    test_adc_hcflags(vm, old, toAdd, result, carry);
 }
 
 static void adcR8D8(VM* vm, GP_REG R) {
     uint16_t data = (uint16_t)READ_BYTE(vm);
     uint8_t old = vm->GPR[R];
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old + data + carry;
+    uint8_t result = old + data;
+    uint8_t finalResult = result + carry;
 
-    vm->GPR[R] = result;
+    vm->GPR[R] = finalResult;
 
-    TEST_Z_FLAG(vm, result);
+    TEST_Z_FLAG(vm, finalResult);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
-    TEST_C_FLAG_ADD8(vm, old, data + carry);
+    test_adc_hcflags(vm, old, data, result, carry);
 }
 
 static void adcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
     uint8_t toAdd = readAddr(vm, get_reg16(vm, R16));
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old + toAdd + carry;
+    uint8_t result = old + toAdd;
+    uint8_t finalResult = result + carry;
 
-    vm->GPR[R8] = result;
+    vm->GPR[R8] = finalResult;
 
-    TEST_Z_FLAG(vm, result);
+    TEST_Z_FLAG(vm, finalResult);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, result);
-    TEST_C_FLAG_ADD8(vm, old, toAdd + carry);
+    test_adc_hcflags(vm, old, toAdd, result, carry);
 }
 
 static void subR8(VM* vm, GP_REG R1, GP_REG R2) {
@@ -508,8 +561,8 @@ static void subR8(VM* vm, GP_REG R1, GP_REG R2) {
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB(vm, old, toSub);
+    TEST_H_FLAG_SUB(vm, old, toSub);
+    TEST_C_FLAG_SUB8(vm, old, toSub);
 }
 
 static void subR8D8(VM* vm, GP_REG R) {
@@ -521,8 +574,8 @@ static void subR8D8(VM* vm, GP_REG R) {
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB(vm, old, data);
+    TEST_H_FLAG_SUB(vm, old, data);
+    TEST_C_FLAG_SUB8(vm, old, data);
 }
 
 static void subR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
@@ -534,50 +587,65 @@ static void subR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
 
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB(vm, old, toSub);
+    TEST_H_FLAG_SUB(vm, old, toSub);
+    TEST_C_FLAG_SUB8(vm, old, toSub);
+}
+
+static void test_sbc_hcflags(VM* vm, uint8_t old, uint8_t toSub, uint8_t result, uint8_t carry) {
+    /* SBC is also similar to ADC so we need a custom test here aswell */
+    bool halfCarryOccurred = false;
+    bool carryOccurred = false;
+
+    if (((old & 0xF) - (toSub & 0xF)) > 0xF) halfCarryOccurred = true;
+    if (((result & 0xF) - carry) > 0xF) halfCarryOccurred = true;
+
+    if (((uint16_t)old - (uint16_t)toSub) > 0xFF) carryOccurred = true;
+    if (((uint16_t)result - carry) > 0xFF) carryOccurred = true;
+
+    set_flag(vm, FLAG_H, halfCarryOccurred);
+    set_flag(vm, FLAG_C, carryOccurred);
 }
 
 static void sbcR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t old = vm->GPR[R1];
-    int32_t toSub = (int32_t)vm->GPR[R2];
+    uint8_t toSub = vm->GPR[R2];
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old - toSub - carry;
+    uint8_t result = old - toSub;
+    uint8_t finalResult = result - carry;
 
-    vm->GPR[R1] = result;
+    vm->GPR[R1] = finalResult;
 
-    TEST_Z_FLAG(vm, result);
+    TEST_Z_FLAG(vm, finalResult);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB(vm, old, toSub - carry);
+    test_sbc_hcflags(vm, old, toSub, result, carry);
 }
 
 static void sbcR8D8(VM* vm, GP_REG R) {
     uint16_t data = (uint16_t)READ_BYTE(vm);
     uint8_t old = vm->GPR[R];
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old - data - carry;
+    uint8_t result = old - data;
+    uint8_t finalResult = result - carry;
 
-    vm->GPR[R] = result;
+    vm->GPR[R] = finalResult;
 
-    TEST_Z_FLAG(vm, result);
+    TEST_Z_FLAG(vm, finalResult);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB(vm, old, data - carry);
+    test_sbc_hcflags(vm, old, data, result, carry);
 }
 
 static void sbcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
     int32_t toSub = readAddr(vm, get_reg16(vm, R16));
     uint8_t carry = get_flag(vm, FLAG_C);
-    uint8_t result = old - toSub - carry;
+    uint8_t result = old - toSub;
+    uint8_t finalResult = result - carry;
 
-    vm->GPR[R8] = result;
+    vm->GPR[R8] = finalResult;
 
-    TEST_Z_FLAG(vm, result);
+    TEST_Z_FLAG(vm, finalResult);
     set_flag(vm, FLAG_N, 1);
-    TEST_H_FLAG_SUB(vm, old, result);
-    TEST_C_FLAG_SUB(vm, old, toSub - carry);
+    test_sbc_hcflags(vm, old, toSub, result, carry);
 }
 
 static void andR8(VM* vm, GP_REG R1, GP_REG R2) {
@@ -796,10 +864,10 @@ static void cpl(VM* vm) {
 
 /* Conditional Jumps (both relative and direct) */ 
 
-#define CONDITION_NZ(vm) (get_flag(vm, FLAG_Z) != 0)
-#define CONDITION_NC(vm) (get_flag(vm, FLAG_C) != 0)
-#define CONDITION_Z(vm)  (get_flag(vm, FLAG_Z) == 0)
-#define CONDITION_C(vm)  (get_flag(vm, FLAG_C) == 0)
+#define CONDITION_NZ(vm) (get_flag(vm, FLAG_Z) != 1)
+#define CONDITION_NC(vm) (get_flag(vm, FLAG_C) != 1)
+#define CONDITION_Z(vm)  (get_flag(vm, FLAG_Z) == 1)
+#define CONDITION_C(vm)  (get_flag(vm, FLAG_C) == 1)
 
 static void jumpCondition(VM* vm, bool isTrue) {
     vm->conditionFalse = !isTrue;
@@ -867,7 +935,11 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
     vm->MEM[addr] = byte; 
 }
 
-static inline uint8_t readAddr(VM* vm, uint16_t addr) {
+static uint8_t readAddr(VM* vm, uint16_t addr) {
+    if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
+        /* Read from external RAM */
+        return mbc_readExternalRAM(vm, addr);
+    }
     return vm->MEM[addr]; 
 }
 
@@ -1143,12 +1215,9 @@ static void prefixCB(VM* vm) {
 
 static void cpuCleanupHandler(void* arg) {
     /* Mark the CPU thread as 'DEAD' */
-#ifdef DEBUG_LOGGING
-    printf("Cleaning Up CPU Worker Thread\n");
-#endif
+
     VM* vm = (VM*)arg;
     vm->cpuThreadStatus = THREAD_DEAD;
-    vm->cpuThreadID = 0;
 }
 
 /* Instruction Set : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html */
@@ -1157,9 +1226,8 @@ void* runCPU(void* arg) {
     VM* vm = (VM*)arg;
     /* Mark thread as 'running' */
     vm->cpuThreadStatus = THREAD_RUNNING;
-    pthread_cleanup_push(cpuCleanupHandler, arg);
 
-    for (;;) {
+    while (vm->runCPU) {
 #ifdef DEBUG_PRINT_REGISTERS
         printRegisters(vm);
 #endif
@@ -1190,8 +1258,8 @@ void* runCPU(void* arg) {
             case 0x0D: decrementR8(vm, R8_C); break;
             case 0x0E: LOAD_R_D8(vm, R8_C); break;
             case 0x0F: rotateRight(vm, R8_A, false); break;
-            /* OPCODE : STOP, for testing only */
-            case 0x10: goto exit_loop;
+            /* OPCODE 10 - STOP, it stops the CPU from running */
+            case 0x10: goto exit_loop; break;
             case 0x11: LOAD_RR_D16(vm, R16_DE); break;
             case 0x12: LOAD_ARR_R(vm, R16_DE, R8_A); break;
             case 0x13: INC_RR(vm, R16_DE); break;
@@ -1212,7 +1280,7 @@ void* runCPU(void* arg) {
             case 0x22: LOAD_ARR_R(vm, R16_HL, R8_A); 
                        INC_RR(vm, R16_HL); 
                        break;
-            case 0x23: INC_RR(vm, R16_SP); break;
+            case 0x23: INC_RR(vm, R16_HL); break;
             case 0x24: incrementR8(vm, R8_H); break;
             case 0x25: decrementR8(vm, R8_H); break;
             case 0x26: LOAD_R_D8(vm, R8_H); break;
@@ -1242,7 +1310,7 @@ void* runCPU(void* arg) {
                 writeAddr(vm, address, new);
 
                 TEST_Z_FLAG(vm, new);
-                TEST_H_FLAG_ADD(vm, old, new);
+                TEST_H_FLAG_ADD(vm, old, 1);
                 set_flag(vm, FLAG_N, 0);
                 break;
             }
@@ -1252,8 +1320,10 @@ void* runCPU(void* arg) {
                 uint8_t old = readAddr(vm, address);
                 uint8_t new = old - 1; 
                 
+                writeAddr(vm, address, new);
+
                 TEST_Z_FLAG(vm, new);
-                TEST_H_FLAG_SUB(vm, old, new);
+                TEST_H_FLAG_SUB(vm, old, 1);
                 set_flag(vm, FLAG_N, 1);
                 break;
             }
@@ -1276,7 +1346,11 @@ void* runCPU(void* arg) {
             case 0x3D: decrementR8(vm, R8_A); break;
             case 0x3E: LOAD_R_D8(vm, R8_A); break;
             case 0x3F: CCF(vm); break;
-            case 0x40: LOAD_R_R(vm, R8_B, R8_B); break;
+            case 0x40: LOAD_R_R(vm, R8_B, R8_B); 
+#ifdef DEBUG_LDBB_BREAKPOINT 
+                       exit(0); 
+#endif                  
+                       break;
             case 0x41: LOAD_R_R(vm, R8_B, R8_C); break;
             case 0x42: LOAD_R_R(vm, R8_B, R8_D); break;
             case 0x43: LOAD_R_R(vm, R8_B, R8_E); break;
@@ -1331,7 +1405,7 @@ void* runCPU(void* arg) {
             case 0x74: LOAD_ARR_R(vm, R16_HL, R8_H); break;
             case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break;
             /* TODO: HALT */ 
-            case 0x76: break;
+            case 0x76: goto exit_loop; break;
             case 0x77: LOAD_ARR_R(vm, R16_HL, R8_A); break;
             case 0x78: LOAD_R_R(vm, R8_A, R8_B); break;
             case 0x79: LOAD_R_R(vm, R8_A, R8_C); break;
@@ -1458,12 +1532,14 @@ void* runCPU(void* arg) {
             case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;
             case 0xFE: compareR8D8(vm, R8_A); break;
             case 0xFF: rst(vm, 0x38); break;
-        }
+        } 
     }
     
 exit_loop:
-    /* We do the cleanup here incase the thread wasnt cancelled */
-    pthread_cleanup_pop(1);
+#ifdef DEBUG_LOGGING
+    printf("Cleaning Up CPU Worker Thread\n");
+#endif
+    vm->cpuThreadStatus = THREAD_DEAD;
     return NULL;
 }
 

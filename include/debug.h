@@ -8,6 +8,9 @@
 // #define DEBUG_LOGGING
 #define DEBUG_PRINT_REGISTERS
 
+/* Stops running when encounters opcode 0x40, LD B, B */
+// #define DEBUG_LDBB_BREAKPOINT
+
 void printInstruction(VM* vm);
 void printRegisters(VM* vm);
 void printCBInstruction(VM* vm, uint8_t byte);
