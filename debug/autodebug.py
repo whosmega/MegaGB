@@ -7,7 +7,8 @@ import sys
 binjgbOutput = open("binjgbLog.txt", "w")
 megagbcOutput = open("megagbcLog.txt", "w")
 
-timeout = 7
+timeout = 3
+
 try:
     subprocess.call(["./binjgb-debugger", sys.argv[1]], 
                     stdout = binjgbOutput, stderr = binjgbOutput, timeout = timeout)
@@ -53,10 +54,11 @@ for i in range(0, bLinesLen):
         break
 
     line = bLines[i]
-    if line[:30] != mLines[i][:30]:
+    l1 = line[:30]
+    l2 = mLines[i][:30]
+
+    if (l1 != l2):
         # mismatch occured
-        print(f"[{line[:30]}]")
-        print(f"[{mLines[i][:30]}]")
         print(f"Mismatch at line {i + 1}")
         print("===== Binjgb Log =====")
         printAround(bLines, i, bLinesLen)    
@@ -64,9 +66,9 @@ for i in range(0, bLinesLen):
         print("===== MegaGBC Log =====")
         printAround(mLines, i, mLinesLen)
         print("======================")
-        exit(1)
+        break 
 
-print("No mismatches occurred :D")
+print("Finished")
     
 
 

@@ -62,6 +62,11 @@
 #define TEST_H_FLAG_ADD(vm, x, y) set_flag(vm, FLAG_H, \
                                     (((uint32_t)x & 0xf) + ((uint32_t)y & 0xf) > 0xf) ? 1 : 0)
 
+/* half carry counts when theres carry from bit 11-12 for most 16 bit instructions */
+
+#define TEST_H_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_H, \
+                                    (((uint32_t)x & 0xfff) + ((uint32_t)y & 0xfff) > 0xfff) ? 1 : 0 )
+
 #define TEST_H_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_H, \
                                     (((x & 0xf) - (y & 0xf) & 0x10) ? 1 : 0))
 
@@ -93,7 +98,7 @@ static inline uint16_t get_reg16(VM* vm, GP_REG RR) {
     return ((vm->GPR[RR] << 8) | vm->GPR[RR + 1]);
 }
 
-/* Sets a 16 bit register by modifying the individual 8 bit registers
+/* Sets 16 bit register by modifying the individual 8 bit registers
  * it consists of */
 static inline uint16_t set_reg16(VM* vm, GP_REG RR, uint16_t v) {
     vm->GPR[RR] = v >> 8; 
@@ -161,7 +166,8 @@ static void decrementR8(VM* vm, GP_REG R) {
 /* The folloing functions are used for all 8 bit rotation 
  * operations */ 
 
-static void rotateLeft(VM* vm, GP_REG R, bool setZFlag) {
+static void rotateLeftR8(VM* vm, GP_REG R, bool setZFlag) {
+    /* Rotates value to left, moves 7th bit to bit 0 and C flag */
     uint8_t toModify = vm->GPR[R];
     uint8_t bit7 = toModify >> 7;
 
@@ -198,7 +204,8 @@ static void rotateLeftAR16(VM* vm, GP_REG R16, bool setZFlag) {
     set_flag(vm, FLAG_C, bit7);  
 }
 
-static void rotateRight(VM* vm, GP_REG R, bool setZFlag) {
+static void rotateRightR8(VM* vm, GP_REG R, bool setZFlag) {
+    /* Rotates value to right, moves bit 0 to bit 7 and C flag */
     uint8_t toModify = vm->GPR[R];
     uint8_t bit1 = toModify & 1;
 
@@ -227,14 +234,90 @@ static void rotateRightAR16(VM* vm, GP_REG R16, bool setZFlag) {
 
     writeAddr(vm, addr, toModify);
 
-    if (setZFlag) {
-        TEST_Z_FLAG(vm, toModify);
-    } else {
-        set_flag(vm, FLAG_Z, 0);
-    }
+    if (setZFlag) TEST_Z_FLAG(vm, toModify);
+    else set_flag(vm, FLAG_Z, 0);
+
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
     set_flag(vm, FLAG_C, bit1); 
+}
+
+static void rotateLeftCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
+    /* Rotates value to left, moves bit 7 to C flag and C flag's original value
+     * to bit 0 */
+    uint8_t toModify = vm->GPR[R8];
+    bool carryFlag = get_flag(vm, FLAG_C);
+    uint8_t bit7 = toModify >> 7;
+
+    toModify <<= 1;
+    toModify |= carryFlag;
+
+    vm->GPR[R8] = toModify;
+
+    if (setZFlag) TEST_Z_FLAG(vm, toModify);
+    else set_flag(vm, FLAG_Z, 0);
+
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit7);
+}
+
+static void rotateLeftCarryAR16(VM* vm, GP_REG R16, bool setZFlag) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t toModify = vm->MEM[addr];
+    bool carryFlag = get_flag(vm, FLAG_C);
+    uint8_t bit7 = toModify >> 7;
+
+    toModify <<= 1;
+    toModify |= carryFlag;
+
+    writeAddr(vm, addr, toModify);
+
+    if (setZFlag) TEST_Z_FLAG(vm, toModify);
+    else set_flag(vm, FLAG_Z, 0);
+
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit7);
+}
+
+static void rotateRightCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
+    /* Rotates value to right, moves bit 0 to C flag and C flag's original value
+     * to bit 7 */
+    uint8_t toModify = vm->GPR[R8];
+    bool carryFlag = get_flag(vm, FLAG_C);
+    uint8_t bit0 = toModify & 1;
+
+    toModify >>= 1;
+    toModify |= carryFlag << 7;
+
+    vm->GPR[R8] = toModify;
+
+    if (setZFlag) TEST_Z_FLAG(vm, toModify);
+    else set_flag(vm, FLAG_Z, 0);
+
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit0);
+}
+
+static void rotateRightCarryAR16(VM* vm, GP_REG R16, bool setZFlag) {
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t toModify = vm->MEM[addr];
+    bool carryFlag = get_flag(vm, FLAG_C);
+    uint8_t bit0 = toModify & 1;
+
+    toModify >>= 1;
+    toModify |= carryFlag << 7;
+
+    writeAddr(vm, addr, toModify);
+
+    if (setZFlag) TEST_Z_FLAG(vm, toModify);
+    else set_flag(vm, FLAG_Z, 0);
+
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, bit0);
 }
 
 static void shiftLeftArithmeticR8(VM* vm, GP_REG R) {
@@ -414,7 +497,7 @@ static void addR16(VM* vm, GP_REG RR1, GP_REG RR2) {
     uint16_t toAdd = get_reg16(vm, RR2);
     uint16_t result = set_reg16(vm, RR1, old + toAdd);
     set_flag(vm, FLAG_N, 0);
-    TEST_H_FLAG_ADD(vm, old, toAdd);
+    TEST_H_FLAG_ADD16(vm, old, toAdd);
     TEST_C_FLAG_ADD16(vm, old, toAdd);
 }
 
@@ -434,11 +517,13 @@ static void addR16I8(VM* vm, GP_REG RR1, GP_REG RR_STORE) {
     if (toAdd < 0) {
         /* Negative integer addition means, subtraction so we
          * do subtraction tests */
-        TEST_H_FLAG_SUB(vm, old, result);
+        TEST_H_FLAG_SUB(vm, old, toAdd);
         TEST_C_FLAG_SUB16(vm, old, toAdd);
     } else {
         /* Normal addition with a number being 0 or greater */
-        TEST_H_FLAG_ADD(vm, old, result);
+        /* For some reason this 16 bit addition does not do normal 
+         * 16 bit half carry setting, so we do the 8 bit test */
+        TEST_H_FLAG_ADD(vm, old, toAdd);
         TEST_C_FLAG_ADD16(vm, old, toAdd);
     }
 }
@@ -595,12 +680,15 @@ static void test_sbc_hcflags(VM* vm, uint8_t old, uint8_t toSub, uint8_t result,
     /* SBC is also similar to ADC so we need a custom test here aswell */
     bool halfCarryOccurred = false;
     bool carryOccurred = false;
+    
+    uint8_t oldLow = old & 0xF;
+    uint8_t resultLow = result & 0xF;
 
-    if (((old & 0xF) - (toSub & 0xF)) > 0xF) halfCarryOccurred = true;
-    if (((result & 0xF) - carry) > 0xF) halfCarryOccurred = true;
+    if ((uint8_t)(oldLow - (toSub & 0xF)) > oldLow) halfCarryOccurred = true;
+    if ((uint8_t)(resultLow - carry) > resultLow) halfCarryOccurred = true;
 
-    if (((uint16_t)old - (uint16_t)toSub) > 0xFF) carryOccurred = true;
-    if (((uint16_t)result - carry) > 0xFF) carryOccurred = true;
+    if ((uint8_t)((uint16_t)old - (uint16_t)toSub) > old) carryOccurred = true;
+    if ((uint8_t)((uint16_t)result - carry) > result) carryOccurred = true;
 
     set_flag(vm, FLAG_H, halfCarryOccurred);
     set_flag(vm, FLAG_C, carryOccurred);
@@ -621,7 +709,7 @@ static void sbcR8(VM* vm, GP_REG R1, GP_REG R2) {
 }
 
 static void sbcR8D8(VM* vm, GP_REG R) {
-    uint16_t data = (uint16_t)READ_BYTE(vm);
+    uint8_t data = READ_BYTE(vm);
     uint8_t old = vm->GPR[R];
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old - data;
@@ -636,7 +724,7 @@ static void sbcR8D8(VM* vm, GP_REG R) {
 
 static void sbcR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     uint8_t old = vm->GPR[R8];
-    int32_t toSub = readAddr(vm, get_reg16(vm, R16));
+    uint8_t toSub = readAddr(vm, get_reg16(vm, R16));
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old - toSub;
     uint8_t finalResult = result - carry;
@@ -766,33 +854,37 @@ static void orR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
 }
 
 static void compareR8(VM* vm, GP_REG R1, GP_REG R2) {
-    uint8_t operand1 = vm->GPR[R1];
-    uint8_t operand2 = vm->GPR[R2];
+    /* Basically R1 - R2, but results are thrown away and R1 is unchanged */
+    uint8_t old = vm->GPR[R1];
+    uint8_t toSub = vm->GPR[R2];
+    uint8_t result = old - toSub;
 
-    set_flag(vm, FLAG_Z, operand1 == operand2);
-    set_flag(vm, FLAG_C, operand2 > operand1);
-    set_flag(vm, FLAG_H, operand1 > operand2);
+    TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
+    TEST_H_FLAG_SUB(vm, old, toSub);
+    TEST_C_FLAG_SUB8(vm, old, toSub);
 }
 
 static void compareR8D8(VM* vm, GP_REG R) {
-    uint8_t operand1 = vm->GPR[R];
-    uint8_t operand2 = READ_BYTE(vm);
+    uint8_t old = vm->GPR[R];
+    uint8_t toSub = READ_BYTE(vm);
+    uint8_t result = old - toSub;
 
-    set_flag(vm, FLAG_Z, operand1 == operand2);
-    set_flag(vm, FLAG_C, operand2 > operand1);
-    set_flag(vm, FLAG_H, operand1 > operand2);
+    TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
+    TEST_H_FLAG_SUB(vm, old, toSub);
+    TEST_C_FLAG_SUB8(vm, old, toSub);
 }
 
 static void compareR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
-    uint8_t operand1 = vm->GPR[R8];
-    uint8_t operand2 = readAddr(vm, get_reg16(vm, R16));
+    uint8_t old = vm->GPR[R8];
+    uint8_t toSub = readAddr(vm, get_reg16(vm, R16));
+    uint8_t result = old - toSub;
 
-    set_flag(vm, FLAG_Z, operand1 == operand2);
-    set_flag(vm, FLAG_C, operand2 > operand1);
-    set_flag(vm, FLAG_H, operand1 > operand2);
-    set_flag(vm, FLAG_N, 1);       
+    TEST_Z_FLAG(vm, result);
+    set_flag(vm, FLAG_N, 1);
+    TEST_H_FLAG_SUB(vm, old, toSub);
+    TEST_C_FLAG_SUB8(vm, old, toSub);       
 }
 
 /* The following functions are responsible for returning, calling & stack manipulation*/
@@ -834,8 +926,6 @@ static void rst(VM* vm, uint16_t addr) {
 }
 
 static void callCondition(VM* vm, bool isTrue) {
-    vm->conditionFalse = !isTrue;
-
     uint16_t callAddress = READ_16BIT(vm);
 
     if (isTrue) {
@@ -849,8 +939,6 @@ static inline void ret(VM* vm) {
 }
 
 static void retCondition(VM* vm, bool isTrue) {
-    vm->conditionFalse = !isTrue;
-
     if (isTrue) {
         vm->PC = pop16(vm);
     }
@@ -870,14 +958,11 @@ static void cpl(VM* vm) {
 #define CONDITION_C(vm)  (get_flag(vm, FLAG_C) == 1)
 
 static void jumpCondition(VM* vm, bool isTrue) {
-    vm->conditionFalse = !isTrue;
-
     uint16_t address = READ_16BIT(vm);
     if (isTrue) vm->PC = address;
 }
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
-    vm->conditionFalse = !isTrue;
     
     int8_t jumpCount = (int8_t)READ_BYTE(vm);
     if (isTrue) vm->PC += jumpCount;
@@ -886,32 +971,39 @@ static void jumpRelativeCondition(VM* vm, bool isTrue) {
 /* Procedure for the decimal adjust instruction (DAA) */
 
 static void decimalAdjust(VM* vm) {
-    uint8_t correction = 0;
-    bool setFlagC = false;
-    bool didHalfCarry = get_flag(vm, FLAG_H);
-    bool wasSubtraction = get_flag(vm, FLAG_N);
-    bool didCarry = get_flag(vm, FLAG_C);
-    uint8_t currentValue = vm->GPR[R8_A];
+    uint8_t value = vm->GPR[R8_A];
 
-    if (didHalfCarry || (!wasSubtraction && (currentValue & 0xF) > 0x9)) {
-        correction |= 0x6;
+    if (get_flag(vm, FLAG_N)) {
+        /* Previous operation was subtraction */
+        if (get_flag(vm, FLAG_H)) {
+            value -= 0x06;
+        }
+
+        if (get_flag(vm, FLAG_C)) {
+            value -= 0x60;
+        }
+    } else {
+        /* Previous operation was addition */
+        if (get_flag(vm, FLAG_H) || (value & 0xF) > 0x9) {
+            uint8_t original = value;
+            value += 0x6;
+
+            if (original > value) set_flag(vm, FLAG_C, 1);
+        }
+
+        if (get_flag(vm, FLAG_C) || value > 0x9F) {
+            value += 0x60;
+            set_flag(vm, FLAG_C, 1);
+        }
     }
 
-    if (didCarry || (!wasSubtraction && currentValue > 0x99)) {
-        correction |= 0x66;
-        setFlagC = true;
-    }
-
-    currentValue += wasSubtraction ? -correction : correction;
-    currentValue &= 0xFF;
-
-    vm->GPR[R8_A] = currentValue;
-
-    set_flag(vm, FLAG_Z, currentValue == 0);
-    set_flag(vm, FLAG_C, setFlagC);
+    TEST_Z_FLAG(vm, value);
     set_flag(vm, FLAG_H, 0);
 
-    /* Refer to 'https://ehaskins.com/2018-01-30%20Z80%20DAA/' */
+    vm->GPR[R8_A] = value;
+
+    /* Implementation from 
+     * 'https://github.com/guigzzz/GoGB/blob/master/backend/cpu_arithmetic.go#L349' */
 }
 
 /* This function is responsible for writing 1 byte to a memory address */
@@ -932,6 +1024,16 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
     }
+
+#ifdef DEBUG_PRINT_SERIAL_OUTPUT
+    else if (addr == 0xFF02 && byte == 0x81) {
+        /* Print character */
+        printf("%c", vm->MEM[0xFF01]);
+        vm->MEM[addr] = 0x00;
+        return;
+    }
+#endif
+
     vm->MEM[addr] = byte; 
 }
 
@@ -949,43 +1051,46 @@ static void prefixCB(VM* vm) {
      * all the instruction prefixed by opcode CB */
     uint8_t byte = READ_BYTE(vm);
     
+#ifdef DEBUG_PRINT_REGISTERS
+    printRegisters(vm);
+#endif
 #ifdef DEBUG_REALTIME_PRINTING
     printCBInstruction(vm, byte);
 #endif
 
     switch (byte) {
-        case 0x00: rotateLeft(vm, R8_B, true); break;
-        case 0x01: rotateLeft(vm, R8_C, true); break;
-        case 0x02: rotateLeft(vm, R8_D, true); break;
-        case 0x03: rotateLeft(vm, R8_E, true); break;
-        case 0x04: rotateLeft(vm, R8_H, true); break;
-        case 0x05: rotateLeft(vm, R8_L, true); break;
+        case 0x00: rotateLeftR8(vm, R8_B, true); break;
+        case 0x01: rotateLeftR8(vm, R8_C, true); break;
+        case 0x02: rotateLeftR8(vm, R8_D, true); break;
+        case 0x03: rotateLeftR8(vm, R8_E, true); break;
+        case 0x04: rotateLeftR8(vm, R8_H, true); break;
+        case 0x05: rotateLeftR8(vm, R8_L, true); break;
         case 0x06: rotateLeftAR16(vm, R16_HL, true); break;
-        case 0x07: rotateLeft(vm, R8_A, true); break;
-        case 0x08: rotateRight(vm, R8_B, true); break;
-        case 0x09: rotateRight(vm, R8_C, true); break;
-        case 0x0A: rotateRight(vm, R8_D, true); break;
-        case 0x0B: rotateRight(vm, R8_E, true); break;
-        case 0x0C: rotateRight(vm, R8_H, true); break;
-        case 0x0D: rotateRight(vm, R8_L, true); break;
+        case 0x07: rotateLeftR8(vm, R8_A, true); break;
+        case 0x08: rotateRightR8(vm, R8_B, true); break;
+        case 0x09: rotateRightR8(vm, R8_C, true); break;
+        case 0x0A: rotateRightR8(vm, R8_D, true); break;
+        case 0x0B: rotateRightR8(vm, R8_E, true); break;
+        case 0x0C: rotateRightR8(vm, R8_H, true); break;
+        case 0x0D: rotateRightR8(vm, R8_L, true); break;
         case 0x0E: rotateRightAR16(vm, R16_HL, true); break;
-        case 0x0F: rotateRight(vm, R8_A, true); break;
-        case 0x10: rotateLeft(vm, R8_B, true); break;
-        case 0x11: rotateLeft(vm, R8_C, true); break;
-        case 0x12: rotateLeft(vm, R8_D, true); break;
-        case 0x13: rotateLeft(vm, R8_E, true); break;
-        case 0x14: rotateLeft(vm, R8_H, true); break;
-        case 0x15: rotateLeft(vm, R8_L, true); break;
-        case 0x16: rotateLeftAR16(vm, R16_HL, true); break;
-        case 0x17: rotateLeft(vm, R8_A, true); break;
-        case 0x18: rotateRight(vm, R8_B, true); break;
-        case 0x19: rotateRight(vm, R8_C, true); break;
-        case 0x1A: rotateRight(vm, R8_D, true); break;
-        case 0x1B: rotateRight(vm, R8_E, true); break;
-        case 0x1C: rotateRight(vm, R8_H, true); break;
-        case 0x1D: rotateRight(vm, R8_L, true); break;
-        case 0x1E: rotateRightAR16(vm, R16_HL, true); break;
-        case 0x1F: rotateRight(vm, R8_A, true); break;
+        case 0x0F: rotateRightR8(vm, R8_A, true); break;
+        case 0x10: rotateLeftCarryR8(vm, R8_B, true); break;
+        case 0x11: rotateLeftCarryR8(vm, R8_C, true); break;
+        case 0x12: rotateLeftCarryR8(vm, R8_D, true); break;
+        case 0x13: rotateLeftCarryR8(vm, R8_E, true); break;
+        case 0x14: rotateLeftCarryR8(vm, R8_H, true); break;
+        case 0x15: rotateLeftCarryR8(vm, R8_L, true); break;
+        case 0x16: rotateLeftCarryAR16(vm, R16_HL, true); break;
+        case 0x17: rotateLeftCarryR8(vm, R8_A, true); break;
+        case 0x18: rotateRightCarryR8(vm, R8_B, true); break;
+        case 0x19: rotateRightCarryR8(vm, R8_C, true); break;
+        case 0x1A: rotateRightCarryR8(vm, R8_D, true); break;
+        case 0x1B: rotateRightCarryR8(vm, R8_E, true); break;
+        case 0x1C: rotateRightCarryR8(vm, R8_H, true); break;
+        case 0x1D: rotateRightCarryR8(vm, R8_L, true); break;
+        case 0x1E: rotateRightCarryAR16(vm, R16_HL, true); break;
+        case 0x1F: rotateRightCarryR8(vm, R8_A, true); break;
         case 0x20: shiftLeftArithmeticR8(vm, R8_B); break;
         case 0x21: shiftLeftArithmeticR8(vm, R8_C); break;
         case 0x22: shiftLeftArithmeticR8(vm, R8_D); break;
@@ -1244,7 +1349,7 @@ void* runCPU(void* arg) {
             case 0x04: incrementR8(vm, R8_B); break;
             case 0x05: decrementR8(vm, R8_B); break;
             case 0x06: LOAD_R_D8(vm, R8_B); break;
-            case 0x07: rotateLeft(vm, R8_A, false); break;
+            case 0x07: rotateLeftR8(vm, R8_A, false); break;
             case 0x08: {
                 uint16_t a = READ_16BIT(vm);
                 writeAddr(vm, a, vm->GPR[R16_SP] & 0xFF);
@@ -1257,7 +1362,7 @@ void* runCPU(void* arg) {
             case 0x0C: incrementR8(vm, R8_C); break;
             case 0x0D: decrementR8(vm, R8_C); break;
             case 0x0E: LOAD_R_D8(vm, R8_C); break;
-            case 0x0F: rotateRight(vm, R8_A, false); break;
+            case 0x0F: rotateRightR8(vm, R8_A, false); break;
             /* OPCODE 10 - STOP, it stops the CPU from running */
             case 0x10: goto exit_loop; break;
             case 0x11: LOAD_RR_D16(vm, R16_DE); break;
@@ -1266,7 +1371,7 @@ void* runCPU(void* arg) {
             case 0x14: incrementR8(vm, R8_D); break;
             case 0x15: decrementR8(vm, R8_D); break;
             case 0x16: LOAD_R_D8(vm, R8_D); break;
-            case 0x17: rotateLeft(vm, R8_A, false); break;
+            case 0x17: rotateLeftCarryR8(vm, R8_A, false); break;
             case 0x18: JUMP_RL(vm, READ_BYTE(vm)); break;
             case 0x19: addR16(vm, R16_HL, R16_DE); break;
             case 0x1A: LOAD_R_ARR(vm, R8_A, R16_DE); break;
@@ -1274,7 +1379,7 @@ void* runCPU(void* arg) {
             case 0x1C: incrementR8(vm, R8_E); break;
             case 0x1D: decrementR8(vm, R8_E); break;
             case 0x1E: LOAD_R_D8(vm, R8_E); break;
-            case 0x1F: rotateRight(vm, R8_A, false); break;
+            case 0x1F: rotateRightCarryR8(vm, R8_A, false); break;
             case 0x20: jumpRelativeCondition(vm, CONDITION_NZ(vm)); break;
             case 0x21: LOAD_RR_D16(vm, R16_HL); break;
             case 0x22: LOAD_ARR_R(vm, R16_HL, R8_A); 
@@ -1520,7 +1625,14 @@ void* runCPU(void* arg) {
             case 0xEE: xorR8D8(vm, R8_A); break;
             case 0xEF: rst(vm, 0x28); break;
             case 0xF0: LOAD_R_D8PORT(vm, R8_A); break;
-            case 0xF1: POP_R16(vm, R16_AF); break;
+            case 0xF1: {
+                POP_R16(vm, R16_AF); 
+                
+                /* Always clear the lower 4 bits, they need to always
+                 * be 0, we failed a blargg test because of this lol */
+                vm->GPR[R8_F] &= 0xF0;
+                break;
+            }
             case 0xF2: LOAD_R_RPORT(vm, R8_A, R8_C); break;
             case 0xF3: INTERRUPT_MASTER_DISABLE(vm); break;
             case 0xF5: PUSH_R16(vm, R16_AF); break;

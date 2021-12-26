@@ -10,13 +10,15 @@
 static void initVM(VM* vm) {
     vm->cartridge = NULL;
     vm->gtkApp = NULL;
-    vm->conditionFalse = false;
+
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
     
     vm->cpuThreadStatus = THREAD_DEAD;
     vm->displayThreadStatus = THREAD_DEAD;
+    vm->clockThreadStatus = THREAD_DEAD;
     vm->runCPU = true;
+    vm->runClock = true;
     /* Set registers & flags to GBC specifics */
     resetGBC(vm);
 }
@@ -87,7 +89,6 @@ void startEmulator(Cartridge* cartridge) {
 #ifdef DEBUG_LOGGING
     printf("Starting CPU Worker Thread\n");
 #endif
-    sleep(1);
     pthread_create(&cpuThreadID, NULL, runCPU, (void*)&vm);
 
     /* We wait till the window is closed then we shut down the emulator 

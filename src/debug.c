@@ -53,7 +53,7 @@ static void r8(VM* vm, char* ins) {
 }
 
 void printCBInstruction(VM* vm, uint8_t byte) {
-    printf("[0x%04x]", vm->PC);
+    printf("[0x%04x]", vm->PC - 1);
     printFlags(vm);
     
     printf(" %10s", "");

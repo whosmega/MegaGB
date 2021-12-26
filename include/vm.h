@@ -69,17 +69,15 @@ typedef enum {
 struct VM {
     /* Thread stopping flags */
     bool runCPU;
-   
+    bool runClock;
+
     volatile sig_atomic_t displayThreadStatus;
     volatile sig_atomic_t cpuThreadStatus;
+    volatile sig_atomic_t clockThreadStatus;
     volatile GtkApplication* gtkApp;
     /* ---------------------- */
     Cartridge* cartridge;
     bool IME;                           /* Interrupt Master Enable Flag */
-    bool conditionFalse;                /* If a condition was false for the previous
-                                           instruction, this flag is set, it is used to
-                                           append the proper cycle count and is reset every
-                                           new dispatch */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
