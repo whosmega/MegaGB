@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O2 `pkg-config --cflags --libs gtk4`
+CFLAGS = -O2 `pkg-config --cflags --libs sdl2`
 EXE = megagbc
 
 BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o

@@ -2,23 +2,21 @@
 #include "../include/vm.h"
 #include "../include/cpu.h"
 #include "../include/debug.h"
+#include "../include/clock.h"
 #include "../include/display.h"
 #include "../include/mbc.h"
 #include <string.h>
-#include <pthread.h>
+
 
 static void initVM(VM* vm) {
     vm->cartridge = NULL;
-    vm->gtkApp = NULL;
-
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
-    
-    vm->cpuThreadStatus = THREAD_DEAD;
-    vm->displayThreadStatus = THREAD_DEAD;
-    vm->clockThreadStatus = THREAD_DEAD;
-    vm->runCPU = true;
-    vm->runClock = true;
+    vm->run = false;
+
+    vm->sdl_window = NULL;
+    vm->sdl_renderer = NULL;
+
     /* Set registers & flags to GBC specifics */
     resetGBC(vm);
 }
@@ -61,16 +59,33 @@ static void bootROM(VM* vm) {
     memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
 }
 
+static void run(VM* vm) {
+    while (vm->run) {
+        /* Handle Events */
+        handleSDLEvents(vm);
+        /* Run the next CPU instruction */
+        dispatch(vm);
+    }
+}
+
 void startEmulator(Cartridge* cartridge) {
     VM vm;
     initVM(&vm);
+
+    /* Start up SDL */
+    int status = initSDL(&vm);
+    if (status != 0) {
+        /* An error occurred and SDL wasnt started
+         *
+         * This is fatal as our emulator cannot run without it
+         * and we immediately quit */
+        log_fatal(&vm, "Error Starting SDL2");
+        return;
+    }
     /* Load the cartridge */
     vm.cartridge = cartridge;
     vm.cartridge->inserted = true;
-   
-    pthread_t displayThreadID = 0;
-    pthread_t cpuThreadID = 0;
-
+    
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge); 
 #endif
@@ -82,45 +97,23 @@ void startEmulator(Cartridge* cartridge) {
     printf("Setting up Memory Bank Controller\n");
 #endif
     mbc_allocate(&vm);
-#ifdef DEBUG_LOGGING
-    printf("Starting Display Worker Thread\n");
-#endif
-    pthread_create(&displayThreadID, NULL, startDisplay, (void*)&vm);
-#ifdef DEBUG_LOGGING
-    printf("Starting CPU Worker Thread\n");
-#endif
-    pthread_create(&cpuThreadID, NULL, runCPU, (void*)&vm);
-
-    /* We wait till the window is closed then we shut down the emulator 
-     *
-     * Display thread is the 'main' thread so we dont provide a way to kill it */
-    pthread_join(displayThreadID, NULL);
-    /* Reset all fields to null */
+ 
+    /* We are now ready to run */
+    vm.run = true;
+    
+    run(&vm);
     stopEmulator(&vm);
 }
 
 void stopEmulator(VM* vm) {
 #ifdef DEBUG_LOGGING
     printf("Stopping Emulator Now\n");
-#endif
-    /* Stop the CPU, we dont need to stop the display 
-     * because it is the main thread, the program wont stop 
-     * until the user closes the display */
-
-    if (vm->cpuThreadStatus == THREAD_RUNNING) {
-        vm->runCPU = false;
-#ifdef DEBUG_LOGGING
-        printf("Stopping CPU Worker Thread\n");
-#endif
-    }
-    
-    /* Wait till the cleanup handlers have finished */
-    while (vm->displayThreadStatus == THREAD_RUNNING ||
-           vm->cpuThreadStatus == THREAD_RUNNING);
-
-#ifdef DEBUG_LOGGING
     printf("Cleaning allocations\n");
 #endif
+
+    /* Free up all SDL allocations and stop it */
+    freeSDL(vm);
+    /* Free up MBC allocations */
     mbc_free(vm);
     /* Reset VM */
     initVM(vm);

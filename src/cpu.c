@@ -1318,21 +1318,9 @@ static void prefixCB(VM* vm) {
     }
 }
 
-static void cpuCleanupHandler(void* arg) {
-    /* Mark the CPU thread as 'DEAD' */
-
-    VM* vm = (VM*)arg;
-    vm->cpuThreadStatus = THREAD_DEAD;
-}
-
 /* Instruction Set : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html */
 
-void* runCPU(void* arg) {
-    VM* vm = (VM*)arg;
-    /* Mark thread as 'running' */
-    vm->cpuThreadStatus = THREAD_RUNNING;
-
-    while (vm->runCPU) {
+void dispatch(VM* vm) {
 #ifdef DEBUG_PRINT_REGISTERS
         printRegisters(vm);
 #endif
@@ -1363,8 +1351,8 @@ void* runCPU(void* arg) {
             case 0x0D: decrementR8(vm, R8_C); break;
             case 0x0E: LOAD_R_D8(vm, R8_C); break;
             case 0x0F: rotateRightR8(vm, R8_A, false); break;
-            /* OPCODE 10 - STOP, it stops the CPU from running */
-            case 0x10: goto exit_loop; break;
+            /* OPCODE 10 TODO - STOP, it stops the CPU from running */
+            case 0x10: break;
             case 0x11: LOAD_RR_D16(vm, R16_DE); break;
             case 0x12: LOAD_ARR_R(vm, R16_DE, R8_A); break;
             case 0x13: INC_RR(vm, R16_DE); break;
@@ -1510,7 +1498,7 @@ void* runCPU(void* arg) {
             case 0x74: LOAD_ARR_R(vm, R16_HL, R8_H); break;
             case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break;
             /* TODO: HALT */ 
-            case 0x76: goto exit_loop; break;
+            case 0x76: break;
             case 0x77: LOAD_ARR_R(vm, R16_HL, R8_A); break;
             case 0x78: LOAD_R_R(vm, R8_A, R8_B); break;
             case 0x79: LOAD_R_R(vm, R8_A, R8_C); break;
@@ -1644,15 +1632,7 @@ void* runCPU(void* arg) {
             case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;
             case 0xFE: compareR8D8(vm, R8_A); break;
             case 0xFF: rst(vm, 0x38); break;
-        } 
     }
-    
-exit_loop:
-#ifdef DEBUG_LOGGING
-    printf("Cleaning Up CPU Worker Thread\n");
-#endif
-    vm->cpuThreadStatus = THREAD_DEAD;
-    return NULL;
 }
 
 

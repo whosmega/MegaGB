@@ -6,6 +6,6 @@
 void resetGBC(VM* vm);
 
 /* This function is invoked to run the CPU thread */
-void* runCPU(void* arg);
+void dispatch(VM* vm);
 
 #endif

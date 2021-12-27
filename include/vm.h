@@ -1,9 +1,9 @@
 #ifndef MGBC_VM_H
 #define MGBC_VM_H
-#include <signal.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_render.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <gtk/gtk.h>
 #include "../include/cartridge.h"
 #include "../include/mbc.h"
 
@@ -61,22 +61,13 @@ typedef enum {
 #define READ_BYTE(vm) (vm->MEM[vm->PC++])
 #define READ_16BIT(vm) ((vm->MEM[vm->PC++]) | (vm->MEM[vm->PC++] << 8))
 
-typedef enum {
-    THREAD_DEAD,
-    THREAD_RUNNING
-} THREAD_STATUS;
-
 struct VM {
-    /* Thread stopping flags */
-    bool runCPU;
-    bool runClock;
-
-    volatile sig_atomic_t displayThreadStatus;
-    volatile sig_atomic_t cpuThreadStatus;
-    volatile sig_atomic_t clockThreadStatus;
-    volatile GtkApplication* gtkApp;
-    /* ---------------------- */
+    /* ---------------- SDL ----------------- */
+    SDL_Window* sdl_window;             /* The window */
+    SDL_Renderer* sdl_renderer;             /* Renderer */
+    /* -------------------------------------- */
     Cartridge* cartridge;
+    bool run;                          /* A flag that when set to false, quits the emulator */
     bool IME;                           /* Interrupt Master Enable Flag */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
@@ -92,7 +83,6 @@ typedef struct VM VM;
 /* Loads in the cartridge into the VM and starts the overall emulator */
 void startEmulator(Cartridge* cartridge);
 /*
- * will terminate CPU thread and other hardware threads then 
- * perform a memory cleanup by freeing the VM state and then safely exiting */
+ * will perform a memory cleanup by freeing the VM state and then safely exiting */
 void stopEmulator(VM* vm);
 #endif

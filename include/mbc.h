@@ -2,6 +2,8 @@
 #define megagbc_mbc_h
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include "../include/cartridge.h"
 
 /* Forward Declare VM instead of including vm.h 

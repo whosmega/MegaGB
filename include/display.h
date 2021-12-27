@@ -1,14 +1,15 @@
 #ifndef megagbc_display_h
 #define megagbc_display_h
-#include <pthread.h>
-#include <gtk/gtk.h>
 #include "../include/vm.h"
+#include <SDL2/SDL.h>
 
 #define MIN_RES_HEIGHT_PX 144 
 #define MIN_RES_WIDTH_PX 160
+#define HEIGHT_PX MIN_RES_HEIGHT_PX * 5
+#define WIDTH_PX  MIN_RES_WIDTH_PX * 5
 
-/* The display GUI is started by invoking this function in a new thread */
-
-void* startDisplay(void* arg);
+int initSDL(VM* vm);
+void freeSDL(VM* vm);
+void handleSDLEvents(VM* vm);
 
 #endif
