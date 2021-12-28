@@ -2,7 +2,6 @@
 #include "../include/vm.h"
 #include "../include/cpu.h"
 #include "../include/debug.h"
-#include "../include/clock.h"
 #include "../include/display.h"
 #include "../include/mbc.h"
 #include <string.h>
@@ -13,6 +12,7 @@ static void initVM(VM* vm) {
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
     vm->run = false;
+    vm->cyclesSinceLastFrame = 0;
 
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
@@ -65,6 +65,20 @@ static void run(VM* vm) {
         handleSDLEvents(vm);
         /* Run the next CPU instruction */
         dispatch(vm);
+    }
+}
+
+void cyclesSync(VM* vm, unsigned int cycles) {
+    /* Syncs all hardware and updates cycles */
+    vm->cyclesSinceLastFrame += cycles;
+
+    if (vm->cyclesSinceLastFrame >= CYCLES_PER_FRAME) {
+        vm->cyclesSinceLastFrame = 0;
+        /* Draw the frame */
+
+#ifdef DEBUG_LOGGING
+        printf("Drawing Frame\n");
+#endif
     }
 }
 

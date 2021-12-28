@@ -12,28 +12,28 @@
 #define PORT_ADDR 0xFF00
 
 /* Load 16 bit data into an R16 Register */
-#define LOAD_RR_D16(vm, RR) set_reg16(vm, RR, READ_16BIT(vm))
+#define LOAD_RR_D16(vm, RR) set_reg16(vm, RR, read2Bytes(vm))
 /* Load contents of R8 Register into address at R16 register (dereferencing) */
 #define LOAD_ARR_R(vm, RR, R) writeAddr(vm, get_reg16(vm, RR), vm->GPR[R])
 /* Load 8 bit data into R8 Register */
-#define LOAD_R_D8(vm, R) vm->GPR[R] = READ_BYTE(vm)
+#define LOAD_R_D8(vm, R) vm->GPR[R] = readByte_4C(vm)
 /* Dereference the address contained in the R16 register and set it's value 
  * to the R8 register */
 #define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = readAddr(vm, get_reg16(vm, RR))
 /* Load 8 bit data into address at R16 register (dereferencing) */
-#define LOAD_ARR_D8(vm, RR) writeAddr(vm, get_reg16(vm, RR), READ_BYTE(vm))
+#define LOAD_ARR_D8(vm, RR) writeAddr(vm, get_reg16(vm, RR), readByte_4C(vm))
 /* Load contents of R8 register into another R8 register */
 #define LOAD_R_R(vm, R1, R2) vm->GPR[R1] = vm->GPR[R2]
 /* Load contents of R16 register into another R16 register */
 #define LOAD_RR_RR(vm, RR1, RR2) set_reg16(vm, RR1, get_reg16(vm, RR2))
 /* Load instructions from reading into and writing into main memory */
-#define LOAD_MEM_R(vm, R) writeAddr(vm, READ_16BIT(vm), vm->GPR[R])
+#define LOAD_MEM_R(vm, R) writeAddr(vm, read2Bytes_8C(vm), vm->GPR[R])
 /* Load what's at the address specified by the 16 bit data into the R8 register */
-#define LOAD_R_MEM(vm, R) vm->GPR[R] = readAddr(vm, READ_16BIT(vm))
+#define LOAD_R_MEM(vm, R) vm->GPR[R] = readAddr(vm, read2Bytes_8C(vm))
 /* Load 'R' into '(PORT_ADDR + D8)' */
-#define LOAD_D8PORT_R(vm, R) writeAddr(vm, PORT_ADDR + READ_BYTE(vm), vm->GPR[R])
+#define LOAD_D8PORT_R(vm, R) writeAddr(vm, PORT_ADDR + readByte_4C(vm), vm->GPR[R])
 /* Load '(PORT_ADDR + D8) into 'R' */
-#define LOAD_R_D8PORT(vm, R) vm->GPR[R] = readAddr(vm, PORT_ADDR + READ_BYTE(vm))
+#define LOAD_R_D8PORT(vm, R) vm->GPR[R] = readAddr(vm, PORT_ADDR + readByte_4C(vm))
 /* Load 'R1' into '(PORT_ADDR + R2)' */
 #define LOAD_RPORT_R(vm, R1, R2) writeAddr(vm, PORT_ADDR + vm->GPR[R2], vm->GPR[R1])
 /* Load '(PORT_ADDR + R2)' into 'R1' */
@@ -78,6 +78,35 @@
 
 static void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
 static inline uint8_t readAddr(VM* vm, uint16_t addr);
+
+static inline uint8_t readByte(VM* vm) {
+    /* Reads a byte and consumes 0 cycles */
+    return vm->MEM[vm->PC++];
+}
+
+static uint8_t readByte_4C(VM* vm) {
+    /* Reads a byte and consumes 4 cycles */
+    uint8_t byte = vm->MEM[vm->PC++];
+
+    cyclesSync(vm, 4);
+    return byte;
+}
+
+static inline uint16_t read2Bytes(VM* vm) {
+    /* Reads 2 bytes and doesnt consume any cycles */
+    return (uint16_t)(vm->MEM[vm->PC++] | (vm->MEM[vm->PC++] << 8));
+}
+
+static uint16_t read2Bytes_8C(VM* vm) {
+    /* Reads 2 bytes and consumes 8 cycles, 4 per byte */
+    uint8_t low = vm->MEM[vm->PC++]; 
+    cyclesSync(vm, 4);
+
+    uint8_t high = vm->MEM[vm->PC++];
+    cyclesSync(vm, 4);
+
+    return (uint16_t)(low | (high << 8));
+}
 
 static inline void set_flag(VM* vm, FLAG flag, uint8_t bit) {
     /* Since the flags are enums and in order, their numeric value
@@ -509,7 +538,7 @@ static void addR16I8(VM* vm, GP_REG RR1, GP_REG RR_STORE) {
      *
      * This comes in handy for another instruction */
     uint16_t old = get_reg16(vm, RR1); 
-    int8_t toAdd = (int8_t)READ_BYTE(vm);
+    int8_t toAdd = (int8_t)readByte_4C(vm);
     uint16_t result = set_reg16(vm, RR_STORE, old + toAdd);
     set_flag(vm, FLAG_Z, 0);
     set_flag(vm, FLAG_N, 0);
@@ -542,7 +571,7 @@ static void addR8(VM* vm, GP_REG R1, GP_REG R2) {
 }
 
 static void addR8D8(VM* vm, GP_REG R) {
-    uint8_t data = READ_BYTE(vm);
+    uint8_t data = readByte_4C(vm);
     uint8_t old = vm->GPR[R];
     uint8_t result = old + data;
 
@@ -610,7 +639,7 @@ static void adcR8(VM* vm, GP_REG R1, GP_REG R2) {
 }
 
 static void adcR8D8(VM* vm, GP_REG R) {
-    uint16_t data = (uint16_t)READ_BYTE(vm);
+    uint16_t data = (uint16_t)readByte_4C(vm);
     uint8_t old = vm->GPR[R];
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old + data;
@@ -651,7 +680,7 @@ static void subR8(VM* vm, GP_REG R1, GP_REG R2) {
 }
 
 static void subR8D8(VM* vm, GP_REG R) {
-    uint8_t data = READ_BYTE(vm);
+    uint8_t data = readByte_4C(vm);
     uint8_t old = vm->GPR[R];
     uint8_t result = old - data;
 
@@ -709,7 +738,7 @@ static void sbcR8(VM* vm, GP_REG R1, GP_REG R2) {
 }
 
 static void sbcR8D8(VM* vm, GP_REG R) {
-    uint8_t data = READ_BYTE(vm);
+    uint8_t data = readByte_4C(vm);
     uint8_t old = vm->GPR[R];
     uint8_t carry = get_flag(vm, FLAG_C);
     uint8_t result = old - data;
@@ -751,7 +780,7 @@ static void andR8(VM* vm, GP_REG R1, GP_REG R2) {
 
 static void andR8D8(VM* vm, GP_REG R) {
     uint8_t old = vm->GPR[R];
-    uint8_t operand = READ_BYTE(vm);
+    uint8_t operand = readByte_4C(vm);
     uint8_t result = old & operand;
 
     vm->GPR[R] = result;
@@ -790,7 +819,7 @@ static void xorR8(VM* vm, GP_REG R1, GP_REG R2) {
 
 static void xorR8D8(VM* vm, GP_REG R) {
     uint8_t old = vm->GPR[R];
-    uint8_t operand = READ_BYTE(vm);
+    uint8_t operand = readByte_4C(vm);
     uint8_t result = old ^ operand;
 
     vm->GPR[R] = result;
@@ -829,7 +858,7 @@ static void orR8(VM* vm, GP_REG R1, GP_REG R2) {
 
 static void orR8D8(VM* vm, GP_REG R) {
     uint8_t old = vm->GPR[R];
-    uint8_t operand = READ_BYTE(vm);
+    uint8_t operand = readByte_4C(vm);
     uint8_t result = old | operand;
 
     vm->GPR[R] = result;
@@ -867,7 +896,7 @@ static void compareR8(VM* vm, GP_REG R1, GP_REG R2) {
 
 static void compareR8D8(VM* vm, GP_REG R) {
     uint8_t old = vm->GPR[R];
-    uint8_t toSub = READ_BYTE(vm);
+    uint8_t toSub = readByte_4C(vm);
     uint8_t result = old - toSub;
 
     TEST_Z_FLAG(vm, result);
@@ -913,7 +942,7 @@ static inline uint16_t pop16(VM* vm) {
 }
 
 static void call(VM* vm) {
-    uint16_t callAddress = READ_16BIT(vm);
+    uint16_t callAddress = read2Bytes_8C(vm);
     push16(vm, vm->PC);
 
     vm->PC = callAddress;
@@ -926,7 +955,7 @@ static void rst(VM* vm, uint16_t addr) {
 }
 
 static void callCondition(VM* vm, bool isTrue) {
-    uint16_t callAddress = READ_16BIT(vm);
+    uint16_t callAddress = read2Bytes_8C(vm);
 
     if (isTrue) {
         push16(vm, vm->PC);
@@ -958,13 +987,13 @@ static void cpl(VM* vm) {
 #define CONDITION_C(vm)  (get_flag(vm, FLAG_C) == 1)
 
 static void jumpCondition(VM* vm, bool isTrue) {
-    uint16_t address = READ_16BIT(vm);
+    uint16_t address = read2Bytes_8C(vm);
     if (isTrue) vm->PC = address;
 }
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
     
-    int8_t jumpCount = (int8_t)READ_BYTE(vm);
+    int8_t jumpCount = (int8_t)readByte_4C(vm);
     if (isTrue) vm->PC += jumpCount;
 }
 
@@ -1049,7 +1078,7 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
 static void prefixCB(VM* vm) {
     /* This function contains opcode interpretations for
      * all the instruction prefixed by opcode CB */
-    uint8_t byte = READ_BYTE(vm);
+    uint8_t byte = readByte_4C(vm);
     
 #ifdef DEBUG_PRINT_REGISTERS
     printRegisters(vm);
@@ -1327,7 +1356,7 @@ void dispatch(VM* vm) {
 #ifdef DEBUG_REALTIME_PRINTING
         printInstruction(vm);
 #endif
-        uint8_t byte = READ_BYTE(vm);
+        uint8_t byte = readByte_4C(vm);
         switch (byte) {
             // nop
             case 0x00: break;
@@ -1339,7 +1368,7 @@ void dispatch(VM* vm) {
             case 0x06: LOAD_R_D8(vm, R8_B); break;
             case 0x07: rotateLeftR8(vm, R8_A, false); break;
             case 0x08: {
-                uint16_t a = READ_16BIT(vm);
+                uint16_t a = read2Bytes_8C(vm);
                 writeAddr(vm, a, vm->GPR[R16_SP] & 0xFF);
                 writeAddr(vm, a+1, vm->GPR[R16_SP] >> 8);
                 break;
@@ -1360,7 +1389,7 @@ void dispatch(VM* vm) {
             case 0x15: decrementR8(vm, R8_D); break;
             case 0x16: LOAD_R_D8(vm, R8_D); break;
             case 0x17: rotateLeftCarryR8(vm, R8_A, false); break;
-            case 0x18: JUMP_RL(vm, READ_BYTE(vm)); break;
+            case 0x18: JUMP_RL(vm, readByte_4C(vm)); break;
             case 0x19: addR16(vm, R16_HL, R16_DE); break;
             case 0x1A: LOAD_R_ARR(vm, R8_A, R16_DE); break;
             case 0x1B: DEC_RR(vm, R16_DE); break;
@@ -1575,7 +1604,7 @@ void dispatch(VM* vm) {
             case 0xC0: retCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC1: POP_R16(vm, R16_BC); break;
             case 0xC2: jumpCondition(vm, CONDITION_NZ(vm)); break;
-            case 0xC3: JUMP(vm, READ_16BIT(vm)); break;
+            case 0xC3: JUMP(vm, read2Bytes_8C(vm)); break;
             case 0xC4: callCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC5: PUSH_R16(vm, R16_BC); break;
             case 0xC6: addR8D8(vm, R8_A); break;

@@ -58,9 +58,6 @@ typedef enum {
 #define R16_HL R8_H
 #define R16_SP R8_SP_LOW
 
-#define READ_BYTE(vm) (vm->MEM[vm->PC++])
-#define READ_16BIT(vm) ((vm->MEM[vm->PC++]) | (vm->MEM[vm->PC++] << 8))
-
 struct VM {
     /* ---------------- SDL ----------------- */
     SDL_Window* sdl_window;             /* The window */
@@ -69,6 +66,7 @@ struct VM {
     Cartridge* cartridge;
     bool run;                          /* A flag that when set to false, quits the emulator */
     bool IME;                           /* Interrupt Master Enable Flag */
+    unsigned int cyclesSinceLastFrame;
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
@@ -82,7 +80,8 @@ typedef struct VM VM;
 
 /* Loads in the cartridge into the VM and starts the overall emulator */
 void startEmulator(Cartridge* cartridge);
-/*
- * will perform a memory cleanup by freeing the VM state and then safely exiting */
+/* will perform a memory cleanup by freeing the VM state and then safely exiting */
 void stopEmulator(VM* vm);
+/* Increments the cycle count and syncs all hardware to act accordingly if necessary */
+void cyclesSync(VM* vm, unsigned int cycles);
 #endif
