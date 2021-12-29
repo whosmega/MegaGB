@@ -8,4 +8,6 @@ void resetGBC(VM* vm);
 /* This function is invoked to run the CPU thread */
 void dispatch(VM* vm);
 
+/* Handle Interrupts */
+void handleInterrupts(VM* vm);
 #endif

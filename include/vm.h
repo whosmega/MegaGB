@@ -14,7 +14,7 @@ typedef enum {
     R8_D, R8_E,
     R8_H, R8_L,
     
-    R8_SP_LOW, R8_SP_HIGH,
+    R8_SP_HIGH, R8_SP_LOW,
     GP_COUNT
 } GP_REG;
 
@@ -56,7 +56,7 @@ typedef enum {
 #define R16_BC R8_B
 #define R16_DE R8_D
 #define R16_HL R8_H
-#define R16_SP R8_SP_LOW
+#define R16_SP R8_SP_HIGH
 
 struct VM {
     /* ---------------- SDL ----------------- */
@@ -67,6 +67,7 @@ struct VM {
     bool run;                          /* A flag that when set to false, quits the emulator */
     bool IME;                           /* Interrupt Master Enable Flag */
     unsigned int cyclesSinceLastFrame;
+    unsigned long clock;
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */

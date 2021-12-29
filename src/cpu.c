@@ -12,20 +12,20 @@
 #define PORT_ADDR 0xFF00
 
 /* Load 16 bit data into an R16 Register */
-#define LOAD_RR_D16(vm, RR) set_reg16(vm, RR, read2Bytes(vm))
+#define LOAD_RR_D16(vm, RR) set_reg16_8C(vm, RR, read2Bytes(vm))
 /* Load contents of R8 Register into address at R16 register (dereferencing) */
 #define LOAD_ARR_R(vm, RR, R) writeAddr_4C(vm, get_reg16(vm, RR), vm->GPR[R])
 /* Load 8 bit data into R8 Register */
-#define LOAD_R_D8(vm, R) vm->GPR[R] = readByte_4C(vm)
+#define LOAD_R_D8(vm, R) vm->GPR[R] = readByte(vm); cyclesSync(vm, 4)
 /* Dereference the address contained in the R16 register and set it's value 
  * to the R8 register */
-#define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = readAddr_4C(vm, get_reg16(vm, RR))
+#define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = readAddr(vm, get_reg16(vm, RR)); cyclesSync(vm, 4)
 /* Load 8 bit data into address at R16 register (dereferencing) */
 #define LOAD_ARR_D8(vm, RR) writeAddr_4C(vm, get_reg16(vm, RR), readByte_4C(vm))
 /* Load contents of R8 register into another R8 register */
 #define LOAD_R_R(vm, R1, R2) vm->GPR[R1] = vm->GPR[R2]
 /* Load contents of R16 register into another R16 register */
-#define LOAD_RR_RR(vm, RR1, RR2) set_reg16(vm, RR1, get_reg16(vm, RR2))
+#define LOAD_RR_RR(vm, RR1, RR2) set_reg16(vm, RR1, get_reg16(vm, RR2)); cyclesSync(vm, 4)
 /* Load instructions from reading into and writing into main memory */
 #define LOAD_MEM_R(vm, R) writeAddr_4C(vm, read2Bytes_8C(vm), vm->GPR[R])
 /* Load what's at the address specified by the 16 bit data into the R8 register */
@@ -39,17 +39,19 @@
 /* Load '(PORT_ADDR + R2)' into 'R1' */
 #define LOAD_R_RPORT(vm, R1, R2) vm->GPR[R1] = readAddr_4C(vm, PORT_ADDR + vm->GPR[R2])
 
+#define LOAD_RR_RRI8(vm, RR1, RR2) load_rr_rri8(vm, RR1, RR2)
 /* Increment contents of R16 register */
-#define INC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) + 1))
+#define INC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) + 1)); cyclesSync(vm, 4)
 /* Decrement contents of R16 register */
-#define DEC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) - 1)) 
+#define DEC_RR(vm, RR) set_reg16(vm, RR, (get_reg16(vm, RR) - 1)); cyclesSync(vm, 4)
 
 /* Direct Jump */
-#define JUMP(vm, a16) vm->PC = a16
+#define JUMP(vm, a16) vm->PC = a16; cyclesSync(vm, 4)
+#define JUMP_RR(vm, RR) vm->PC = get_reg16(vm, RR)
 /* Relative Jump */
-#define JUMP_RL(vm, i8) vm->PC += (int8_t)i8
+#define JUMP_RL(vm, i8) vm->PC += (int8_t)i8; cyclesSync(vm, 4)
 
-#define PUSH_R16(vm, RR) push16(vm, get_reg16(vm, RR))
+#define PUSH_R16(vm, RR) cyclesSync(vm, 4); push16(vm, get_reg16(vm, RR))
 #define POP_R16(vm, RR) set_reg16(vm, RR, pop16(vm))
 #define RST(vm, a16) call(vm, a16)
 #define INTERRUPT_MASTER_ENABLE(vm) vm->IME = true
@@ -76,15 +78,17 @@
 #define TEST_C_FLAG_SUB16(vm, x, y) set_flag(vm, FLAG_C, ((int)(x) - (int)(y)) < 0 ? 1 : 0)
 #define TEST_C_FLAG_SUB8(vm, x, y) set_flag(vm, FLAG_C, ((int)(x) - (int)(y)) < 0 ? 1 : 0)
 
-static void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte);
+static uint8_t readAddr(VM* vm, uint16_t addr);
+static void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
+static inline void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte);
 static inline uint8_t readAddr_4C(VM* vm, uint16_t addr);
 
 static inline uint8_t readByte(VM* vm) {
-    /* Reads a byte and consumes 0 cycles */
+    /* Reads a byte and doesnt consume any cycles */
     return vm->MEM[vm->PC++];
 }
 
-static uint8_t readByte_4C(VM* vm) {
+static inline uint8_t readByte_4C(VM* vm) {
     /* Reads a byte and consumes 4 cycles */
     uint8_t byte = vm->MEM[vm->PC++];
 
@@ -136,6 +140,16 @@ static inline uint16_t set_reg16(VM* vm, GP_REG RR, uint16_t v) {
     return v;
 }
 
+static uint16_t set_reg16_8C(VM* vm, GP_REG RR, uint16_t v) {
+    /* Takes 8 clock cycles */
+    vm->GPR[RR] = v >> 8;
+    cyclesSync(vm, 4);
+
+    vm->GPR[RR + 1] = v & 0xFF;
+    cyclesSync(vm, 4);
+    return v;
+}
+
 void resetGBC(VM* vm) {
     vm->PC = 0x0100;
     set_reg16(vm, R16_SP, 0xFFFE);
@@ -171,6 +185,27 @@ void resetGBC(VM* vm) {
 
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(vm);
+}
+
+static void load_rr_rri8(VM* vm, GP_REG RR1, GP_REG RR2) {
+    /* Opcode 0xF8 specific 
+     *
+     * RR1 = RR2 + I8 */
+    uint16_t old = get_reg16(vm, RR2); 
+    int8_t toAdd = (int8_t)readByte_4C(vm);
+    uint16_t result = set_reg16(vm, RR1, old + toAdd);
+
+    set_flag(vm, FLAG_Z, 0);
+    set_flag(vm, FLAG_N, 0);
+
+    /* For some reason this 16 bit addition does not do normal 
+     * 16 bit half carry setting, so we do the 8 bit test */
+    old &= 0xFF;
+
+    /* We passed unsigned version to flag tests to handle
+     * flags because at the low level its basically the same thing */
+    TEST_H_FLAG_ADD(vm, old, (uint8_t)toAdd);
+    TEST_C_FLAG_ADD8(vm, old, (uint8_t)toAdd);
 }
 
 static void incrementR8(VM* vm, GP_REG R) {
@@ -525,36 +560,31 @@ static void addR16(VM* vm, GP_REG RR1, GP_REG RR2) {
     uint16_t old = get_reg16(vm, RR1); 
     uint16_t toAdd = get_reg16(vm, RR2);
     uint16_t result = set_reg16(vm, RR1, old + toAdd);
+
     set_flag(vm, FLAG_N, 0);
     TEST_H_FLAG_ADD16(vm, old, toAdd);
     TEST_C_FLAG_ADD16(vm, old, toAdd);
+
+    cyclesSync(vm, 4);
 }
 
 /* Adding a signed 8 bit integer to a 16 bit register */
 
-static void addR16I8(VM* vm, GP_REG RR1, GP_REG RR_STORE) {
-    /* This function is a little bit special because it provides an extra parameter 
-     * for a 16 bit register, which is where the final result is stored. 
-     *
-     * This comes in handy for another instruction */
-    uint16_t old = get_reg16(vm, RR1); 
+static void addR16I8(VM* vm, GP_REG RR) {
+    uint16_t old = get_reg16(vm, RR);
     int8_t toAdd = (int8_t)readByte_4C(vm);
-    uint16_t result = set_reg16(vm, RR_STORE, old + toAdd);
+    uint16_t result = set_reg16_8C(vm, RR, old + toAdd);
     set_flag(vm, FLAG_Z, 0);
     set_flag(vm, FLAG_N, 0);
 
-    if (toAdd < 0) {
-        /* Negative integer addition means, subtraction so we
-         * do subtraction tests */
-        TEST_H_FLAG_SUB(vm, old, toAdd);
-        TEST_C_FLAG_SUB16(vm, old, toAdd);
-    } else {
-        /* Normal addition with a number being 0 or greater */
-        /* For some reason this 16 bit addition does not do normal 
-         * 16 bit half carry setting, so we do the 8 bit test */
-        TEST_H_FLAG_ADD(vm, old, toAdd);
-        TEST_C_FLAG_ADD16(vm, old, toAdd);
-    }
+    /* For some reason this 16 bit addition does not do normal 
+     * 16 bit half carry setting, so we do the 8 bit test */
+    old &= 0xFF;
+
+    /* We passed unsigned version to flag tests to handle
+     * flags because at the low level its basically the same thing */
+    TEST_H_FLAG_ADD(vm, old, (uint8_t)toAdd);
+    TEST_C_FLAG_ADD8(vm, old, (uint8_t)toAdd);
 }
 
 static void addR8(VM* vm, GP_REG R1, GP_REG R2) {
@@ -921,21 +951,21 @@ static void compareR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
 static inline void push16(VM* vm, uint16_t u16) {
     /* Pushes a 2 byte value to the stack */
     uint16_t stackPointer = get_reg16(vm, R16_SP);
-
+    
     /* Write the high byte */
     writeAddr_4C(vm, stackPointer - 1, u16 >> 8);
     /* Write the low byte */
     writeAddr_4C(vm, stackPointer - 2, u16 & 0xFF);
 
-    /* Update the stack pointer */
+    /* Update the SP */
     set_reg16(vm, R16_SP, stackPointer - 2);
 }
 
 static inline uint16_t pop16(VM* vm) {
     uint16_t stackPointer = get_reg16(vm, R16_SP);
+
     uint8_t lowByte = readAddr_4C(vm, stackPointer);
     uint8_t highByte = readAddr_4C(vm, stackPointer + 1);
-
     set_reg16(vm, R16_SP, stackPointer + 2);
 
     return (uint16_t)((highByte << 8) | lowByte);
@@ -943,8 +973,11 @@ static inline uint16_t pop16(VM* vm) {
 
 static void call(VM* vm) {
     uint16_t callAddress = read2Bytes_8C(vm);
-    push16(vm, vm->PC);
 
+    /* Branch decision cycle sync */
+    cyclesSync(vm, 4);
+
+    push16(vm, vm->PC);
     vm->PC = callAddress;
 }
 
@@ -958,6 +991,8 @@ static void callCondition(VM* vm, bool isTrue) {
     uint16_t callAddress = read2Bytes_8C(vm);
 
     if (isTrue) {
+        /* Branch decision cycles sync */
+        cyclesSync(vm, 4);
         push16(vm, vm->PC);
         vm->PC = callAddress;
     }
@@ -965,11 +1000,19 @@ static void callCondition(VM* vm, bool isTrue) {
 
 static inline void ret(VM* vm) {
     vm->PC = pop16(vm);
+
+    /* Internal : Cycle sync */
+    cyclesSync(vm, 4);
 }
 
 static void retCondition(VM* vm, bool isTrue) {
+    /* Branch decision cycles */
+    cyclesSync(vm, 4);
+
     if (isTrue) {
         vm->PC = pop16(vm);
+        /* Cycles sync after setting PC */
+        cyclesSync(vm, 4);
     }
 }
 
@@ -988,13 +1031,21 @@ static void cpl(VM* vm) {
 
 static void jumpCondition(VM* vm, bool isTrue) {
     uint16_t address = read2Bytes_8C(vm);
+    /* Cycles sync after branch decision */
+    cyclesSync(vm, 4);
+
     if (isTrue) vm->PC = address;
 }
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
-    
     int8_t jumpCount = (int8_t)readByte_4C(vm);
-    if (isTrue) vm->PC += jumpCount;
+
+    if (isTrue) {
+        vm->PC += jumpCount;
+
+        /* Cycles sync after incrementing PC */
+        cyclesSync(vm, 4);
+    }
 }
 
 /* Procedure for the decimal adjust instruction (DAA) */
@@ -1037,7 +1088,10 @@ static void decimalAdjust(VM* vm) {
 
 /* This function is responsible for writing 1 byte to a memory address */
 
-static void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte) {
+static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
+#ifdef DEBUG_MEM_LOGGING
+    printf("Writing 0x%02x to address 0x%04x\n", byte, addr);
+#endif
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* External RAM write request */
         mbc_writeExternalRAM(vm, addr, byte);
@@ -1053,7 +1107,6 @@ static void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte) {
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
     }
-
 #ifdef DEBUG_PRINT_SERIAL_OUTPUT
     else if (addr == 0xFF02 && byte == 0x81) {
         /* Print character */
@@ -1062,17 +1115,28 @@ static void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte) {
         return;
     }
 #endif
+    
 
     vm->MEM[addr] = byte; 
 }
 
-static uint8_t readAddr_4C(VM* vm, uint16_t addr) {
+static uint8_t readAddr(VM* vm, uint16_t addr) {
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* Read from external RAM */
         return mbc_readExternalRAM(vm, addr);
     }
-    
-    uint8_t byte = vm->MEM[addr]; 
+
+    return vm->MEM[addr];
+}
+
+
+static void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte) {
+    writeAddr(vm, addr, byte);
+    cyclesSync(vm, 4);
+}
+
+static uint8_t readAddr_4C(VM* vm, uint16_t addr) {
+    uint8_t byte = readAddr(vm, addr);
     cyclesSync(vm, 4);
 
     return byte;
@@ -1351,6 +1415,10 @@ static void prefixCB(VM* vm) {
     }
 }
 
+void handleInterrupts(VM* vm) {
+    
+}
+
 /* Instruction Set : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html */
 
 void dispatch(VM* vm) {
@@ -1373,8 +1441,10 @@ void dispatch(VM* vm) {
             case 0x07: rotateLeftR8(vm, R8_A, false); break;
             case 0x08: {
                 uint16_t a = read2Bytes_8C(vm);
-                writeAddr_4C(vm, a, vm->GPR[R16_SP] & 0xFF);
-                writeAddr_4C(vm, a+1, vm->GPR[R16_SP] >> 8);
+                uint16_t sp = get_reg16(vm, R16_SP);
+                /* Write high byte to high and low byte to low */
+                writeAddr_4C(vm, a+1, sp >> 8);
+                writeAddr_4C(vm, a, sp & 0xFF);
                 break;
             }
             case 0x09: addR16(vm, R16_HL, R16_BC); break;
@@ -1404,7 +1474,7 @@ void dispatch(VM* vm) {
             case 0x20: jumpRelativeCondition(vm, CONDITION_NZ(vm)); break;
             case 0x21: LOAD_RR_D16(vm, R16_HL); break;
             case 0x22: LOAD_ARR_R(vm, R16_HL, R8_A); 
-                       INC_RR(vm, R16_HL); 
+                       set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) + 1));
                        break;
             case 0x23: INC_RR(vm, R16_HL); break;
             case 0x24: incrementR8(vm, R8_H); break;
@@ -1413,8 +1483,8 @@ void dispatch(VM* vm) {
             case 0x27: decimalAdjust(vm); break;
             case 0x28: jumpRelativeCondition(vm, CONDITION_Z(vm)); break;
             case 0x29: addR16(vm, R16_HL, R16_HL); break;
-            case 0x2A: LOAD_R_ARR(vm, R8_A, R16_HL); 
-                       INC_RR(vm, R16_HL); 
+            case 0x2A: LOAD_R_ARR(vm, R8_A, R16_HL);
+                       set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) + 1)); 
                        break;
             case 0x2B: DEC_RR(vm, R16_HL); break;
             case 0x2C: incrementR8(vm, R8_L); break;
@@ -1424,7 +1494,7 @@ void dispatch(VM* vm) {
             case 0x30: jumpRelativeCondition(vm, CONDITION_NC(vm)); break;
             case 0x31: LOAD_RR_D16(vm, R16_SP); break;
             case 0x32: LOAD_ARR_R(vm, R16_HL, R8_A); 
-                       DEC_RR(vm, R16_HL); 
+                       set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) - 1));
                        break;
             case 0x33: INC_RR(vm, R16_SP); break;
             case 0x34: {
@@ -1433,11 +1503,10 @@ void dispatch(VM* vm) {
                 uint8_t old = readAddr_4C(vm, address);
                 uint8_t new = old + 1; 
                 
-                writeAddr_4C(vm, address, new);
-
                 TEST_Z_FLAG(vm, new);
                 TEST_H_FLAG_ADD(vm, old, 1);
                 set_flag(vm, FLAG_N, 0);
+                writeAddr_4C(vm, address, new);
                 break;
             }
             case 0x35: {
@@ -1445,12 +1514,11 @@ void dispatch(VM* vm) {
                 uint16_t address = get_reg16(vm, R16_HL);
                 uint8_t old = readAddr_4C(vm, address);
                 uint8_t new = old - 1; 
-                
-                writeAddr_4C(vm, address, new);
 
                 TEST_Z_FLAG(vm, new);
                 TEST_H_FLAG_SUB(vm, old, 1);
                 set_flag(vm, FLAG_N, 1);
+                writeAddr_4C(vm, address, new);
                 break;
             }
             case 0x36: LOAD_ARR_D8(vm, R16_HL); break;
@@ -1464,7 +1532,7 @@ void dispatch(VM* vm) {
             case 0x39: addR16(vm, R16_HL, R16_SP); break;
             case 0x3A: {
                 LOAD_R_ARR(vm, R8_A, R16_HL);
-                DEC_RR(vm, R16_HL);
+                set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) - 1));
                 break;
             }
             case 0x3B: DEC_RR(vm, R16_SP); break;
@@ -1640,8 +1708,8 @@ void dispatch(VM* vm) {
             case 0xE5: PUSH_R16(vm, R16_HL); break;
             case 0xE6: andR8D8(vm, R8_A); break;
             case 0xE7: rst(vm, 0x20); break;
-            case 0xE8: addR16I8(vm, R16_SP, R16_SP); break;
-            case 0xE9: JUMP(vm, get_reg16(vm, R16_HL)); break; 
+            case 0xE8: addR16I8(vm, R16_SP); break;
+            case 0xE9: JUMP_RR(vm, R16_HL); break; 
             case 0xEA: LOAD_MEM_R(vm, R8_A); break;
             case 0xEE: xorR8D8(vm, R8_A); break;
             case 0xEF: rst(vm, 0x28); break;
@@ -1659,7 +1727,7 @@ void dispatch(VM* vm) {
             case 0xF5: PUSH_R16(vm, R16_AF); break;
             case 0xF6: orR8D8(vm, R8_A); break;
             case 0xF7: rst(vm, 0x30); break;
-            case 0xF8: addR16I8(vm, R16_SP, R16_HL); break;
+            case 0xF8: LOAD_RR_RRI8(vm, R16_HL, R16_SP); break;
             case 0xF9: LOAD_RR_RR(vm, R16_SP, R16_HL); break;
             case 0xFA: LOAD_R_MEM(vm, R8_A); break;
             case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;

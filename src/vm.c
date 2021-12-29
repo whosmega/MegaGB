@@ -4,6 +4,8 @@
 #include "../include/debug.h"
 #include "../include/display.h"
 #include "../include/mbc.h"
+
+#include <time.h>
 #include <string.h>
 
 
@@ -13,6 +15,7 @@ static void initVM(VM* vm) {
     vm->memControllerType = MBC_NONE;
     vm->run = false;
     vm->cyclesSinceLastFrame = 0;
+    vm->clock = 0;
 
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
@@ -59,6 +62,8 @@ static void bootROM(VM* vm) {
     memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
 }
 
+/* Timer */
+
 static void run(VM* vm) {
     while (vm->run) {
         /* Handle Events */
@@ -71,14 +76,11 @@ static void run(VM* vm) {
 void cyclesSync(VM* vm, unsigned int cycles) {
     /* Syncs all hardware and updates cycles */
     vm->cyclesSinceLastFrame += cycles;
+    vm->clock += cycles;
 
-    if (vm->cyclesSinceLastFrame >= CYCLES_PER_FRAME) {
+    if (vm->cyclesSinceLastFrame == CYCLES_PER_FRAME) {
         vm->cyclesSinceLastFrame = 0;
         /* Draw the frame */
-
-#ifdef DEBUG_LOGGING
-        printf("Drawing Frame\n");
-#endif
     }
 }
 
@@ -121,6 +123,9 @@ void startEmulator(Cartridge* cartridge) {
 
 void stopEmulator(VM* vm) {
 #ifdef DEBUG_LOGGING
+    double total = (double)(clock() - vm->startTime) / CLOCKS_PER_SEC;
+
+    printf("Frames Drawn : %d, Time Elapsed : %g, FPS : %g\n", vm->framesDrawn, (double)total, (double)vm->framesDrawn / total);
     printf("Stopping Emulator Now\n");
     printf("Cleaning allocations\n");
 #endif

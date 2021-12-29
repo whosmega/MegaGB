@@ -4,9 +4,8 @@ SECTION "Header", rom0[$100]
 
 
 EntryPoint:
-    ld a, $00
-    sbc a, $01
-    stop
+    ld a, [$FF00 + $44]
+
 
 
 

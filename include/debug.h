@@ -6,7 +6,9 @@
 // #define DEBUG_REALTIME_PRINTING
 // #define DEBUG_PRINT_CARTRIDGE_INFO
 // #define DEBUG_LOGGING
+// #define DEBUG_MEM_LOGGING
 // #define DEBUG_PRINT_REGISTERS
+// #define DEBUG_PRINT_CYCLES
 #define DEBUG_PRINT_SERIAL_OUTPUT
 
 /* Stops running when encounters opcode 0x40, LD B, B */

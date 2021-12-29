@@ -55,7 +55,11 @@ static void r8(VM* vm, char* ins) {
 void printCBInstruction(VM* vm, uint8_t byte) {
     printf("[0x%04x]", vm->PC - 1);
     printFlags(vm);
-    
+
+#ifdef DEBUG_PRINT_CYCLES
+    printf("[%ld]", vm->clock);
+#endif
+
     printf(" %10s", "");
 
     switch (byte) {
@@ -321,7 +325,10 @@ void printCBInstruction(VM* vm, uint8_t byte) {
 void printInstruction(VM* vm) {
     printf("[0x%04x]", vm->PC);
     printFlags(vm);
-    
+
+#ifdef DEBUG_PRINT_CYCLES
+    printf("[%ld]", vm->clock);
+#endif
     printf(" %10s", "");
   
     switch (vm->MEM[vm->PC]) {
@@ -552,7 +559,7 @@ void printInstruction(VM* vm) {
         case 0xE5: return simpleInstruction(vm, "PUSH HL");
         case 0xE6: return d8(vm, "AND d8");
         case 0xE7: return simpleInstruction(vm, "RST 0x20");
-        case 0xE8: return r8(vm, "AND SP, r8");
+        case 0xE8: return r8(vm, "ADD SP, r8");
         case 0xE9: return simpleInstruction(vm, "JP (HL)");
         case 0xEA: return a16(vm, "LD (a16), A");
         case 0xEE: return d8(vm, "XOR d8");
@@ -576,7 +583,8 @@ void printInstruction(VM* vm) {
 
 void printRegisters(VM* vm) {
     printf("[");
-    printf("A%02x B%02x C%02x D%02x E%02x H%02x L%02x]\n", vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C], 
-                                             vm->GPR[R8_D], vm->GPR[R8_E], vm->GPR[R8_H],
-                                             vm->GPR[R8_L]);
+    printf("A%02xB%02xC%02xD%02xE%02xH%02xL%02xSP%04x]\n", 
+            vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C],
+            vm->GPR[R8_D], vm->GPR[R8_E], vm->GPR[R8_H],
+            vm->GPR[R8_L], (uint16_t)(vm->GPR[R8_SP_HIGH] << 8) + vm->GPR[R8_SP_LOW]);
 }
