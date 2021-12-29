@@ -7,7 +7,7 @@ import sys
 binjgbOutput = open("binjgbLog.txt", "w")
 megagbcOutput = open("megagbcLog.txt", "w")
 
-timeout = 3
+timeout = 15
 
 try:
     subprocess.call(["./binjgb-debugger", sys.argv[1]], 

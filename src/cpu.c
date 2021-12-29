@@ -56,7 +56,9 @@
 #define RST(vm, a16) call(vm, a16)
 #define INTERRUPT_MASTER_ENABLE(vm) vm->IME = true
 #define INTERRUPT_MASTER_DISABLE(vm) vm->IME = false
-#define CCF(vm) set_flag(vm, FLAG_C, get_flag(vm, FLAG_C) ^ 1)
+#define CCF(vm) set_flag(vm, FLAG_C, get_flag(vm, FLAG_C) ^ 1); \
+                set_flag(vm, FLAG_N, 0);                        \
+                set_flag(vm, FLAG_H, 0)
 /* Flag utility macros */
 #define TEST_Z_FLAG(vm, r) set_flag(vm, FLAG_Z, r == 0 ? 1 : 0)
 /* We check if a carry over for the last 4 bits happened 
@@ -441,6 +443,7 @@ static void shiftRightLogicalAR16(VM* vm, GP_REG R16) {
 static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
     uint8_t value = vm->GPR[R];
     uint8_t bit7 = value >> 7;
+    uint8_t bit0 = value & 0x1;
     uint8_t result = value >> 1;
     
     /* Copy the 7th bit to its original location after the shift */
@@ -450,13 +453,14 @@ static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, 0);
+    set_flag(vm, FLAG_C, bit0);
 }
 
 static void shiftRightArithmeticAR16(VM* vm, GP_REG R16) {
     uint16_t addr = get_reg16(vm, R16);
     uint8_t value = readAddr_4C(vm, addr); 
     uint8_t bit7 = value >> 7;
+    uint8_t bit0 = value & 0x1;
     uint8_t result = value >> 1;
     
     /* Copy the 7th bit to its original location after the shift */
@@ -466,7 +470,7 @@ static void shiftRightArithmeticAR16(VM* vm, GP_REG R16) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, 0);
+    set_flag(vm, FLAG_C, bit0);
 }
 
 static void swapR8(VM* vm, GP_REG R8) {
@@ -520,7 +524,7 @@ static void testBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
 
 static void setBitR8(VM* vm, GP_REG R8, uint8_t bit) {
     uint8_t value = vm->GPR[R8];
-    uint8_t orValue = 0b10000000 >> bit;
+    uint8_t orValue = 1 << bit;
     uint8_t result = value | orValue;
 
     vm->GPR[R8] = result;
@@ -529,7 +533,7 @@ static void setBitR8(VM* vm, GP_REG R8, uint8_t bit) {
 static void setBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
     uint16_t addr = get_reg16(vm, R16);
     uint8_t value = readAddr_4C(vm, addr);
-    uint8_t orValue = 0b10000000 >> bit;
+    uint8_t orValue = 1 << bit;
     uint8_t result = value | orValue;
 
     writeAddr_4C(vm, addr, result);
@@ -538,7 +542,7 @@ static void setBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
 static void resetBitR8(VM* vm, GP_REG R8, uint8_t bit) {
     uint8_t value = vm->GPR[R8];
     /* Converts 00010000 to 11101111 for the andValue when bit 3 has to be reset for ex */
-    uint8_t andValue = ~(0b10000000 >> bit);
+    uint8_t andValue = ~(1 << bit);
     uint8_t result = value & andValue;
 
     vm->GPR[R8] = result;
@@ -547,7 +551,7 @@ static void resetBitR8(VM* vm, GP_REG R8, uint8_t bit) {
 static void resetBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
     uint16_t addr = get_reg16(vm, R16);
     uint8_t value = readAddr_4C(vm, addr);
-    uint8_t andValue = ~(0b10000000 >> bit);
+    uint8_t andValue = ~(1 << bit);
     uint8_t result = value & andValue;
 
     writeAddr_4C(vm, addr, result);
