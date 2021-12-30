@@ -6,24 +6,7 @@
 #include <unistd.h>
 #include "../include/cartridge.h"
 #include "../include/mbc.h"
-
-typedef enum {
-    /* General purpose Registers */
-    R8_A, R8_F,
-    R8_B, R8_C,
-    R8_D, R8_E,
-    R8_H, R8_L,
-    
-    R8_SP_HIGH, R8_SP_LOW,
-    GP_COUNT
-} GP_REG;
-
-typedef enum {
-    FLAG_C,
-    FLAG_H,
-    FLAG_N,
-    FLAG_Z
-} FLAG;
+#include "../include/cpu.h"
 
 typedef enum {
     ROM_N0_16KB = 0x0000,                       /* 16KB ROM Bank number 0 (from cartridge) */
@@ -48,15 +31,12 @@ typedef enum {
     IO_REG_END = 0xFF7F,
     HRAM_N0 = 0xFF80,                           /* High Ram or 'fast ram' */
     HRAM_N0_END = 0xFFFE, 
-    INTERRUPT_ENABLE_REG8 = 0xFFFF              /* register which stores if interrupts are enabled */
+    INTERRUPT_ENABLE = 0xFFFF                   /* register which stores if interrupts are enabled */
 } MEM_ADDR;
 
-/* Defining macros for 16 bit registers, only for readability purposes */
-#define R16_AF R8_A
-#define R16_BC R8_B
-#define R16_DE R8_D
-#define R16_HL R8_H
-#define R16_SP R8_SP_HIGH
+/* IO Port Register Macros */
+#define R_IF        0xFF0F
+#define R_IE        INTERRUPT_ENABLE
 
 struct VM {
     /* ---------------- SDL ----------------- */
@@ -67,10 +47,11 @@ struct VM {
     bool run;                          /* A flag that when set to false, quits the emulator */
     bool IME;                           /* Interrupt Master Enable Flag */
     unsigned int cyclesSinceLastFrame;
-    unsigned long clock;
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
+    bool scheduleInterruptEnable;       /* If set to true, it enables interrupts at the
+                                           dispatch of the next instruction */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
     void* memController;                 /* Memory Bank Controller */

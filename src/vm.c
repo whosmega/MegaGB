@@ -15,8 +15,8 @@ static void initVM(VM* vm) {
     vm->memControllerType = MBC_NONE;
     vm->run = false;
     vm->cyclesSinceLastFrame = 0;
-    vm->clock = 0;
-
+    vm->scheduleInterruptEnable = false; 
+    
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
 
@@ -76,7 +76,6 @@ static void run(VM* vm) {
 void cyclesSync(VM* vm, unsigned int cycles) {
     /* Syncs all hardware and updates cycles */
     vm->cyclesSinceLastFrame += cycles;
-    vm->clock += cycles;
 
     if (vm->cyclesSinceLastFrame == CYCLES_PER_FRAME) {
         vm->cyclesSinceLastFrame = 0;

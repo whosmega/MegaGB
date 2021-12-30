@@ -54,7 +54,7 @@
 #define PUSH_R16(vm, RR) cyclesSync(vm, 4); push16(vm, get_reg16(vm, RR))
 #define POP_R16(vm, RR) set_reg16(vm, RR, pop16(vm))
 #define RST(vm, a16) call(vm, a16)
-#define INTERRUPT_MASTER_ENABLE(vm) vm->IME = true
+#define INTERRUPT_MASTER_ENABLE(vm) vm->scheduleInterruptEnable = true
 #define INTERRUPT_MASTER_DISABLE(vm) vm->IME = false
 #define CCF(vm) set_flag(vm, FLAG_C, get_flag(vm, FLAG_C) ^ 1); \
                 set_flag(vm, FLAG_N, 0);                        \
@@ -975,30 +975,20 @@ static inline uint16_t pop16(VM* vm) {
     return (uint16_t)((highByte << 8) | lowByte);
 }
 
-static void call(VM* vm) {
-    uint16_t callAddress = read2Bytes_8C(vm);
-
+static void call(VM* vm, uint16_t addr) {
     /* Branch decision cycle sync */
     cyclesSync(vm, 4);
 
     push16(vm, vm->PC);
-    vm->PC = callAddress;
-}
-
-static void rst(VM* vm, uint16_t addr) {
-    /* RST are calls to fixed addresses */
-    push16(vm, vm->PC);
     vm->PC = addr;
 }
 
-static void callCondition(VM* vm, bool isTrue) {
-    uint16_t callAddress = read2Bytes_8C(vm);
-
+static void callCondition(VM* vm, uint16_t addr, bool isTrue) {
     if (isTrue) {
         /* Branch decision cycles sync */
         cyclesSync(vm, 4);
         push16(vm, vm->PC);
-        vm->PC = callAddress;
+        vm->PC = addr;
     }
 }
 
@@ -1146,6 +1136,71 @@ static uint8_t readAddr_4C(VM* vm, uint16_t addr) {
     return byte;
 }
 
+/* Interrupt handling and helper functions */
+
+static void dispatchInterrupt(VM* vm, INTERRUPTS interrupt) {
+    /* Disable all interrupts */
+    INTERRUPT_MASTER_DISABLE(vm);
+    
+    /* Set the bit of this interrupt in the IF register to 0 */
+    vm->MEM[R_IF] &= ~(1 << interrupt);
+    
+    /* Now we pass control to the interrupt handler 
+     *
+     * CPU does nothing for 8 cycles (or executes NOPs) */
+    cyclesSync(vm, 8);
+
+    /* Jump to interrupt vector */
+    switch (interrupt) {
+        case INTERRUPT_VBLANK:      call(vm, 0x40); break;
+        case INTERRUPT_LCD_STAT:    call(vm, 0x48); break;
+        case INTERRUPT_TIMER:       call(vm, 0x50); break;
+        case INTERRUPT_SERIAL:      call(vm, 0x58); break;
+        case INTERRUPT_JOYPAD:      call(vm, 0x60); break;
+
+        default: break;
+    }
+
+}
+
+static void handleInterrupts(VM* vm) {
+    /* Main interrupt handler for the CPU */
+    
+    /* If interrupts arent enabled, we dont do anything */
+    if (!vm->IME) return;
+    
+    /* We read interrupt flags, which tell us which interrupts are requested
+     * if any */
+    uint8_t requestedInterrupts = vm->MEM[R_IF];
+    uint8_t enabledInterrups = vm->MEM[R_IE];
+
+    if (requestedInterrupts != 0) {
+        /* An interrupt has been requested
+         *
+         * Note : Upper 3 bits should always be 0, this is handled when normally
+         * writing to interrupt flag register and in normal hardware requests this is
+         * never encountered 
+         *
+         * We loop to find the interrupt requested with the highest priority thats enabled */
+
+        for (int i = 0; i < INTERRUPT_COUNT; i++) {
+            /* 'i' corresponds to the individual interrupts ranging from bit 0 to 4 */
+
+            uint8_t requestBit = (requestedInterrupts >> i) & 0x1;
+            uint8_t enabledBit = (enabledInterrups >> i) & 0x1;
+
+            if (requestBit && enabledBit) {
+                /* 'i' is currently the interrupt at the highest priority thats enabled */
+                dispatchInterrupt(vm, i);
+                return;
+            }
+        }
+
+        /* If we reach here, the interrupts requested arent enabled so we do nothing */
+    }
+}
+
+/* Main CPU instruction dispatchers */
 
 static void prefixCB(VM* vm) {
     /* This function contains opcode interpretations for
@@ -1419,10 +1474,6 @@ static void prefixCB(VM* vm) {
     }
 }
 
-void handleInterrupts(VM* vm) {
-    
-}
-
 /* Instruction Set : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html */
 
 void dispatch(VM* vm) {
@@ -1432,6 +1483,12 @@ void dispatch(VM* vm) {
 #ifdef DEBUG_REALTIME_PRINTING
         printInstruction(vm);
 #endif
+        /* Enable interrupts if it was scheduled */
+        if (vm->scheduleInterruptEnable) {
+            vm->scheduleInterruptEnable = false;
+            vm->IME = true;
+        }
+
         uint8_t byte = readByte_4C(vm);
         switch (byte) {
             // nop
@@ -1681,42 +1738,42 @@ void dispatch(VM* vm) {
             case 0xC1: POP_R16(vm, R16_BC); break;
             case 0xC2: jumpCondition(vm, CONDITION_NZ(vm)); break;
             case 0xC3: JUMP(vm, read2Bytes_8C(vm)); break;
-            case 0xC4: callCondition(vm, CONDITION_NZ(vm)); break;
+            case 0xC4: callCondition(vm, read2Bytes_8C(vm), CONDITION_NZ(vm)); break;
             case 0xC5: PUSH_R16(vm, R16_BC); break;
             case 0xC6: addR8D8(vm, R8_A); break;
-            case 0xC7: rst(vm, 0x00); break;
+            case 0xC7: RST(vm, 0x00); break;
             case 0xC8: retCondition(vm, CONDITION_Z(vm)); break;
             case 0xC9: ret(vm); break;
             case 0xCA: jumpCondition(vm, CONDITION_Z(vm)); break;
             case 0xCB: prefixCB(vm); break;
-            case 0xCC: callCondition(vm, CONDITION_Z(vm)); break;
-            case 0xCD: call(vm); break;
+            case 0xCC: callCondition(vm, read2Bytes_8C(vm), CONDITION_Z(vm)); break;
+            case 0xCD: call(vm, read2Bytes(vm)); break;
             case 0xCE: adcR8D8(vm, R8_A); break;
-            case 0xCF: rst(vm, 0x08); break;
+            case 0xCF: RST(vm, 0x08); break;
             case 0xD0: retCondition(vm, CONDITION_NC(vm)); break;
             case 0xD1: POP_R16(vm, R16_DE); break;
             case 0xD2: jumpCondition(vm, CONDITION_NC(vm)); break;
-            case 0xD4: callCondition(vm, CONDITION_NC(vm)); break;
+            case 0xD4: callCondition(vm, read2Bytes_8C(vm), CONDITION_NC(vm)); break;
             case 0xD5: PUSH_R16(vm, R16_DE); break;
             case 0xD6: subR8D8(vm, R8_A); break;
-            case 0xD7: rst(vm, 0x10); break;
+            case 0xD7: RST(vm, 0x10); break;
             case 0xD8: retCondition(vm, CONDITION_C(vm)); break;
             case 0xD9: INTERRUPT_MASTER_ENABLE(vm); ret(vm); break;
             case 0xDA: jumpCondition(vm, CONDITION_C(vm)); break;
-            case 0xDC: callCondition(vm, CONDITION_C(vm)); break;
+            case 0xDC: callCondition(vm, read2Bytes_8C(vm), CONDITION_C(vm)); break;
             case 0xDE: sbcR8D8(vm, R8_A); break;
-            case 0xDF: rst(vm, 0x18); break;
+            case 0xDF: RST(vm, 0x18); break;
             case 0xE0: LOAD_D8PORT_R(vm, R8_A); break;
             case 0xE1: POP_R16(vm, R16_HL); break;
             case 0xE2: LOAD_RPORT_R(vm, R8_A, R8_C); break;
             case 0xE5: PUSH_R16(vm, R16_HL); break;
             case 0xE6: andR8D8(vm, R8_A); break;
-            case 0xE7: rst(vm, 0x20); break;
+            case 0xE7: RST(vm, 0x20); break;
             case 0xE8: addR16I8(vm, R16_SP); break;
             case 0xE9: JUMP_RR(vm, R16_HL); break; 
             case 0xEA: LOAD_MEM_R(vm, R8_A); break;
             case 0xEE: xorR8D8(vm, R8_A); break;
-            case 0xEF: rst(vm, 0x28); break;
+            case 0xEF: RST(vm, 0x28); break;
             case 0xF0: LOAD_R_D8PORT(vm, R8_A); break;
             case 0xF1: {
                 POP_R16(vm, R16_AF); 
@@ -1730,14 +1787,17 @@ void dispatch(VM* vm) {
             case 0xF3: INTERRUPT_MASTER_DISABLE(vm); break;
             case 0xF5: PUSH_R16(vm, R16_AF); break;
             case 0xF6: orR8D8(vm, R8_A); break;
-            case 0xF7: rst(vm, 0x30); break;
+            case 0xF7: RST(vm, 0x30); break;
             case 0xF8: LOAD_RR_RRI8(vm, R16_HL, R16_SP); break;
             case 0xF9: LOAD_RR_RR(vm, R16_SP, R16_HL); break;
             case 0xFA: LOAD_R_MEM(vm, R8_A); break;
             case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;
             case 0xFE: compareR8D8(vm, R8_A); break;
-            case 0xFF: rst(vm, 0x38); break;
+            case 0xFF: RST(vm, 0x38); break;
     }
+
+    /* We handle any interrupts that are requested */
+    handleInterrupts(vm);
 }
 
 
