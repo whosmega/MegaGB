@@ -14,9 +14,13 @@ static void initVM(VM* vm) {
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
     vm->run = false;
+    vm->scheduleInterruptEnable = false;
+
     vm->cyclesSinceLastFrame = 0;
-    vm->scheduleInterruptEnable = false; 
-    
+    vm->clock = 0;
+    vm->lastTIMASync = 0;
+    vm->lastDIVSync = 0;
+
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
 
@@ -64,6 +68,65 @@ static void bootROM(VM* vm) {
 
 /* Timer */
 
+void syncTimer(VM* vm) {
+    /* This function should be called after every instruction dispatch at minimum
+     * it fully syncs the timer despite the length of the interval
+     *
+     * This is mainly an optimisation because display needs to always be updated
+     * and is therefore called after every cycle but it isnt the case for timer
+     * It only needs to be updated to request interrupts or provide 
+     * correct values when registers are queried / modified 
+     *
+     * Sometimes the timers should have had been incremented a few cycles 
+     * earlier, in that case we calculate the extra cycles and reduce the 
+     * lastSync value to match the older cycle and maintain the frequency
+     *
+     * Because we have 2 timers with different frequencies, 
+     * we need 2 different variables to keep the values */
+    
+    unsigned int cyclesElapsedDIV = vm->clock - vm->lastDIVSync;
+    vm->lastDIVSync = vm->clock;
+
+    /* Sync DIV */
+    if (cyclesElapsedDIV >= CYCLES_PER_DIV) {
+        /* 'Rewind' the last timer sync in case the timer should have been 
+         * incremented on an earlier cycle */
+        vm->lastDIVSync -= cyclesElapsedDIV - CYCLES_PER_DIV;
+        vm->MEM[R_DIV] += 1;
+    }
+
+    /* Sync TIMA */
+    unsigned int cyclesElapsedTIMA = vm->clock - vm->lastTIMASync;
+    uint8_t timerControl    =  vm->MEM[R_TAC];
+    uint8_t timerEnabled    =  (timerControl >> 2) & 1;
+    uint8_t timerFrequency  =  timerControl & 0b00000011;
+
+    if (timerEnabled) {
+        unsigned int freq = 0;
+        switch (timerFrequency) {
+            case 0: freq = 4096; break;
+            case 1: freq = 262144; break;
+            case 2: freq = 65536; break;
+            case 3: freq = 16384; break;
+        }
+        
+        if (cyclesElapsedTIMA >= freq) {
+            uint8_t old = vm->MEM[R_DIV];
+            vm->lastTIMASync -= cyclesElapsedTIMA - freq;
+
+            if (old == 0xFF) {
+                /* Overflow */
+                vm->MEM[R_DIV] = vm->MEM[R_TMA];
+                requestInterrupt(vm, INTERRUPT_TIMER);
+            } else {
+                vm->MEM[R_DIV] += 1;
+            }
+        }
+    }
+}
+
+/* ------------------ */ 
+
 static void run(VM* vm) {
     while (vm->run) {
         /* Handle Events */
@@ -74,13 +137,15 @@ static void run(VM* vm) {
 }
 
 void cyclesSync(VM* vm, unsigned int cycles) {
-    /* Syncs all hardware and updates cycles */
-    vm->cyclesSinceLastFrame += cycles;
+    /* This function is called millions of times
+     * in a second and therefore it needs to be optimised 
+     *
+     * So we dont update all hardware but only the ones that need to
+     * always be upto date like the display */
+    vm->clock += cycles;
 
-    if (vm->cyclesSinceLastFrame == CYCLES_PER_FRAME) {
-        vm->cyclesSinceLastFrame = 0;
-        /* Draw the frame */
-    }
+    /* We pass cycles that were incremented */
+    syncDisplay(vm, cycles);
 }
 
 void startEmulator(Cartridge* cartridge) {

@@ -14,4 +14,6 @@ int initSDL(VM* vm);
 void freeSDL(VM* vm);
 void handleSDLEvents(VM* vm);
 
+void syncDisplay(VM* vm, unsigned int cycleUpdate);
+
 #endif

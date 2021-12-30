@@ -27,6 +27,7 @@ typedef enum {
     INTERRUPT_TIMER,
     INTERRUPT_SERIAL,
     INTERRUPT_JOYPAD,
+
     INTERRUPT_COUNT
 } INTERRUPTS;
 
@@ -43,4 +44,6 @@ void resetGBC(struct VM* vm);
 /* This function is invoked to run the CPU thread */
 void dispatch(struct VM* vm);
 
+/* Function to request an interrupt when necessary */
+void requestInterrupt(struct VM* vm, INTERRUPTS interrupt);
 #endif

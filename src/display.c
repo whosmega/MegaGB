@@ -39,3 +39,17 @@ void freeSDL(VM* vm) {
 }
 
 
+void syncDisplay(VM* vm, unsigned int cycleUpdate) {
+    /* We sync the display by checking if we have to draw a frame 
+     *
+     * This is probably called every cycle update*/
+
+    vm->cyclesSinceLastFrame += cycleUpdate;
+
+    if (vm->cyclesSinceLastFrame >= CYCLES_PER_FRAME) {
+        /* We preserve any extra cycles */
+        vm->cyclesSinceLastFrame -= CYCLES_PER_FRAME;
+
+        /* Draw frame */
+    }
+}

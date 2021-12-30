@@ -1138,6 +1138,13 @@ static uint8_t readAddr_4C(VM* vm, uint16_t addr) {
 
 /* Interrupt handling and helper functions */
 
+void requestInterrupt(VM* vm, INTERRUPTS interrupt) {
+    /* This is called by external hardware to request interrupts
+     *
+     * We set the corresponding bit */
+    vm->MEM[R_IF] |= 1 << interrupt;
+}
+
 static void dispatchInterrupt(VM* vm, INTERRUPTS interrupt) {
     /* Disable all interrupts */
     INTERRUPT_MASTER_DISABLE(vm);

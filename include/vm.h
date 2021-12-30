@@ -8,6 +8,9 @@
 #include "../include/mbc.h"
 #include "../include/cpu.h"
 
+/* Cycles till the DIV timer is increment */
+#define CYCLES_PER_DIV      16384
+
 typedef enum {
     ROM_N0_16KB = 0x0000,                       /* 16KB ROM Bank number 0 (from cartridge) */
     ROM_N0_16KB_END = 0x3FFF,               
@@ -35,6 +38,10 @@ typedef enum {
 } MEM_ADDR;
 
 /* IO Port Register Macros */
+#define R_DIV       0xFF04
+#define R_TIMA      0xFF05
+#define R_TMA       0xFF06
+#define R_TAC       0xFF07
 #define R_IF        0xFF0F
 #define R_IE        INTERRUPT_ENABLE
 
@@ -44,9 +51,13 @@ struct VM {
     SDL_Renderer* sdl_renderer;             /* Renderer */
     /* -------------------------------------- */
     Cartridge* cartridge;
-    bool run;                          /* A flag that when set to false, quits the emulator */
-    bool IME;                           /* Interrupt Master Enable Flag */
-    unsigned int cyclesSinceLastFrame;
+    bool run;                               /* A flag that when set to false, quits the emulator */
+    bool IME;                               /* Interrupt Master Enable Flag */
+    unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */ 
+    unsigned int lastDIVSync;               /* Holds the clock's state when DIV timer was last synced
+                                             * this helps in getting the cycles elapsed */
+    unsigned int lastTIMASync;              /* Same but for the TIMA timer */
+    unsigned long clock;                    /* Main clock of the whole emulator */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
