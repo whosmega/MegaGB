@@ -38,6 +38,8 @@ typedef enum {
 } MEM_ADDR;
 
 /* IO Port Register Macros */
+#define R_SB        0xFF01
+#define R_SC        0xFF02
 #define R_DIV       0xFF04
 #define R_TIMA      0xFF05
 #define R_TMA       0xFF06
@@ -54,9 +56,9 @@ struct VM {
     bool run;                               /* A flag that when set to false, quits the emulator */
     bool IME;                               /* Interrupt Master Enable Flag */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */ 
-    unsigned int lastDIVSync;               /* Holds the clock's state when DIV timer was last synced
+    unsigned long lastDIVSync;               /* Holds the clock's state when DIV timer was last synced
                                              * this helps in getting the cycles elapsed */
-    unsigned int lastTIMASync;              /* Same but for the TIMA timer */
+    unsigned long lastTIMASync;              /* Same but for the TIMA timer */
     unsigned long clock;                    /* Main clock of the whole emulator */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
@@ -77,4 +79,7 @@ void startEmulator(Cartridge* cartridge);
 void stopEmulator(VM* vm);
 /* Increments the cycle count and syncs all hardware to act accordingly if necessary */
 void cyclesSync(VM* vm, unsigned int cycles);
+/* Sync timer */
+void syncTimer(VM* vm);
+void incrementTIMA(VM* vm);
 #endif

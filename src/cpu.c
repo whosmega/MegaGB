@@ -1100,17 +1100,69 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
-    }
-#ifdef DEBUG_PRINT_SERIAL_OUTPUT
-    else if (addr == 0xFF02 && byte == 0x81) {
-        /* Print character */
-        printf("%c", vm->MEM[0xFF01]);
-        vm->MEM[addr] = 0x00;
-        return;
-    }
-#endif
-    
+    } else if (addr >= IO_REG && addr <= IO_REG_END) {
+        /* We perform some actions before writing in some 
+         * cases */
+        switch (addr) {
+            case R_TIMA : syncTimer(vm); break;
+            case R_TMA  : syncTimer(vm); break;
+            case R_TAC  : {
+                syncTimer(vm); 
+                
+                /* Writing to TAC sometimes glitches TIMA,
+                 * algorithm from 'https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html' */
+                uint8_t oldTAC = vm->MEM[R_TAC];
+                uint8_t newTAC = byte;
 
+                vm->MEM[R_TAC] = newTAC;
+
+                int clocks_array[] = {1024, 16, 64, 256};
+                uint8_t old_clock = clocks_array[oldTAC & 3];
+                uint8_t new_clock = clocks_array[newTAC & 3];
+
+                uint8_t old_enable = (oldTAC >> 2) & 1;
+                uint8_t new_enable = (newTAC >> 2) & 1;
+                uint16_t sys_clock = vm->clock & 0xFFFF;
+
+                bool glitch = false;
+                if (old_enable != 0) {
+                    if (new_enable == 0) {
+                        glitch = (sys_clock & (old_clock / 2)) != 0;
+                    } else {
+                        glitch = ((sys_clock & (old_clock / 2)) != 0) && 
+                                 ((sys_clock & (new_clock / 2)) == 0);
+                    }
+                }
+                
+                if (glitch) {
+                    incrementTIMA(vm);
+                }
+                return;
+            }
+            case R_DIV  : {
+                /* Write to DIV resets it */
+                syncTimer(vm);
+
+                if (vm->MEM[R_DIV] == 1 && ((vm->MEM[R_TAC] >> 2) & 1)) {
+                    /* If DIV = 1 and timer is enabled, theres a bug in which
+                     * the TIMA increases */
+                    vm->MEM[R_DIV] = 0;
+                    incrementTIMA(vm); 
+                    return;
+                }
+                vm->MEM[R_DIV] = 0;
+                return;
+            }
+            case R_SC:
+#ifdef DEBUG_PRINT_SERIAL_OUTPUT
+                if (byte == 0x81) {
+                    printf("%c", vm->MEM[R_SB]);
+                    vm->MEM[addr] = 0x00;
+                }
+#endif
+                break;
+        }
+    }
     vm->MEM[addr] = byte; 
 }
 
@@ -1118,6 +1170,15 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* Read from external RAM */
         return mbc_readExternalRAM(vm, addr);
+    } else if (addr >= IO_REG && addr <= IO_REG_END) {
+        /* If we have IO registers to read from, we perform some 
+         * actions before the read is done in some cases */
+        switch (addr) {
+            case R_DIV  :
+            case R_TIMA :
+            case R_TMA  :
+            case R_TAC  : syncTimer(vm); break;
+        }
     }
 
     return vm->MEM[addr];
@@ -1155,7 +1216,8 @@ static void dispatchInterrupt(VM* vm, INTERRUPTS interrupt) {
     /* Now we pass control to the interrupt handler 
      *
      * CPU does nothing for 8 cycles (or executes NOPs) */
-    cyclesSync(vm, 8);
+    cyclesSync(vm, 4);
+    cyclesSync(vm, 4);
 
     /* Jump to interrupt vector */
     switch (interrupt) {
@@ -1803,6 +1865,8 @@ void dispatch(VM* vm) {
             case 0xFF: RST(vm, 0x38); break;
     }
 
+    /* We sync the timer after every dispatch just before checking for interrupts */
+    syncTimer(vm);
     /* We handle any interrupts that are requested */
     handleInterrupts(vm);
 }

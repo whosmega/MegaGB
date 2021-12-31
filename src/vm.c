@@ -68,6 +68,18 @@ static void bootROM(VM* vm) {
 
 /* Timer */
 
+void incrementTIMA(VM* vm) {
+    uint8_t old = vm->MEM[R_TIMA];
+    
+    if (old == 0xFF) {
+        /* Overflow */
+        vm->MEM[R_TIMA] = vm->MEM[R_TMA];
+        requestInterrupt(vm, INTERRUPT_TIMER);
+    } else {
+        vm->MEM[R_TIMA]++;
+    }
+}
+
 void syncTimer(VM* vm) {
     /* This function should be called after every instruction dispatch at minimum
      * it fully syncs the timer despite the length of the interval
@@ -86,6 +98,7 @@ void syncTimer(VM* vm) {
     
     unsigned int cyclesElapsedDIV = vm->clock - vm->lastDIVSync;
     vm->lastDIVSync = vm->clock;
+    vm->lastTIMASync = vm->clock;
 
     /* Sync DIV */
     if (cyclesElapsedDIV >= CYCLES_PER_DIV) {
@@ -102,25 +115,12 @@ void syncTimer(VM* vm) {
     uint8_t timerFrequency  =  timerControl & 0b00000011;
 
     if (timerEnabled) {
-        unsigned int freq = 0;
-        switch (timerFrequency) {
-            case 0: freq = 4096; break;
-            case 1: freq = 262144; break;
-            case 2: freq = 65536; break;
-            case 3: freq = 16384; break;
-        }
+        int freqTable[] = {4096, 262144, 65536, 16384};
+        unsigned int freq = freqTable[timerFrequency];
         
         if (cyclesElapsedTIMA >= freq) {
-            uint8_t old = vm->MEM[R_DIV];
             vm->lastTIMASync -= cyclesElapsedTIMA - freq;
-
-            if (old == 0xFF) {
-                /* Overflow */
-                vm->MEM[R_DIV] = vm->MEM[R_TMA];
-                requestInterrupt(vm, INTERRUPT_TIMER);
-            } else {
-                vm->MEM[R_DIV] += 1;
-            }
+            incrementTIMA(vm);
         }
     }
 }
@@ -137,7 +137,7 @@ static void run(VM* vm) {
 }
 
 void cyclesSync(VM* vm, unsigned int cycles) {
-    /* This function is called millions of times
+    /* This function is called millions of times by the CPU
      * in a second and therefore it needs to be optimised 
      *
      * So we dont update all hardware but only the ones that need to
@@ -145,7 +145,7 @@ void cyclesSync(VM* vm, unsigned int cycles) {
     vm->clock += cycles;
 
     /* We pass cycles that were incremented */
-    syncDisplay(vm, cycles);
+    syncDisplay(vm, cycles); 
 }
 
 void startEmulator(Cartridge* cartridge) {
