@@ -66,6 +66,8 @@
 #define TEST_H_FLAG_ADD(vm, x, y) set_flag(vm, FLAG_H, \
                                     (((uint32_t)x & 0xf) + ((uint32_t)y & 0xf) > 0xf) ? 1 : 0)
 
+
+
 /* half carry counts when theres carry from bit 11-12 for most 16 bit instructions */
 
 #define TEST_H_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_H, \
@@ -73,7 +75,6 @@
 
 #define TEST_H_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_H, \
                                     (((x & 0xf) - (y & 0xf) & 0x10) ? 1 : 0))
-
 /* Test for integer overloads and set carry flags */
 #define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, ((uint32_t)(x) + (uint32_t)(y)) > 0xFFFF ? 1 : 0)
 #define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, ((uint16_t)(x) + (uint16_t)(y)) > 0xFF ? 1 : 0)

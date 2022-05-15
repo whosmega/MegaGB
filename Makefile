@@ -3,6 +3,7 @@ CFLAGS = -O2 `sdl2-config --cflags`
 LFLAGS = -O2 `sdl2-config --libs`
 EXE = megagbc
 
+
 BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
 
 $(EXE): $(BIN)
