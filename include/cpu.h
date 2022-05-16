@@ -29,7 +29,7 @@ typedef enum {
     INTERRUPT_JOYPAD,
 
     INTERRUPT_COUNT
-} INTERRUPTS;
+} INTERRUPT;
 
 /* Defining macros for 16 bit registers, only for readability purposes */
 #define R16_AF R8_A
@@ -45,5 +45,5 @@ void resetGBC(struct VM* vm);
 void dispatch(struct VM* vm);
 
 /* Function to request an interrupt when necessary */
-void requestInterrupt(struct VM* vm, INTERRUPTS interrupt);
+void requestInterrupt(struct VM* vm, INTERRUPT interrupt);
 #endif

@@ -1200,14 +1200,14 @@ static uint8_t readAddr_1C(VM* vm, uint16_t addr) {
 
 /* Interrupt handling and helper functions */
 
-void requestInterrupt(VM* vm, INTERRUPTS interrupt) {
+void requestInterrupt(VM* vm, INTERRUPT interrupt) {
     /* This is called by external hardware to request interrupts
      *
      * We set the corresponding bit */
     vm->MEM[R_IF] |= 1 << interrupt;
 }
 
-static void dispatchInterrupt(VM* vm, INTERRUPTS interrupt) {
+static void dispatchInterrupt(VM* vm, INTERRUPT interrupt) {
     /* Disable all interrupts */
     INTERRUPT_MASTER_DISABLE(vm);
     
@@ -1233,41 +1233,86 @@ static void dispatchInterrupt(VM* vm, INTERRUPTS interrupt) {
 
 }
 
+static INTERRUPT getInterrupt(VM* vm) {
+
+	return -1;
+}
+
 static void handleInterrupts(VM* vm) {
     /* Main interrupt handler for the CPU */
     
-    /* If interrupts arent enabled, we dont do anything */
-    if (!vm->IME) return;
-    
+	/* Checks for an interrupt that can be handled and returns 
+	 * it if found, otherwise returns -1 */
+
     /* We read interrupt flags, which tell us which interrupts are requested
      * if any */
     uint8_t requestedInterrupts = vm->MEM[R_IF];
     uint8_t enabledInterrups = vm->MEM[R_IE];
 
-    if (requestedInterrupts != 0) {
-        /* An interrupt has been requested
-         *
-         * Note : Upper 3 bits should always be 0, this is handled when normally
-         * writing to interrupt flag register and in normal hardware requests this is
-         * never encountered 
-         *
-         * We loop to find the interrupt requested with the highest priority thats enabled */
+	if (vm->IME) {
+		if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
+			/* Exit halt mode */
+			vm->haltMode = false;
+			/* Atleast 1 interrupt has been requested and is enabled too
+			*
+			* Note : Upper 3 bits should always be 0, this is handled when normally
+			* writing to interrupt flag register and in normal hardware requests this is
+			* never encountered 
+			*
+			* We loop to find the interrupt requested with the highest priority thats enabled */
+	
+		    for (int i = 0; i < INTERRUPT_COUNT; i++) {
+			    /* 'i' corresponds to the individual interrupts ranging from bit 0 to 4 */
 
-        for (int i = 0; i < INTERRUPT_COUNT; i++) {
-            /* 'i' corresponds to the individual interrupts ranging from bit 0 to 4 */
+				uint8_t requestBit = (requestedInterrupts >> i) & 0x1;
+				uint8_t enabledBit = (enabledInterrups >> i) & 0x1;
 
-            uint8_t requestBit = (requestedInterrupts >> i) & 0x1;
-            uint8_t enabledBit = (enabledInterrups >> i) & 0x1;
+				if (requestBit && enabledBit) {
+					/* 'i' is currently the interrupt at the highest priority thats enabled */
+					dispatchInterrupt(vm, i);
+					return;
+				}
+			}
+		}
+	} else {
+		/* Even though the interrupt cannot be handled because IME is false,
+		 * we still need to exit halt mode */
+		if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
+			vm->haltMode = false;
+		}
+	}
+}
 
-            if (requestBit && enabledBit) {
-                /* 'i' is currently the interrupt at the highest priority thats enabled */
-                dispatchInterrupt(vm, i);
-                return;
-            }
-        }
+static void halt(VM* vm) {
+	/* HALT Instruction procedure */
+	uint8_t IE = vm->MEM[R_IE];
+	uint8_t IF = vm->MEM[R_IF];
 
-        /* If we reach here, the interrupts requested arent enabled so we do nothing */
-    }
+	if (vm->IME) {
+		if ((IE & IF & 0x1F) == 0) {
+			/* IME Enabled, No enabled interrupts requested */
+			vm->haltMode = true;	
+			return;
+		}	
+
+		/* If an enabled interrupt is already requested 
+		 * we normally exit */
+		return;
+	} else {
+
+		if ((IE & IF & 0x1F) == 0) {
+			/* IME Disabled, No enabled interrupts requested 
+			 *
+			 * We wait till an interrupt is requested, then we dont jump to the 
+			 * interrupt vector and just continue executing instructions */
+			vm->haltMode = true;
+		} else {
+			/* IME Disabled, 1 or more enabled interrupts requested
+			 *
+			 * Halt Bug Occurs */
+			vm->scheduleHaltBug = true;
+		}
+	}
 }
 
 /* Main CPU instruction dispatchers */
@@ -1553,13 +1598,36 @@ void dispatch(VM* vm) {
 #ifdef DEBUG_REALTIME_PRINTING
         printInstruction(vm);
 #endif
+		uint8_t byte = 0; /* Will get set later */
+
         /* Enable interrupts if it was scheduled */
         if (vm->scheduleInterruptEnable) {
             vm->scheduleInterruptEnable = false;
             vm->IME = true;
         }
 
-        uint8_t byte = readByte_1C(vm);
+		if (vm->haltMode) {
+			/* Skip dispatch and directly check for pending interrupts */
+
+			/* The CPU is in sleep mode while halt mode is true,
+			 * but the device clock will not be affected and continue 
+			 * ticking 
+			 *
+			 * Other syncs will also continue taking place */
+			cyclesSync(vm);
+			goto skipLabel;
+		} else if (vm->scheduleHaltBug) {
+			/* Revert the PC increment */
+
+			byte = readByte(vm);
+			vm->PC--;
+			cyclesSync(vm);
+		} else {
+			/* Normal Read */
+			byte = readByte_1C(vm);	
+		}
+	
+		/* Do the dispatch */
         switch (byte) {
             // nop
             case 0x00: break;
@@ -1728,9 +1796,8 @@ void dispatch(VM* vm) {
             case 0x72: LOAD_ARR_R(vm, R16_HL, R8_D); break;
             case 0x73: LOAD_ARR_R(vm, R16_HL, R8_E); break;
             case 0x74: LOAD_ARR_R(vm, R16_HL, R8_H); break;
-            case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break;
-            /* TODO: HALT */ 
-            case 0x76: break;
+            case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break; 
+            case 0x76: halt(vm); break;
             case 0x77: LOAD_ARR_R(vm, R16_HL, R8_A); break;
             case 0x78: LOAD_R_R(vm, R8_A, R8_B); break;
             case 0x79: LOAD_R_R(vm, R8_A, R8_C); break;
@@ -1866,6 +1933,7 @@ void dispatch(VM* vm) {
             case 0xFF: RST(vm, 0x38); break;
     }
 
+skipLabel:
     /* We sync the timer after every dispatch just before checking for interrupts */
     syncTimer(vm);
     /* We handle any interrupts that are requested */

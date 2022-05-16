@@ -68,6 +68,9 @@ struct VM {
     uint16_t PC;                        /* Program Counter */
     bool scheduleInterruptEnable;       /* If set to true, it enables interrupts at the
                                            dispatch of the next instruction */
+	bool haltMode;						/* If set to true, the CPU enters the halt 
+										   procedure */
+	bool scheduleHaltBug;				/* If set to true,the CPU recreates the halt bug */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
     void* memController;                 /* Memory Bank Controller */

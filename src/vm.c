@@ -14,7 +14,10 @@ static void initVM(VM* vm) {
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
     vm->run = false;
+
     vm->scheduleInterruptEnable = false;
+	vm->haltMode = false;
+	vm->scheduleHaltBug = false;
 
     vm->cyclesSinceLastFrame = 0;
     vm->clock = 0;
@@ -87,7 +90,7 @@ void syncTimer(VM* vm) {
      *
      * This is mainly an optimisation because display needs to always be updated
      * and is therefore called after every cycle but it isnt the case for timer
-     * It only needs to be updated to request interrupts or provide 
+     * It only needs to be updated tzo request interrupts or provide 
      * correct values when registers are queried / modified 
      *
      * Sometimes the timers should have had been incremented a few cycles 
@@ -95,17 +98,20 @@ void syncTimer(VM* vm) {
      * lastSync value to match the older cycle and maintain the frequency
      *
      * Because we have 2 timers with different frequencies, 
-     * we need 2 different variables to keep the values */
+     * we need 2 different variables to keep the values 
+	 *
+	 * lastDIVSync and lastTIMASync store the state of the clock when
+	 * the last successful sync happened
+	 * */
     
     unsigned int cyclesElapsedDIV = vm->clock - vm->lastDIVSync;
-    vm->lastDIVSync = vm->clock;
-    vm->lastTIMASync = vm->clock;
+    
 
     /* Sync DIV */
     if (cyclesElapsedDIV >= M_CYCLES_PER_DIV) {
         /* 'Rewind' the last timer sync in case the timer should have been 
          * incremented on an earlier cycle */
-        vm->lastDIVSync -= cyclesElapsedDIV - M_CYCLES_PER_DIV;
+        vm->lastDIVSync = vm->clock - (cyclesElapsedDIV - M_CYCLES_PER_DIV);
         vm->MEM[R_DIV]++;
     }
 
@@ -125,7 +131,7 @@ void syncTimer(VM* vm) {
         unsigned int freq = freqTable[timerFrequency];
         
         if (cyclesElapsedTIMA >= freq) {
-            vm->lastTIMASync -= cyclesElapsedTIMA - freq;
+            vm->lastTIMASync = vm->clock + (cyclesElapsedTIMA - freq);
             incrementTIMA(vm);
         }
     }

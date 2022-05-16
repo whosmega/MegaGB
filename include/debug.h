@@ -12,7 +12,7 @@
 #define DEBUG_PRINT_SERIAL_OUTPUT
 
 /* Stops running when encounters opcode 0x40, LD B, B */
-#define DEBUG_LDBB_BREAKPOINT
+// #define DEBUG_LDBB_BREAKPOINT
 
 void printInstruction(VM* vm);
 void printRegisters(VM* vm);
