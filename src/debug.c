@@ -327,7 +327,8 @@ void printInstruction(VM* vm) {
     printFlags(vm);
 
 #ifdef DEBUG_PRINT_CYCLES
-    printf("[%ld]", vm->clock);
+	/* We print t-cycles */
+    printf("[%ld]", vm->clock * 4);
 #endif
     printf(" %10s", "");
   

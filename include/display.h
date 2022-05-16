@@ -3,17 +3,20 @@
 #include "../include/vm.h"
 #include <SDL2/SDL.h>
 
+#define DISPLAY_SCALING 3
+
 #define MIN_RES_HEIGHT_PX 144 
 #define MIN_RES_WIDTH_PX 160
-#define HEIGHT_PX MIN_RES_HEIGHT_PX * 5
-#define WIDTH_PX  MIN_RES_WIDTH_PX * 5
+#define HEIGHT_PX MIN_RES_HEIGHT_PX * DISPLAY_SCALING
+#define WIDTH_PX  MIN_RES_WIDTH_PX * DISPLAY_SCALING
 
-#define CYCLES_PER_FRAME 70224
+#define T_CYCLES_PER_FRAME 70224
+#define M_CYCLES_PER_FRAME 17556	// 70224/4
 
 int initSDL(VM* vm);
 void freeSDL(VM* vm);
 void handleSDLEvents(VM* vm);
 
-void syncDisplay(VM* vm, unsigned int cycleUpdate);
+void syncDisplay(VM* vm);
 
 #endif

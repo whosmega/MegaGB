@@ -20,6 +20,7 @@ static void initVM(VM* vm) {
     vm->clock = 0;
     vm->lastTIMASync = 0;
     vm->lastDIVSync = 0;
+	vm->emulatorStartTime = 0;
 
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
@@ -101,11 +102,11 @@ void syncTimer(VM* vm) {
     vm->lastTIMASync = vm->clock;
 
     /* Sync DIV */
-    if (cyclesElapsedDIV >= CYCLES_PER_DIV) {
+    if (cyclesElapsedDIV >= M_CYCLES_PER_DIV) {
         /* 'Rewind' the last timer sync in case the timer should have been 
          * incremented on an earlier cycle */
-        vm->lastDIVSync -= cyclesElapsedDIV - CYCLES_PER_DIV;
-        vm->MEM[R_DIV] += 1;
+        vm->lastDIVSync -= cyclesElapsedDIV - M_CYCLES_PER_DIV;
+        vm->MEM[R_DIV]++;
     }
 
     /* Sync TIMA */
@@ -115,7 +116,12 @@ void syncTimer(VM* vm) {
     uint8_t timerFrequency  =  timerControl & 0b00000011;
 
     if (timerEnabled) {
-        int freqTable[] = {4096, 262144, 65536, 16384};
+        int freqTable[] = {
+			1024,	// 4096		t-cycles 
+			65536,  // 262144	t-cycles
+			16384,  // 85536	t-cycles
+			4096    // 16384	t-cycles
+		};
         unsigned int freq = freqTable[timerFrequency];
         
         if (cyclesElapsedTIMA >= freq) {
@@ -128,24 +134,34 @@ void syncTimer(VM* vm) {
 /* ------------------ */ 
 
 static void run(VM* vm) {
+	/* We do input polling every 1000 cpu ticks */
+	vm->emulatorStartTime = clock();
+
     while (vm->run) {
-        /* Handle Events */
+		/* Handle Events */
         handleSDLEvents(vm);
-        /* Run the next CPU instruction */
-        dispatch(vm);
+
+		for (int i = 0; (i < 1000) && vm->run; i++) {
+			/* Run the next CPU instruction */
+			dispatch(vm);
+		}
     }
 }
 
-void cyclesSync(VM* vm, unsigned int cycles) {
+void cyclesSync(VM* vm) {
     /* This function is called millions of times by the CPU
      * in a second and therefore it needs to be optimised 
      *
      * So we dont update all hardware but only the ones that need to
-     * always be upto date like the display */
-    vm->clock += cycles;
+     * always be upto date like the display 
+	 *
+	 * Each call only increments 1 m-cycle by default thus
+	 * another function should be made to increment more than 1 cycles to fully 
+	 * optimise this. That is rarely done however so thats gonna be on last priority
+	 * */
+    vm->clock++;
 
-    /* We pass cycles that were incremented */
-    syncDisplay(vm, cycles); 
+    syncDisplay(vm); 
 }
 
 void startEmulator(Cartridge* cartridge) {
@@ -178,18 +194,19 @@ void startEmulator(Cartridge* cartridge) {
 #endif
     mbc_allocate(&vm);
  
+	vm.emulatorStartTime = clock();
     /* We are now ready to run */
     vm.run = true;
-    
+	 
     run(&vm);
     stopEmulator(&vm);
 }
 
 void stopEmulator(VM* vm) {
 #ifdef DEBUG_LOGGING
-    double total = (double)(clock() - vm->startTime) / CLOCKS_PER_SEC;
-
-    printf("Frames Drawn : %d, Time Elapsed : %g, FPS : %g\n", vm->framesDrawn, (double)total, (double)vm->framesDrawn / total);
+    double totalElapsed = (double)(clock() - vm->emulatorStartTime) / CLOCKS_PER_SEC;
+	
+    printf("Time Elapsed : %g\n", totalElapsed);
     printf("Stopping Emulator Now\n");
     printf("Cleaning allocations\n");
 #endif

@@ -9,7 +9,8 @@
 #include "../include/cpu.h"
 
 /* Cycles till the DIV timer is increment */
-#define CYCLES_PER_DIV      16384
+#define T_CYCLES_PER_DIV      16384
+#define M_CYCLES_PER_DIV	  4096			// 16384/4
 
 typedef enum {
     ROM_N0_16KB = 0x0000,                       /* 16KB ROM Bank number 0 (from cartridge) */
@@ -56,10 +57,12 @@ struct VM {
     bool run;                               /* A flag that when set to false, quits the emulator */
     bool IME;                               /* Interrupt Master Enable Flag */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */ 
-    unsigned long lastDIVSync;               /* Holds the clock's state when DIV timer was last synced
+    unsigned long lastDIVSync;              /* Holds the clock's state when DIV timer was last synced
                                              * this helps in getting the cycles elapsed */
-    unsigned long lastTIMASync;              /* Same but for the TIMA timer */
-    unsigned long clock;                    /* Main clock of the whole emulator */
+    unsigned long lastTIMASync;             /* Same but for the TIMA timer */
+	clock_t emulatorStartTime;				/* Start time of the emu stored for logging */
+    unsigned long clock;                    /* Main clock of the whole emulator 
+											   Counts in M-Cycles */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
@@ -77,8 +80,8 @@ typedef struct VM VM;
 void startEmulator(Cartridge* cartridge);
 /* will perform a memory cleanup by freeing the VM state and then safely exiting */
 void stopEmulator(VM* vm);
-/* Increments the cycle count and syncs all hardware to act accordingly if necessary */
-void cyclesSync(VM* vm, unsigned int cycles);
+/* Increments the cycle count by 1 M-Cycle and syncs all hardware to act accordingly if necessary */
+void cyclesSync(VM* vm);
 /* Sync timer */
 void syncTimer(VM* vm);
 void incrementTIMA(VM* vm);

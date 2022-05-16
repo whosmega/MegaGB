@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -O2 `sdl2-config --cflags`
-LFLAGS = -O2 `sdl2-config --libs`
+CFLAGS = -O3 `sdl2-config --cflags`
+LFLAGS = -O3 `sdl2-config --libs`
 EXE = megagbc
 
 

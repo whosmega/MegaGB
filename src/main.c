@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
 
     /* Allocate enough space for the bytes */
     uint8_t* allocation = (uint8_t*)malloc(size);
-    size = fread(allocation, size, 1, file);
+    fread(allocation, size, 1, file);
 	
     fclose(file);
     
