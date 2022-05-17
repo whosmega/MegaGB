@@ -52,6 +52,9 @@ struct VM {
     /* ---------------- SDL ----------------- */
     SDL_Window* sdl_window;             /* The window */
     SDL_Renderer* sdl_renderer;             /* Renderer */
+	unsigned long ticksAtStartup;			/* Stores the ticks at emulator startup (rom boot) */
+	unsigned long ticksAtLastRender;		/* Used to calculate how much time has passed 
+											   since last sdl frame render */
     /* -------------------------------------- */
     Cartridge* cartridge;
     bool run;                               /* A flag that when set to false, quits the emulator */
@@ -60,7 +63,6 @@ struct VM {
     unsigned long lastDIVSync;              /* Holds the clock's state when DIV timer was last synced
                                              * this helps in getting the cycles elapsed */
     unsigned long lastTIMASync;             /* Same but for the TIMA timer */
-	clock_t emulatorStartTime;				/* Start time of the emu stored for logging */
     unsigned long clock;                    /* Main clock of the whole emulator 
 											   Counts in M-Cycles */
     /* ---------------- CPU ---------------- */
@@ -88,4 +90,6 @@ void cyclesSync(VM* vm);
 /* Sync timer */
 void syncTimer(VM* vm);
 void incrementTIMA(VM* vm);
+/* Utility */
+unsigned long clock_u();
 #endif

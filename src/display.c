@@ -1,12 +1,13 @@
 #include "../include/vm.h"
 #include "../include/display.h"
 #include "../include/debug.h"
-#include "../include/vm.h"
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <stdbool.h>
 
 #include <SDL2/SDL.h>
+
 
 int initSDL(VM* vm) {
     SDL_Init(SDL_INIT_EVERYTHING);
@@ -38,7 +39,6 @@ void freeSDL(VM* vm) {
     SDL_Quit();
 }
 
-
 void syncDisplay(VM* vm) {
     /* We sync the display by checking if we have to draw a frame 
      *
@@ -51,5 +51,20 @@ void syncDisplay(VM* vm) {
         vm->cyclesSinceLastFrame -= M_CYCLES_PER_FRAME;
 
         /* Draw frame */
+
+
+		/* The emulator keeps its speed accurate by locking to the framerate
+		 * Whatever has to be done (cpu execution, audio, rendering a frame) in 
+		 * the interval equivalent to 1 frame render on the gameboy is done in 1 frame
+		 * render on the emulator, the remaining time is waited for on the emulator to
+		 * sync with the time on the gameboy */
+		unsigned long ticksElapsed = (clock_u() - vm->ticksAtStartup) - vm->ticksAtLastRender;
+		
+		/* Ticks elapsed is the amount of time elapsed since last frame render (in microsec),
+		 * which is lesser than the amount of time it would have taken on the real gameboy
+		 * because the emulator goes very fast */
+
+		usleep((1e6/DEFAULT_FRAMERATE) - ticksElapsed);
+		vm->ticksAtLastRender = clock_u() - vm->ticksAtStartup;
     }
 }

@@ -12,6 +12,7 @@
 
 #define T_CYCLES_PER_FRAME 70224
 #define M_CYCLES_PER_FRAME 17556	// 70224/4
+#define DEFAULT_FRAMERATE 59.7275
 
 int initSDL(VM* vm);
 void freeSDL(VM* vm);

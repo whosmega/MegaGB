@@ -5,9 +5,12 @@
 #include "../include/display.h"
 #include "../include/mbc.h"
 
+#include <SDL2/SDL_timer.h>
+#include <bits/time.h>
 #include <time.h>
 #include <string.h>
-
+#include <SDL2/SDL.h>
+#include <sys/time.h>
 
 static void initVM(VM* vm) {
     vm->cartridge = NULL;
@@ -23,11 +26,12 @@ static void initVM(VM* vm) {
     vm->clock = 0;
     vm->lastTIMASync = 0;
     vm->lastDIVSync = 0;
-	vm->emulatorStartTime = 0;
 
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
-
+	vm->ticksAtLastRender = 0;
+	vm->ticksAtStartup = 0;
+	
     /* Set registers & flags to GBC specifics */
     resetGBC(vm);
 }
@@ -68,6 +72,15 @@ static void bootROM(VM* vm) {
     /* Map the cartridge rom to the GBC rom space 
      * occupying bank 0 and 1, a total of 32 KB*/
     memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
+}
+
+/* Utility */
+unsigned long clock_u() {
+	/* Function to get time with microsecod precision */
+	struct timeval t;
+	gettimeofday(&t, NULL);
+
+	return (t.tv_sec * 1e6 + t.tv_usec);
 }
 
 /* Timer */
@@ -141,7 +154,7 @@ void syncTimer(VM* vm) {
 
 static void run(VM* vm) {
 	/* We do input polling every 1000 cpu ticks */
-	vm->emulatorStartTime = clock();
+	vm->ticksAtStartup = clock_u();
 
     while (vm->run) {
 		/* Handle Events */
@@ -200,7 +213,6 @@ void startEmulator(Cartridge* cartridge) {
 #endif
     mbc_allocate(&vm);
  
-	vm.emulatorStartTime = clock();
     /* We are now ready to run */
     vm.run = true;
 	 
@@ -210,8 +222,9 @@ void startEmulator(Cartridge* cartridge) {
 
 void stopEmulator(VM* vm) {
 #ifdef DEBUG_LOGGING
-    double totalElapsed = (double)(clock() - vm->emulatorStartTime) / CLOCKS_PER_SEC;
-	
+    double totalElapsed = (clock_u() - vm->ticksAtStartup) / 1e6;
+	// TODO - Fix time elapsed timer (showing count divided by 10)
+	//		- Fix accuracy of ticksElapsed in display.c (shows only upto 1ms)
     printf("Time Elapsed : %g\n", totalElapsed);
     printf("Stopping Emulator Now\n");
     printf("Cleaning allocations\n");
