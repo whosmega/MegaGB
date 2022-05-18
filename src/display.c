@@ -2,42 +2,13 @@
 #include "../include/display.h"
 #include "../include/debug.h"
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <stdbool.h>
 
 #include <SDL2/SDL.h>
-
-
-int initSDL(VM* vm) {
-    SDL_Init(SDL_INIT_EVERYTHING);
-    SDL_CreateWindowAndRenderer(WIDTH_PX, HEIGHT_PX, SDL_WINDOW_SHOWN,
-                                &vm->sdl_window, &vm->sdl_renderer);
-
-    if (!vm->sdl_window) return 1;          /* Failed to create screen */
-
-    SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
-    return 0;
-}
-
-void handleSDLEvents(VM *vm) {
-    /* We listen for events like keystrokes and window closing */
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-        switch (event.type) {
-            case SDL_QUIT: {
-                vm->run = false;
-                break;
-            }
-        }
-    }
-}
-
-void freeSDL(VM* vm) {
-    SDL_DestroyRenderer(vm->sdl_renderer);
-    SDL_DestroyWindow(vm->sdl_window);
-    SDL_Quit();
-}
 
 void syncDisplay(VM* vm) {
     /* We sync the display by checking if we have to draw a frame 
@@ -49,7 +20,6 @@ void syncDisplay(VM* vm) {
     if (vm->cyclesSinceLastFrame >= M_CYCLES_PER_FRAME) {
         /* We preserve any extra cycles just in case */
         vm->cyclesSinceLastFrame -= M_CYCLES_PER_FRAME;
-
         /* Draw frame */
 
 
@@ -62,9 +32,18 @@ void syncDisplay(VM* vm) {
 		
 		/* Ticks elapsed is the amount of time elapsed since last frame render (in microsec),
 		 * which is lesser than the amount of time it would have taken on the real gameboy
-		 * because the emulator goes very fast */
+		 * because the emulator goes very fast 
+		 *
+		 * In special cases where the emulator needs to be able to go slower than the 
+		 * gba itself (for debugging), we add a special check */
 
-		usleep((1e6/DEFAULT_FRAMERATE) - ticksElapsed);
+#ifdef DEBUG_SUPPORT_SLOW_EMULATION
+		if (ticksElapsed < (1e6/DEFAULT_FRAMERATE)) {
+#endif
+			usleep((1e6/DEFAULT_FRAMERATE) - ticksElapsed);
+#ifdef DEBUG_SUPPORT_SLOW_EMULATION
+		}
+#endif
 		vm->ticksAtLastRender = clock_u() - vm->ticksAtStartup;
     }
 }

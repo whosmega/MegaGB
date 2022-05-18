@@ -5,6 +5,7 @@
 #include "../include/display.h"
 #include "../include/mbc.h"
 
+#include <SDL2/SDL_events.h>
 #include <SDL2/SDL_timer.h>
 #include <bits/time.h>
 #include <time.h>
@@ -31,7 +32,12 @@ static void initVM(VM* vm) {
     vm->sdl_renderer = NULL;
 	vm->ticksAtLastRender = 0;
 	vm->ticksAtStartup = 0;
+
+	/* bit 3-0 in joypad register is set to 1 on boot (0xCF) */
 	
+	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
+	vm->joypadActionBuffer = 0xF;
+	vm->joypadDirectionBuffer = 0xF;
     /* Set registers & flags to GBC specifics */
     resetGBC(vm);
 }
@@ -113,39 +119,57 @@ void syncTimer(VM* vm) {
      * Because we have 2 timers with different frequencies, 
      * we need 2 different variables to keep the values 
 	 *
-	 * lastDIVSync and lastTIMASync store the state of the clock when
+	 * lastDIVSync and lastTIMASync store the cycle at which
 	 * the last successful sync happened
 	 * */
-    
-    unsigned int cyclesElapsedDIV = vm->clock - vm->lastDIVSync;
+	
+	unsigned int cycles = vm->clock * 4;
+    unsigned int cyclesElapsedDIV = cycles - vm->lastDIVSync;
     
 
     /* Sync DIV */
-    if (cyclesElapsedDIV >= M_CYCLES_PER_DIV) {
+    if (cyclesElapsedDIV >= T_CYCLES_PER_DIV) {
         /* 'Rewind' the last timer sync in case the timer should have been 
          * incremented on an earlier cycle */
-        vm->lastDIVSync = vm->clock - (cyclesElapsedDIV - M_CYCLES_PER_DIV);
+        vm->lastDIVSync = cycles - (cyclesElapsedDIV - T_CYCLES_PER_DIV);
         vm->MEM[R_DIV]++;
     }
 
     /* Sync TIMA */
-    unsigned int cyclesElapsedTIMA = vm->clock - vm->lastTIMASync;
+    unsigned int cyclesElapsedTIMA = cycles - vm->lastTIMASync;
     uint8_t timerControl    =  vm->MEM[R_TAC];
     uint8_t timerEnabled    =  (timerControl >> 2) & 1;
     uint8_t timerFrequency  =  timerControl & 0b00000011;
 
     if (timerEnabled) {
-        int freqTable[] = {
-			1024,	// 4096		t-cycles 
-			65536,  // 262144	t-cycles
-			16384,  // 85536	t-cycles
-			4096    // 16384	t-cycles
+		/* Cycle table contains number of cycles per increment for its corresponding freq */
+        int cycleTable[] = {
+			1024,		// 4096 Hz
+			16,			// 262144 Hz
+			64,			// 65536 Hz
+			256			// 16384 Hz
 		};
-        unsigned int freq = freqTable[timerFrequency];
-        
-        if (cyclesElapsedTIMA >= freq) {
-            vm->lastTIMASync = vm->clock + (cyclesElapsedTIMA - freq);
-            incrementTIMA(vm);
+        unsigned int cyc = cycleTable[timerFrequency];
+		
+        if (cyclesElapsedTIMA >= cyc) {
+			/* The least amount of cycles per increment for the timer 
+			 * is 16 cycles, which means it has to be often incremented more than
+			 * once per instruction 
+			 *
+			 * This is a good reason to sync it every cycle update but 
+			 * it still isnt as significant because the only times it really matters is
+			 * when the instructions read its value, we always sync the timer just before
+			 * the read so it gets covered. Interrupt timing also isnt a problem because 
+			 * interrupts are only checked once per instruction dispatch, and the timer
+			 * is synced right before that happens */
+			int rem = cyclesElapsedTIMA % cyc;
+			int increments = (int)(cyclesElapsedTIMA / cyc);
+
+            vm->lastTIMASync = cycles - rem;
+
+			for (int i = 0; i < increments; i++) {
+				incrementTIMA(vm);
+			}
         }
     }
 }
@@ -179,9 +203,153 @@ void cyclesSync(VM* vm) {
 	 * optimise this. That is rarely done however so thats gonna be on last priority
 	 * */
     vm->clock++;
-
+	
     syncDisplay(vm); 
 }
+
+/* SDL */
+
+int initSDL(VM* vm) {
+    SDL_Init(SDL_INIT_EVERYTHING);
+    SDL_CreateWindowAndRenderer(WIDTH_PX, HEIGHT_PX, SDL_WINDOW_SHOWN,
+                                &vm->sdl_window, &vm->sdl_renderer);
+
+    if (!vm->sdl_window) return 1;          /* Failed to create screen */
+
+    SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
+    return 0;
+}
+
+void handleSDLEvents(VM *vm) {
+    /* We listen for events like keystrokes and window closing */
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+			/* We reset the corresponding bit for every scancode 
+			 * in the buffer for keydown and set for keyup */
+			switch (event.key.keysym.scancode) {
+				case SDL_SCANCODE_W:
+					/* Joypad Up */
+					vm->joypadDirectionBuffer &= ~(1 << 2);
+					break;
+				case SDL_SCANCODE_A:
+					/* Joypad Left */
+					vm->joypadDirectionBuffer &= ~(1 << 1);
+					break;
+				case SDL_SCANCODE_S:
+					/* Joypad Down */
+					vm->joypadDirectionBuffer &= ~(1 << 3);
+					break;
+				case SDL_SCANCODE_D:
+					/* Joypad Right */
+					vm->joypadDirectionBuffer &= ~(1 << 0);
+					break;
+				case SDL_SCANCODE_Z:
+					/* B */
+					vm->joypadActionBuffer &= ~(1 << 1);
+					break;
+				case SDL_SCANCODE_X:
+					/* A */
+					vm->joypadActionBuffer &= ~(1 << 0);
+					break;
+				case SDL_SCANCODE_I:
+					/* Start */
+					vm->joypadActionBuffer &= ~(1 << 3);
+					break;
+				case SDL_SCANCODE_O:
+					/* Select */
+					vm->joypadActionBuffer &= ~(1 << 2);
+					break;
+				default: return;
+			}
+
+			updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
+
+			if (vm->joypadSelectedMode != JOYPAD_SELECT_NONE) {
+				/* Request joypad interrupt if atleast 1 of the modes are selected */
+				requestInterrupt(vm, INTERRUPT_JOYPAD);
+			}
+		} else if (event.type == SDL_KEYUP && event.key.repeat == 0) {
+			switch (event.key.keysym.scancode) {
+				case SDL_SCANCODE_W:
+					/* Joypad Up */
+					vm->joypadDirectionBuffer |= 1 << 2;
+					break;
+				case SDL_SCANCODE_A:
+					/* Joypad Left */
+					vm->joypadDirectionBuffer |= 1 << 1;
+					break;
+				case SDL_SCANCODE_S:
+					/* Joypad Down */
+					vm->joypadDirectionBuffer |= 1 << 3;
+					break;
+				case SDL_SCANCODE_D:
+					/* Joypad Right */
+					vm->joypadDirectionBuffer |= 1 << 0;
+					break;
+				case SDL_SCANCODE_Z:
+					/* B */
+					vm->joypadActionBuffer |= 1 << 1;
+					break;
+				case SDL_SCANCODE_X:
+					/* A */
+					vm->joypadActionBuffer |= 1 << 0;
+					break;
+				case SDL_SCANCODE_I:
+					/* Start */
+					vm->joypadActionBuffer |= 1 << 3;
+					break;
+				case SDL_SCANCODE_O:
+					/* Select */
+					vm->joypadActionBuffer |= 1 << 2;
+					break;
+				default: return;			 
+			}
+			updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
+
+		} else if (event.type == SDL_QUIT) {
+            vm->run = false;
+        }
+    }
+}
+
+void freeSDL(VM* vm) {
+    SDL_DestroyRenderer(vm->sdl_renderer);
+    SDL_DestroyWindow(vm->sdl_window);
+    SDL_Quit();
+}
+/* ---------------------------------------- */
+
+/* Joypad */
+
+void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode) {
+	switch (mode) {
+		case JOYPAD_SELECT_DIRECTION_ACTION:
+			/* The program has selected action and direction both,
+			 * so my best guess is to just bitwise OR them and set the value */
+			vm->MEM[R_P1_JOYP] &= 0xF0;
+			vm->MEM[R_P1_JOYP] |= ~(~vm->joypadDirectionBuffer | ~vm->joypadActionBuffer) & 0xF;
+			break;
+		case JOYPAD_SELECT_ACTION:
+			/* Select Action */
+			vm->MEM[R_P1_JOYP] &= 0xF0;
+			vm->MEM[R_P1_JOYP] |= vm->joypadActionBuffer & 0xF;
+
+			break;
+		case JOYPAD_SELECT_DIRECTION:
+			/* Select Direction */
+			vm->MEM[R_P1_JOYP] &= 0xF0;
+			vm->MEM[R_P1_JOYP] |= vm->joypadDirectionBuffer & 0xF;
+
+			break;
+		case JOYPAD_SELECT_NONE:
+			/* Select None */
+			vm->MEM[R_P1_JOYP] &= 0xF0;
+			break;
+	}
+}
+
+/* ---------------------------------------- */ 
 
 void startEmulator(Cartridge* cartridge) {
     VM vm;
@@ -223,8 +391,6 @@ void startEmulator(Cartridge* cartridge) {
 void stopEmulator(VM* vm) {
 #ifdef DEBUG_LOGGING
     double totalElapsed = (clock_u() - vm->ticksAtStartup) / 1e6;
-	// TODO - Fix time elapsed timer (showing count divided by 10)
-	//		- Fix accuracy of ticksElapsed in display.c (shows only upto 1ms)
     printf("Time Elapsed : %g\n", totalElapsed);
     printf("Stopping Emulator Now\n");
     printf("Cleaning allocations\n");

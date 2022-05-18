@@ -14,10 +14,6 @@
 #define M_CYCLES_PER_FRAME 17556	// 70224/4
 #define DEFAULT_FRAMERATE 59.7275
 
-int initSDL(VM* vm);
-void freeSDL(VM* vm);
-void handleSDLEvents(VM* vm);
-
 void syncDisplay(VM* vm);
 
 #endif

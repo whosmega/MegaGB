@@ -168,7 +168,7 @@ void resetGBC(VM* vm) {
     /* Set hardware registers and initialise empty areas */
     
     uint8_t hreg_defaults[80] = {
-        0xC7, 0x00, 0x7F, 0xFF, 0xFF, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
+        0xCF, 0x00, 0x7F, 0xFF, 0xAC, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xE1,                 // 0xFF08 - 0xFF0F
         0x80, 0xBF, 0xF3, 0xFF, 0xBF, 0xFF, 0x3F, 0x00,                 // 0xFF10 - 0xFF17
         0xFF, 0xBF, 0x7F, 0xFF, 0x9F, 0xFF, 0xBF, 0xFF,                 // 0xFF18 - 0xFF1F
@@ -1123,7 +1123,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 
                 uint8_t old_enable = (oldTAC >> 2) & 1;
                 uint8_t new_enable = (newTAC >> 2) & 1;
-                uint16_t sys_clock = vm->clock & 0xFFFF;
+                uint16_t sys_clock = (vm->clock * 4) & 0xFFFF;	/* convert to t-cycles */
 
                 bool glitch = false;
                 if (old_enable != 0) {
@@ -1162,6 +1162,25 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                 }
 #endif
                 break;
+			case R_P1_JOYP:
+				/* Perform Checks */
+				if ((byte & 0xF) != (vm->MEM[addr] & 0xF)) {
+					/* Attempt to write to read only area,
+					 * we ignore the value the user gave for the read only bits */
+					byte &= 0xF;
+					byte |= vm->MEM[addr] & 0xF;
+				}
+				
+				/* Check bit 4-5to get selected mode */
+				uint8_t selected = ((byte >> 4) & 0b11);
+				vm->joypadSelectedMode = selected;
+				
+				/* Write the selected mode */
+				vm->MEM[addr] = byte;
+				
+				/* Update register to show the keys for the new mode */
+				updateJoypadRegBuffer(vm, selected);
+				return;
         }
     }
     vm->MEM[addr] = byte; 
@@ -1173,7 +1192,9 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
         return mbc_readExternalRAM(vm, addr);
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* If we have IO registers to read from, we perform some 
-         * actions before the read is done in some cases */
+         * actions before the read is done in some cases 
+		 *
+		 * or modify the read values accordingly*/
         switch (addr) {
             case R_DIV  :
             case R_TIMA :

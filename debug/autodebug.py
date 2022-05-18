@@ -7,7 +7,8 @@ import sys
 binjgbOutput = open("binjgbLog.txt", "w")
 megagbcOutput = open("megagbcLog.txt", "w")
 
-timeout = 15
+timeout = 5
+MaxCharPerLine = 25
 
 try:
     subprocess.call(["./binjgb-debugger", sys.argv[1]], 
@@ -54,8 +55,8 @@ for i in range(0, bLinesLen):
         break
 
     line = bLines[i]
-    l1 = line[:30]
-    l2 = mLines[i][:30]
+    l1 = line[:MaxCharPerLine]
+    l2 = mLines[i][:MaxCharPerLine]
 
     if (l1 != l2):
         # mismatch occured

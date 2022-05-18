@@ -53,13 +53,21 @@ static void r8(VM* vm, char* ins) {
 }
 
 void printCBInstruction(VM* vm, uint8_t byte) {
+#ifdef DEBUG_PRINT_ADDRESS
     printf("[0x%04x]", vm->PC - 1);
-    printFlags(vm);
-
-#ifdef DEBUG_PRINT_CYCLES
-    printf("[%ld]", vm->clock);
 #endif
-
+#ifdef DEBUG_PRINT_FLAGS
+    printFlags(vm);
+#endif
+#ifdef DEBUG_PRINT_CYCLES
+    printf("[%ld]", vm->clock * 4);
+#endif
+#ifdef DEBUG_PRINT_JOYPAD_REG
+	printf("[0x%x]", vm->MEM[R_P1_JOYP] & 0xF);
+#endif
+#ifdef DEBUG_PRINT_TIMERS
+	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
+#endif
     printf(" %10s", "");
 
     switch (byte) {
@@ -323,12 +331,21 @@ void printCBInstruction(VM* vm, uint8_t byte) {
 }
 
 void printInstruction(VM* vm) {
+#ifdef DEBUG_PRINT_ADDRESS
     printf("[0x%04x]", vm->PC);
+#endif
+#ifdef DEBUG_PRINT_FLAGS
     printFlags(vm);
-
+#endif
 #ifdef DEBUG_PRINT_CYCLES
 	/* We print t-cycles */
     printf("[%ld]", vm->clock * 4);
+#endif
+#ifdef DEBUG_PRINT_JOYPAD_REG
+	printf("[0x%x]", vm->MEM[R_P1_JOYP] & 0xF);
+#endif
+#ifdef DEBUG_PRINT_TIMERS
+	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
 #endif
     printf(" %10s", "");
   

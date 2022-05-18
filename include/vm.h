@@ -9,8 +9,8 @@
 #include "../include/cpu.h"
 
 /* Cycles till the DIV timer is increment */
-#define T_CYCLES_PER_DIV      16384
-#define M_CYCLES_PER_DIV	  4096			// 16384/4
+#define T_CYCLES_PER_DIV      256
+#define M_CYCLES_PER_DIV	  64
 
 typedef enum {
     ROM_N0_16KB = 0x0000,                       /* 16KB ROM Bank number 0 (from cartridge) */
@@ -38,7 +38,17 @@ typedef enum {
     INTERRUPT_ENABLE = 0xFFFF                   /* register which stores if interrupts are enabled */
 } MEM_ADDR;
 
+/* Joypad key select modes */
+
+typedef enum {
+	JOYPAD_SELECT_DIRECTION_ACTION,
+	JOYPAD_SELECT_ACTION,
+	JOYPAD_SELECT_DIRECTION,
+	JOYPAD_SELECT_NONE
+} JOYPAD_SELECT;
+
 /* IO Port Register Macros */
+#define R_P1_JOYP	0xFF00
 #define R_SB        0xFF01
 #define R_SC        0xFF02
 #define R_DIV       0xFF04
@@ -55,6 +65,9 @@ struct VM {
 	unsigned long ticksAtStartup;			/* Stores the ticks at emulator startup (rom boot) */
 	unsigned long ticksAtLastRender;		/* Used to calculate how much time has passed 
 											   since last sdl frame render */
+	uint8_t joypadDirectionBuffer;			/* Stores joypad direction button states */
+	uint8_t joypadActionBuffer;				/* Stores joypad action button states */
+	JOYPAD_SELECT joypadSelectedMode;		
     /* -------------------------------------- */
     Cartridge* cartridge;
     bool run;                               /* A flag that when set to false, quits the emulator */
@@ -83,13 +96,27 @@ typedef struct VM VM;
 
 /* Loads in the cartridge into the VM and starts the overall emulator */
 void startEmulator(Cartridge* cartridge);
+
 /* will perform a memory cleanup by freeing the VM state and then safely exiting */
 void stopEmulator(VM* vm);
+
 /* Increments the cycle count by 1 M-Cycle and syncs all hardware to act accordingly if necessary */
 void cyclesSync(VM* vm);
+
+/* Joypad */
+
+/* Updates the register by writing correct values to the lower nibble */
+void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode);
+
+/* SDL */
+int initSDL(VM* vm);
+void freeSDL(VM* vm);
+void handleSDLEvents(VM* vm);
+
 /* Sync timer */
 void syncTimer(VM* vm);
 void incrementTIMA(VM* vm);
+
 /* Utility */
 unsigned long clock_u();
 #endif
