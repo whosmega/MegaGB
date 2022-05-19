@@ -209,6 +209,9 @@ static void load_rr_rri8(VM* vm, GP_REG RR1, GP_REG RR2) {
      * flags because at the low level its basically the same thing */
     TEST_H_FLAG_ADD(vm, old, (uint8_t)toAdd);
     TEST_C_FLAG_ADD8(vm, old, (uint8_t)toAdd);
+	
+	/* Internal */
+	cyclesSync(vm);
 }
 
 static void incrementR8(VM* vm, GP_REG R) {
@@ -331,6 +334,9 @@ static void rotateLeftCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
 
 static void rotateLeftCarryAR16(VM* vm, GP_REG R16, bool setZFlag) {
     uint16_t addr = get_reg16(vm, R16);
+
+	/* Reading RR also consumes 4 tcycles on this one */
+	cyclesSync(vm);
     uint8_t toModify = vm->MEM[addr];
     bool carryFlag = get_flag(vm, FLAG_C);
     uint8_t bit7 = toModify >> 7;
@@ -370,6 +376,9 @@ static void rotateRightCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
 
 static void rotateRightCarryAR16(VM* vm, GP_REG R16, bool setZFlag) {
     uint16_t addr = get_reg16(vm, R16);
+
+	/* Reading RR also consumes 4 tcycles */
+	cyclesSync(vm);
     uint8_t toModify = vm->MEM[addr];
     bool carryFlag = get_flag(vm, FLAG_C);
     uint8_t bit0 = toModify & 1;
@@ -1026,10 +1035,12 @@ static void cpl(VM* vm) {
 
 static void jumpCondition(VM* vm, bool isTrue) {
     uint16_t address = read2Bytes_2C(vm);
-    /* Cycles sync after branch decision */
-    cyclesSync(vm);
 
-    if (isTrue) vm->PC = address;
+    if (isTrue) {
+	    /* Cycles sync after branch decision */
+		cyclesSync(vm);
+		vm->PC = address;
+	}
 }
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
