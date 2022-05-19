@@ -1113,7 +1113,8 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                 /* Writing to TAC sometimes glitches TIMA,
                  * algorithm from 'https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html' */
                 uint8_t oldTAC = vm->MEM[R_TAC];
-                uint8_t newTAC = byte;
+				/* Make sure unused bits are unchanged */
+                uint8_t newTAC = byte | 0xF8;
 
                 vm->MEM[R_TAC] = newTAC;
 
@@ -1905,7 +1906,7 @@ void dispatch(VM* vm) {
             case 0xCA: jumpCondition(vm, CONDITION_Z(vm)); break;
             case 0xCB: prefixCB(vm); break;
             case 0xCC: callCondition(vm, read2Bytes_2C(vm), CONDITION_Z(vm)); break;
-            case 0xCD: call(vm, read2Bytes(vm)); break;
+            case 0xCD: call(vm, read2Bytes_2C(vm)); break;
             case 0xCE: adcR8D8(vm, R8_A); break;
             case 0xCF: RST(vm, 0x08); break;
             case 0xD0: retCondition(vm, CONDITION_NC(vm)); break;

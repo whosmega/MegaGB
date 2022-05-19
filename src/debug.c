@@ -600,8 +600,7 @@ void printInstruction(VM* vm) {
 }
 
 void printRegisters(VM* vm) {
-    printf("[");
-    printf("A%02xB%02xC%02xD%02xE%02xH%02xL%02xSP%04x]\n", 
+    printf("[A%02xB%02xC%02xD%02xE%02xH%02xL%02xSP%04x]\n", 
             vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C],
             vm->GPR[R8_D], vm->GPR[R8_E], vm->GPR[R8_H],
             vm->GPR[R8_L], (uint16_t)(vm->GPR[R8_SP_HIGH] << 8) + vm->GPR[R8_SP_LOW]);
