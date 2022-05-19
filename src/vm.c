@@ -103,6 +103,39 @@ void incrementTIMA(VM* vm) {
     }
 }
 
+/* CGB Specific WRAM & VRAM banking */
+
+void switchCGB_WRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber) {
+	/* Switch WRAM bank (0xD000-0xDFFF) from oldBankNumber to bankNumber */
+
+	/* Copy contents of the old bank number to its respective bank buffer */
+	/* We do oldBankNumber - 1 because bank 0 is not stored in this buffer,
+	 * the first ram number that gets stored here is 1 */
+	memcpy(&vm->wramBanks[0x1000 * (oldBankNumber - 1)], &vm->MEM[WRAM_NN_4KB], 0x1000);
+
+	/* If old bank buffer is the same as the one to be switched to, copying 
+	 * the buffer to the address will cause a previous version of the ram to be loaded
+	 * so we put this check in place */
+
+	if (oldBankNumber != bankNumber) {	
+		memcpy(&vm->MEM[WRAM_NN_4KB], &vm->wramBanks[0x1000 * (bankNumber - 1)], 0x1000);
+	}
+}
+
+void switchCGB_VRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber) {
+	/* There are only 2 VRAM banks in total so we can basically just swap them */
+	if (oldBankNumber != bankNumber) {
+		/* Swap */
+		for (int i = 0; i < 0x1800; i++) {
+			uint8_t b1 = vm->MEM[VRAM_N0_8KB + i];
+			uint8_t b2 = vm->vramBank[i];
+
+			vm->MEM[VRAM_N0_8KB + i] = b2;
+			vm->vramBank[i] = b1;
+		}
+	}
+}
+
 void syncTimer(VM* vm) {
     /* This function should be called after every instruction dispatch at minimum
      * it fully syncs the timer despite the length of the interval

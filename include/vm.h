@@ -56,6 +56,8 @@ typedef enum {
 #define R_TMA       0xFF06
 #define R_TAC       0xFF07
 #define R_IF        0xFF0F
+#define R_VBK		0xFF4F
+#define R_SVBK		0xFF70
 #define R_IE        INTERRUPT_ENABLE
 
 struct VM {
@@ -88,6 +90,8 @@ struct VM {
 	bool scheduleHaltBug;				/* If set to true,the CPU recreates the halt bug */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
+	uint8_t wramBanks[0x1000 * 7];	     /* 7 Banks for WRAM when on CGB mode */
+	uint8_t vramBank[0x1800];			 /* Switchable VRAM Bank when on CGB mode */
     void* memController;                 /* Memory Bank Controller */
     MBC_TYPE memControllerType;
 };
@@ -116,6 +120,10 @@ void handleSDLEvents(VM* vm);
 /* Sync timer */
 void syncTimer(VM* vm);
 void incrementTIMA(VM* vm);
+
+/* CGB Only, WRAM/VRAM bank switching */
+void switchCGB_WRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber);
+void switchCGB_VRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber);
 
 /* Utility */
 unsigned long clock_u();

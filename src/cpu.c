@@ -334,10 +334,7 @@ static void rotateLeftCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
 
 static void rotateLeftCarryAR16(VM* vm, GP_REG R16, bool setZFlag) {
     uint16_t addr = get_reg16(vm, R16);
-
-	/* Reading RR also consumes 4 tcycles on this one */
-	cyclesSync(vm);
-    uint8_t toModify = vm->MEM[addr];
+    uint8_t toModify = readAddr_1C(vm, addr);
     bool carryFlag = get_flag(vm, FLAG_C);
     uint8_t bit7 = toModify >> 7;
 
@@ -376,10 +373,7 @@ static void rotateRightCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
 
 static void rotateRightCarryAR16(VM* vm, GP_REG R16, bool setZFlag) {
     uint16_t addr = get_reg16(vm, R16);
-
-	/* Reading RR also consumes 4 tcycles */
-	cyclesSync(vm);
-    uint8_t toModify = vm->MEM[addr];
+    uint8_t toModify = readAddr_1C(vm, addr);
     bool carryFlag = get_flag(vm, FLAG_C);
     uint8_t bit0 = toModify & 1;
 
@@ -1193,6 +1187,29 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				/* Update register to show the keys for the new mode */
 				updateJoypadRegBuffer(vm, selected);
 				return;
+			case R_SVBK: {
+				/* In CGB Mode, switch WRAM banks */
+				uint8_t oldBankNumber = vm->MEM[R_SVBK] & 0b00000111;
+				uint8_t bankNumber = byte & 0b00000111;
+				
+				if (bankNumber == 0) bankNumber = 1;
+				switchCGB_WRAM(vm, oldBankNumber, bankNumber);
+				/* Ignore bits 7-3 */
+				vm->MEM[R_SVBK] = byte | 0b11111000;
+				return;	
+			}
+			case R_VBK: {
+				/* In CGB Mode, switch VRAM banks 
+				 *
+				 * Only bit 0 matters */
+				uint8_t oldBankNumber = vm->MEM[R_VBK] & 1;
+				uint8_t bankNumber = byte & 1;
+				
+				switchCGB_VRAM(vm, oldBankNumber, bankNumber);
+				/* Ignore all bits other than bit 0 */
+				vm->MEM[R_VBK] = byte | ~1;
+				return;
+			}
         }
     }
     vm->MEM[addr] = byte; 
