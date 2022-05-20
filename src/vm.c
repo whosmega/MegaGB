@@ -34,12 +34,20 @@ static void initVM(VM* vm) {
 	vm->ticksAtStartup = 0;
 
 	/* bit 3-0 in joypad register is set to 1 on boot (0xCF) */
-	
 	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
 	vm->joypadActionBuffer = 0xF;
 	vm->joypadDirectionBuffer = 0xF;
+
     /* Set registers & flags to GBC specifics */
     resetGBC(vm);
+
+	/* Set WRAM/VRAM banks if in CGB mode 
+	 * Because the default value of SVBK is 0xFF, which means bank 7 is selected 
+	 * by default 
+	 * Same goes for VBK, bank 1 will be selected by default*/
+	switchCGB_WRAM(vm, 1, 7);
+	switchCGB_VRAM(vm, 0, 1);
+
 }
 
 
@@ -126,7 +134,7 @@ void switchCGB_VRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber) {
 	/* There are only 2 VRAM banks in total so we can basically just swap them */
 	if (oldBankNumber != bankNumber) {
 		/* Swap */
-		for (int i = 0; i < 0x1800; i++) {
+		for (int i = 0; i < 0x2000; i++) {
 			uint8_t b1 = vm->MEM[VRAM_N0_8KB + i];
 			uint8_t b2 = vm->vramBank[i];
 

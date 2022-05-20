@@ -91,7 +91,7 @@ struct VM {
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
 	uint8_t wramBanks[0x1000 * 7];	     /* 7 Banks for WRAM when on CGB mode */
-	uint8_t vramBank[0x1800];			 /* Switchable VRAM Bank when on CGB mode */
+	uint8_t vramBank[0x2000];			 /* Switchable VRAM Bank when on CGB mode */
     void* memController;                 /* Memory Bank Controller */
     MBC_TYPE memControllerType;
 };
