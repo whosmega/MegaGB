@@ -10,7 +10,6 @@
 
 /* Cycles till the DIV timer is increment */
 #define T_CYCLES_PER_DIV      256
-#define M_CYCLES_PER_DIV	  64
 
 typedef enum {
     ROM_N0_16KB = 0x0000,                       /* 16KB ROM Bank number 0 (from cartridge) */
@@ -79,7 +78,7 @@ struct VM {
                                              * this helps in getting the cycles elapsed */
     unsigned long lastTIMASync;             /* Same but for the TIMA timer */
     unsigned long clock;                    /* Main clock of the whole emulator 
-											   Counts in M-Cycles */
+											   Counts in T-Cycles */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
@@ -104,8 +103,8 @@ void startEmulator(Cartridge* cartridge);
 /* will perform a memory cleanup by freeing the VM state and then safely exiting */
 void stopEmulator(VM* vm);
 
-/* Increments the cycle count by 1 M-Cycle and syncs all hardware to act accordingly if necessary */
-void cyclesSync(VM* vm);
+/* Increments the cycle count by 4 tcycles and syncs all hardware to act accordingly if necessary */
+void cyclesSync_4(VM* vm);
 
 /* Joypad */
 

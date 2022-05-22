@@ -13,13 +13,13 @@
 void syncDisplay(VM* vm) {
     /* We sync the display by checking if we have to draw a frame 
      *
-     * This is called every cycle update*/
+     * This is called every 4 t-cycle update*/
 
-    vm->cyclesSinceLastFrame++;
+    vm->cyclesSinceLastFrame += 4;
 
-    if (vm->cyclesSinceLastFrame >= M_CYCLES_PER_FRAME) {
+    if (vm->cyclesSinceLastFrame >= T_CYCLES_PER_FRAME) {
         /* We preserve any extra cycles just in case */
-        vm->cyclesSinceLastFrame -= M_CYCLES_PER_FRAME;
+        vm->cyclesSinceLastFrame -= T_CYCLES_PER_FRAME;
         /* Draw frame */
 
 

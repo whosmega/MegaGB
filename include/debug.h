@@ -14,7 +14,7 @@
 // #define DEBUG_PRINT_CARTRIDGE_INFO
 // #define DEBUG_LOGGING
 // #define DEBUG_MEM_LOGGING
-// #define DEBUG_PRINT_SERIAL_OUTPUT
+#define DEBUG_PRINT_SERIAL_OUTPUT
 // #define DEBUG_SUPPORT_SLOW_EMULATION
 
 /* Stops running when encounters opcode 0x40, LD B, B */

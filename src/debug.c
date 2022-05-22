@@ -60,7 +60,7 @@ void printCBInstruction(VM* vm, uint8_t byte) {
     printFlags(vm);
 #endif
 #ifdef DEBUG_PRINT_CYCLES
-    printf("[%ld]", vm->clock * 4);
+    printf("[%ld]", vm->clock);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
 	printf("[0x%x]", vm->MEM[R_P1_JOYP] & 0xF);

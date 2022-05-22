@@ -164,7 +164,7 @@ void syncTimer(VM* vm) {
 	 * the last successful sync happened
 	 * */
 	
-	unsigned int cycles = vm->clock * 4;
+	unsigned int cycles = vm->clock;
     unsigned int cyclesElapsedDIV = cycles - vm->lastDIVSync;
     
 
@@ -232,18 +232,18 @@ static void run(VM* vm) {
     }
 }
 
-void cyclesSync(VM* vm) {
+void cyclesSync_4(VM* vm) {
     /* This function is called millions of times by the CPU
      * in a second and therefore it needs to be optimised 
      *
      * So we dont update all hardware but only the ones that need to
      * always be upto date like the display 
 	 *
-	 * Each call only increments 1 m-cycle by default thus
+	 * Each call only increments 4 t-cycles/1 m-cycle by default thus
 	 * another function should be made to increment more than 1 cycles to fully 
 	 * optimise this. That is rarely done however so thats gonna be on last priority
 	 * */
-    vm->clock++;
+    vm->clock += 4;
 	
     syncDisplay(vm); 
 }
