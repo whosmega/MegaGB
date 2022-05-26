@@ -6,6 +6,7 @@
 #include "../include/mbc.h"
 
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_timer.h>
 #include <bits/time.h>
 #include <time.h>
@@ -23,7 +24,6 @@ static void initVM(VM* vm) {
 	vm->haltMode = false;
 	vm->scheduleHaltBug = false;
 
-    vm->cyclesSinceLastFrame = 0;
     vm->clock = 0;
     vm->lastTIMASync = 0;
     vm->lastDIVSync = 0;
@@ -32,6 +32,16 @@ static void initVM(VM* vm) {
     vm->sdl_renderer = NULL;
 	vm->ticksAtLastRender = 0;
 	vm->ticksAtStartup = 0;
+
+	vm->lockVRAM = false;
+	vm->lockOAM = false;
+	vm->lockPalettes = false;
+	vm->ppuMode = PPU_MODE_2; 
+    vm->cyclesSinceLastFrame = 0;
+	vm->cyclesSinceLastMode = 0;
+
+	/* Initialise FIFO */
+	clearFIFO(&vm->BackgroundFIFO);
 
 	/* bit 3-0 in joypad register is set to 1 on boot (0xCF) */
 	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
@@ -239,25 +249,23 @@ void cyclesSync_4(VM* vm) {
      * So we dont update all hardware but only the ones that need to
      * always be upto date like the display 
 	 *
-	 * Each call only increments 4 t-cycles/1 m-cycle by default thus
-	 * another function should be made to increment more than 1 cycles to fully 
-	 * optimise this. That is rarely done however so thats gonna be on last priority
-	 * */
+	 */
     vm->clock += 4;
 	
-    syncDisplay(vm); 
+    syncDisplay(vm, 4); 
 }
 
 /* SDL */
 
 int initSDL(VM* vm) {
     SDL_Init(SDL_INIT_EVERYTHING);
-    SDL_CreateWindowAndRenderer(WIDTH_PX, HEIGHT_PX, SDL_WINDOW_SHOWN,
+    SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING, SDL_WINDOW_SHOWN,
                                 &vm->sdl_window, &vm->sdl_renderer);
 
     if (!vm->sdl_window) return 1;          /* Failed to create screen */
 
     SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
+	SDL_RenderSetScale(vm->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
     return 0;
 }
 

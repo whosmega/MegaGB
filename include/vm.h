@@ -7,6 +7,7 @@
 #include "../include/cartridge.h"
 #include "../include/mbc.h"
 #include "../include/cpu.h"
+#include "../include/display.h"
 
 /* Cycles till the DIV timer is increment */
 #define T_CYCLES_PER_DIV      256
@@ -55,6 +56,8 @@ typedef enum {
 #define R_TMA       0xFF06
 #define R_TAC       0xFF07
 #define R_IF        0xFF0F
+#define R_LCDC		0xFF40
+#define R_LY		0xFF44
 #define R_VBK		0xFF4F
 #define R_SVBK		0xFF70
 #define R_IE        INTERRUPT_ENABLE
@@ -72,8 +75,7 @@ struct VM {
     /* -------------------------------------- */
     Cartridge* cartridge;
     bool run;                               /* A flag that when set to false, quits the emulator */
-    bool IME;                               /* Interrupt Master Enable Flag */
-    unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */ 
+    bool IME;                               /* Interrupt Master Enable Flag */ 
     unsigned long lastDIVSync;              /* Holds the clock's state when DIV timer was last synced
                                              * this helps in getting the cycles elapsed */
     unsigned long lastTIMASync;             /* Same but for the TIMA timer */
@@ -93,6 +95,14 @@ struct VM {
 	uint8_t vramBank[0x2000];			 /* Switchable VRAM Bank when on CGB mode */
     void* memController;                 /* Memory Bank Controller */
     MBC_TYPE memControllerType;
+	/* ---------------- PPU ---------------- */
+	FIFO BackgroundFIFO;
+	PPU_MODE ppuMode;	
+    unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */
+	unsigned int cyclesSinceLastMode;
+	bool lockVRAM;							/* Locks CPU from accessing VRAM */
+	bool lockOAM;							/*						 -> OAM */
+	bool lockPalettes;						/*						 -> CGB Palettes */
 };
 
 typedef struct VM VM;
