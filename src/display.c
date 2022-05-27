@@ -38,6 +38,27 @@ static void lockToFramerate(VM* vm) {
 static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 	vm->ppuMode = mode;
 	vm->cyclesSinceLastMode = 0;
+
+	/* Handle access locking for VRAM/OAM/Palettes */
+
+	switch (mode) {
+		case PPU_MODE_2: 
+			vm->lockOAM = true;
+			vm->lockPalettes = false;
+			vm->lockVRAM = false;
+			break;
+		case PPU_MODE_3:
+			vm->lockOAM = true;
+			vm->lockPalettes = true;
+			vm->lockVRAM = true;
+			break;
+		case PPU_MODE_0:
+		case PPU_MODE_1:
+			vm->lockOAM = false;
+			vm->lockPalettes = false;
+			vm->lockVRAM = false;
+			break;
+	}
 }
 
 static void advancePPU(VM* vm) {

@@ -59,6 +59,10 @@ typedef enum {
 #define R_LCDC		0xFF40
 #define R_LY		0xFF44
 #define R_VBK		0xFF4F
+#define R_BCPS		0xFF68
+#define R_BCPD		0xFF69
+#define R_OCPS		0xFF6A
+#define R_OCPD		0xFF6B
 #define R_SVBK		0xFF70
 #define R_IE        INTERRUPT_ENABLE
 

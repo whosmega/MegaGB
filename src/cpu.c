@@ -1210,8 +1210,21 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				vm->MEM[R_VBK] = byte | ~1;
 				return;
 			}
+			case R_BCPD:
+			case R_BCPS:
+			case R_OCPD:
+			case R_OCPS:
+				/* Handle the case when palettes have been locked by PPU */
+				if (vm->lockPalettes) return;
+				break;
         }
-    }
+    } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
+		/* Handle the case when VRAM has been locked by PPU */
+		if (vm->lockVRAM) return;
+	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
+		/* Handle the case when OAM has been locked by PPU */
+		if (vm->lockOAM) return;
+	}
     vm->MEM[addr] = byte; 
 }
 
@@ -1229,8 +1242,21 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
             case R_TIMA :
             case R_TMA  :
             case R_TAC  : syncTimer(vm); break;
+			case R_BCPD:
+			case R_BCPS:
+			case R_OCPD:
+			case R_OCPS:
+				/* Handle the case when Palettes have been locked by the PPU */
+				if (vm->lockPalettes) return 0xFF;
+				break;
         }
-    }
+    } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
+		/* Handle the case when VRAM has been locked by the PPU */
+		if (vm->lockVRAM) return 0xFF;
+	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
+		/* Handle the case when OAM has been locked by the PPU */
+		if (vm->lockOAM) return 0xFF;
+	}
 
     return vm->MEM[addr];
 }
