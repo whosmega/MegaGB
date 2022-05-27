@@ -32,7 +32,6 @@ static void lockToFramerate(VM* vm) {
 #ifdef DEBUG_SUPPORT_SLOW_EMULATION
 	}
 #endif
-
 	vm->ticksAtLastRender = clock_u() - vm->ticksAtStartup;
 }
 
@@ -44,6 +43,7 @@ static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 static void advancePPU(VM* vm) {
 	/* We use a state machine to handle different PPU modes */
 	vm->cyclesSinceLastMode++;
+
 
 	switch (vm->ppuMode) {
 		case PPU_MODE_2:
@@ -66,18 +66,35 @@ static void advancePPU(VM* vm) {
 				/* End of scanline */
 				uint8_t nextScanlineNumber = (vm->cyclesSinceLastFrame / T_CYCLES_PER_SCANLINE) + 1;
 				if (nextScanlineNumber == 144) switchModePPU(vm, PPU_MODE_1);
-				else switchModePPU(vm, PPU_MODE_2);	
+				else switchModePPU(vm, PPU_MODE_2);
+			} else if (vm->cyclesSinceLastMode == 198) {
+				/* LY register gets incremented 6 dots before the *true* increment */
+				vm->MEM[R_LY]++;
 			}
 
 			break;
 		}
 		case PPU_MODE_1: {
 			/* VBLANK */
-			if (vm->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) 
+
+			/* LY Resets to 0 after 4 cycles on line 153 
+			 * LY=LYC Interrupt is triggered 12 cycles after line 153 begins */
+
+			unsigned cycleAtLYReset = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 4;	
+
+			if (cycleAtLYReset != vm->cyclesSinceLastMode && vm->cyclesSinceLastMode % 
+					T_CYCLES_PER_SCANLINE == T_CYCLES_PER_SCANLINE - 6) {
+
+				/* LY register Increments 6 cycles before *true* LY, only when
+				 * the line is other than 153, because on line 153 it resets early */
+				vm->MEM[R_LY]++;
+			} else if (vm->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) {
 				switchModePPU(vm, PPU_MODE_2);
+			} else if (vm->cyclesSinceLastMode == cycleAtLYReset) {
+				vm->MEM[R_LY] = 0;
+			}
 			break;
 		}
-		default: return;
 	}
 }
 
@@ -129,7 +146,7 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 	for (unsigned int i = 0; i < cycles; i++) {
 		vm->cyclesSinceLastFrame++;
 		
-		advancePPU(vm);
+		advancePPU(vm);	
 
 		if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
 			/* End of frame */

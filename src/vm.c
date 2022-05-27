@@ -6,6 +6,7 @@
 #include "../include/mbc.h"
 
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_timer.h>
 #include <bits/time.h>
@@ -266,6 +267,9 @@ int initSDL(VM* vm) {
 
     SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
 	SDL_RenderSetScale(vm->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
+	SDL_SetRenderDrawColor(vm->sdl_renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+	SDL_RenderClear(vm->sdl_renderer);
+	SDL_RenderPresent(vm->sdl_renderer);
     return 0;
 }
 

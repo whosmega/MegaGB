@@ -3,8 +3,8 @@
 #include <SDL2/SDL.h>
 
 #define DISPLAY_SCALING 3
-#define HEIGHT_PX 160
-#define WIDTH_PX  144
+#define HEIGHT_PX 144
+#define WIDTH_PX  160
 
 #define FIFO_MAX_COUNT 16
 
