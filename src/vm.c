@@ -37,7 +37,9 @@ static void initVM(VM* vm) {
 	vm->lockVRAM = false;
 	vm->lockOAM = false;
 	vm->lockPalettes = false;
-	vm->ppuMode = PPU_MODE_2; 
+	vm->ppuMode = PPU_MODE_2;
+	vm->fetcherState = FETCHER_SLEEP;
+	vm->currentFetcherTask = 0;
     vm->cyclesSinceLastFrame = 0;
 	vm->cyclesSinceLastMode = 0;
 

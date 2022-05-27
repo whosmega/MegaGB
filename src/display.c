@@ -39,7 +39,7 @@ static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 	vm->ppuMode = mode;
 	vm->cyclesSinceLastMode = 0;
 
-	/* Handle access locking for VRAM/OAM/Palettes */
+
 
 	switch (mode) {
 		case PPU_MODE_2: 
@@ -61,6 +61,44 @@ static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 	}
 }
 
+static void advanceFetcher(VM* vm) {
+	/* Defines the order of the tasks in the fetcher, 
+	* we reuse the sleep state as a way to consume 1 dot when required
+	* because the states usually take 2 dots and the fetcher is stepped every dot */
+
+	const FETCHER_STATE fetcherTasks[7] = {
+		FETCHER_SLEEP,
+		FETCHER_GET_TILE,
+		FETCHER_SLEEP,
+		FETCHER_GET_DATA_LOW,
+		FETCHER_SLEEP,
+		FETCHER_SLEEP,
+		FETCHER_PUSH			/* The amount of dots this takes isnt fixed */
+	};
+
+	/* Fetcher state machine to handle pixel FIFO */
+	switch (fetcherTasks[vm->currentFetcherTask]) {
+		case FETCHER_GET_TILE: {
+			
+			break;
+		}
+		case FETCHER_GET_DATA_LOW: {
+			
+			break;
+		}
+		case FETCHER_GET_DATA_HIGH: {
+			break;
+		}	
+		case FETCHER_SLEEP: break;			/* Do nothing */
+		case FETCHER_PUSH: {
+			vm->currentFetcherTask = 0;
+			break;
+		}
+	}
+
+	vm->currentFetcherTask++;
+}
+
 static void advancePPU(VM* vm) {
 	/* We use a state machine to handle different PPU modes */
 	vm->cyclesSinceLastMode++;
@@ -77,6 +115,8 @@ static void advancePPU(VM* vm) {
 			break;
 		case PPU_MODE_3:
 			/* Draw Pixels */
+			advanceFetcher(vm);
+
 			if (vm->cyclesSinceLastMode == 172)
 				switchModePPU(vm, PPU_MODE_0);
 

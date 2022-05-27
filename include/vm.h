@@ -68,7 +68,7 @@ typedef enum {
 
 struct VM {
     /* ---------------- SDL ----------------- */
-    SDL_Window* sdl_window;             /* The window */
+    SDL_Window* sdl_window;					/* The window */
     SDL_Renderer* sdl_renderer;             /* Renderer */
 	unsigned long ticksAtStartup;			/* Stores the ticks at emulator startup (rom boot) */
 	unsigned long ticksAtLastRender;		/* Used to calculate how much time has passed 
@@ -76,7 +76,7 @@ struct VM {
 	uint8_t joypadDirectionBuffer;			/* Stores joypad direction button states */
 	uint8_t joypadActionBuffer;				/* Stores joypad action button states */
 	JOYPAD_SELECT joypadSelectedMode;		
-    /* -------------------------------------- */
+    /* -------------- Emulator ------------- */
     Cartridge* cartridge;
     bool run;                               /* A flag that when set to false, quits the emulator */
     bool IME;                               /* Interrupt Master Enable Flag */ 
@@ -102,6 +102,8 @@ struct VM {
 	/* ---------------- PPU ---------------- */
 	FIFO BackgroundFIFO;
 	PPU_MODE ppuMode;	
+	FETCHER_STATE fetcherState;
+	uint8_t currentFetcherTask;
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */
 	unsigned int cyclesSinceLastMode;
 	bool lockVRAM;							/* Locks CPU from accessing VRAM */
