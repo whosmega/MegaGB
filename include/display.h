@@ -35,6 +35,16 @@ typedef enum {
 	FETCHER_PUSH
 } FETCHER_STATE;
 
+/* Different types of STAT updates */
+
+typedef enum {
+	STAT_UPDATE_LY_LYC,
+	STAT_UPDATE_SWITCH_MODE0,
+	STAT_UPDATE_SWITCH_MODE1,
+	STAT_UPDATE_SWITCH_MODE2,
+	STAT_UPDATE_SWITCH_MODE3
+} STAT_UPDATE_TYPE;
+
 typedef struct {
 	uint8_t colorID;
 	uint8_t colorPalette;

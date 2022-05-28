@@ -35,28 +35,74 @@ static void lockToFramerate(VM* vm) {
 	vm->ticksAtLastRender = clock_u() - vm->ticksAtStartup;
 }
 
+static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
+	/* This function updates the STAT register depending on the type of update 
+	 * that is requested */
+
+#define SWITCH_MODE(mode) vm->MEM[R_STAT] &= 0x3; \
+						  vm->MEM[R_STAT] |= mode
+
+	switch (type) {
+		case STAT_UPDATE_LY_LYC:
+			if (vm->MEM[R_LY] == vm->MEM[R_LYC]) {
+				/* Set bit 2 */
+				vm->MEM[R_STAT] |= 1 << 2;
+	
+				if ((vm->MEM[R_STAT] >> 6) & 0x1) {
+					/* If bit 6 is set, we can trigger the STAT interrupt */
+					requestInterrupt(vm, INTERRUPT_LCD_STAT);
+				}
+			} else {
+				/* Clear bit 2 */
+				vm->MEM[R_STAT] &= ~(1 << 2);
+			}
+			break;
+		case STAT_UPDATE_SWITCH_MODE0:
+			/* Switch to mode 0 */
+			SWITCH_MODE(PPU_MODE_0);
+			break;
+		case STAT_UPDATE_SWITCH_MODE1:
+			SWITCH_MODE(PPU_MODE_1);
+			break;
+		case STAT_UPDATE_SWITCH_MODE2:
+			SWITCH_MODE(PPU_MODE_2);
+			break;
+		case STAT_UPDATE_SWITCH_MODE3:
+			SWITCH_MODE(PPU_MODE_3);
+			break;
+	}
+
+#undef SWITCH_MODE
+}
+
 static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 	vm->ppuMode = mode;
 	vm->cyclesSinceLastMode = 0;
-
-
 
 	switch (mode) {
 		case PPU_MODE_2: 
 			vm->lockOAM = true;
 			vm->lockPalettes = false;
 			vm->lockVRAM = false;
+			updateSTAT(vm, STAT_UPDATE_SWITCH_MODE2);
 			break;
 		case PPU_MODE_3:
 			vm->lockOAM = true;
 			vm->lockPalettes = true;
 			vm->lockVRAM = true;
+			updateSTAT(vm, STAT_UPDATE_SWITCH_MODE3);
 			break;
 		case PPU_MODE_0:
+			vm->lockOAM = false;
+			vm->lockPalettes = false;
+			vm->lockVRAM = false;
+			updateSTAT(vm, STAT_UPDATE_SWITCH_MODE0);
+			break;
 		case PPU_MODE_1:
 			vm->lockOAM = false;
 			vm->lockPalettes = false;
 			vm->lockVRAM = false;
+			updateSTAT(vm, STAT_UPDATE_SWITCH_MODE1);
 			break;
 	}
 }
@@ -131,28 +177,33 @@ static void advancePPU(VM* vm) {
 			} else if (vm->cyclesSinceLastMode == 198) {
 				/* LY register gets incremented 6 dots before the *true* increment */
 				vm->MEM[R_LY]++;
+				updateSTAT(vm, STAT_UPDATE_LY_LYC);
 			}
 
 			break;
 		}
 		case PPU_MODE_1: {
 			/* VBLANK */
-
+			requestInterrupt(vm, INTERRUPT_VBLANK);	
 			/* LY Resets to 0 after 4 cycles on line 153 
 			 * LY=LYC Interrupt is triggered 12 cycles after line 153 begins */
 
 			unsigned cycleAtLYReset = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 4;	
-
+			unsigned cycleAtLYCInterrupt = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 12;
 			if (cycleAtLYReset != vm->cyclesSinceLastMode && vm->cyclesSinceLastMode % 
 					T_CYCLES_PER_SCANLINE == T_CYCLES_PER_SCANLINE - 6) {
 
 				/* LY register Increments 6 cycles before *true* LY, only when
 				 * the line is other than 153, because on line 153 it resets early */
 				vm->MEM[R_LY]++;
+				updateSTAT(vm, STAT_UPDATE_LY_LYC);
 			} else if (vm->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) {
 				switchModePPU(vm, PPU_MODE_2);
 			} else if (vm->cyclesSinceLastMode == cycleAtLYReset) {
 				vm->MEM[R_LY] = 0;
+			} else if (vm->cyclesSinceLastMode == cycleAtLYCInterrupt) {
+				/* The STAT update can be issued now */
+				updateSTAT(vm, STAT_UPDATE_LY_LYC);
 			}
 			break;
 		}

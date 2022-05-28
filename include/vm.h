@@ -57,7 +57,9 @@ typedef enum {
 #define R_TAC       0xFF07
 #define R_IF        0xFF0F
 #define R_LCDC		0xFF40
+#define R_STAT		0xFF41
 #define R_LY		0xFF44
+#define R_LYC		0xFF45
 #define R_VBK		0xFF4F
 #define R_BCPS		0xFF68
 #define R_BCPD		0xFF69
