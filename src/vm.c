@@ -33,8 +33,10 @@ static void initVM(VM* vm) {
     vm->sdl_renderer = NULL;
 	vm->ticksAtLastRender = 0;
 	vm->ticksAtStartup = 0;
-
-	/* The STAT register is supposed to start with mode VBLANK, 
+	
+	/* UPDATE : The following is only true for DMG */
+	/* The STAT register is supposed to start with mode VBLANK,
+	 * (DMG has the first 4 cycles in vblank)
 	 * but we start with an initial value that has mode 2
 	 *
 	 * we also dont use the switch mode function because there are special conditions 
@@ -45,15 +47,15 @@ static void initVM(VM* vm) {
 	 * -> No STAT checks are necessary because the inital value has already been set */
 
 	vm->lockVRAM = false;
-	vm->lockOAM = false;
+	vm->lockOAM = true;
 	vm->lockPalettes = false;
-	vm->ppuMode = PPU_MODE_2;
+	vm->ppuMode = PPU_MODE_2;			
 	vm->fetcherState = FETCHER_SLEEP;
 	vm->currentFetcherTask = 0;
 	/* When the PPU first starts up, it takes 4 cycles less on the first frame,
 	 * it also doesnt lock OAM */
-    vm->cyclesSinceLastFrame = 4;
-	vm->cyclesSinceLastMode = 4;
+    vm->cyclesSinceLastFrame = 0;		/* 4 on DMG */
+	vm->cyclesSinceLastMode = 0;		/* ^^^^^^^^ */
 
 	/* Initialise FIFO */
 	clearFIFO(&vm->BackgroundFIFO);
