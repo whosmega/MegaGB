@@ -1217,6 +1217,18 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				/* Handle the case when palettes have been locked by PPU */
 				if (vm->lockPalettes) return;
 				break;
+			case R_STAT:
+				/* Bit 7 in STAT is unused so it has to always be 1.
+				 * Bit 2-0 are read only, and are left unchanged */
+				SET_BIT(byte, 7);
+				
+				/* Clear last 3 bits */
+				byte &= ~0x7;
+				/* Set the last 3 bits of STAT to byte */
+				byte |= vm->MEM[R_STAT] & 0x7;
+				
+				vm->MEM[R_STAT] = byte;
+				return;
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
 		/* Handle the case when VRAM has been locked by PPU */

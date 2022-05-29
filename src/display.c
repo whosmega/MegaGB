@@ -41,28 +41,27 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 
 #define SWITCH_MODE(mode) vm->MEM[R_STAT] &= 0x3; \
 						  vm->MEM[R_STAT] |= mode
-#define BIT(byte, bit) ((byte >> bit) & 0x1)
 
 	switch (type) {
 		case STAT_UPDATE_LY_LYC:
 			if (vm->MEM[R_LY] == vm->MEM[R_LYC]) {
 				/* Set bit 2 */
-				vm->MEM[R_STAT] |= 1 << 2;
+				SET_BIT(vm->MEM[R_STAT], 2);
 	
-				if (BIT(vm->MEM[R_STAT], 6)) {
+				if (GET_BIT(vm->MEM[R_STAT], 6)) {
 					/* If bit 6 is set, we can trigger the STAT interrupt */
 					requestInterrupt(vm, INTERRUPT_LCD_STAT);
 				}
 			} else {
 				/* Clear bit 2 */
-				vm->MEM[R_STAT] &= ~(1 << 2);
+				CLEAR_BIT(vm->MEM[R_STAT], 2);
 			}
 			break;
 		case STAT_UPDATE_SWITCH_MODE0:
 			/* Switch to mode 0 */
 			SWITCH_MODE(PPU_MODE_0);
 
-			if (BIT(vm->MEM[R_STAT], 3)) {
+			if (GET_BIT(vm->MEM[R_STAT], 3)) {
 				/* If mode 0 interrupt source is enabled */
 				requestInterrupt(vm, INTERRUPT_LCD_STAT);
 			}
@@ -71,14 +70,14 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 			/* Switch to mode 1 */
 			SWITCH_MODE(PPU_MODE_1);
 
-			if (BIT(vm->MEM[R_STAT], 4)) {
+			if (GET_BIT(vm->MEM[R_STAT], 4)) {
 				requestInterrupt(vm, INTERRUPT_LCD_STAT);
 			}
 			break;
 		case STAT_UPDATE_SWITCH_MODE2:
 			SWITCH_MODE(PPU_MODE_2);
 
-			if (BIT(vm->MEM[R_STAT], 5)) {
+			if (GET_BIT(vm->MEM[R_STAT], 5)) {
 				requestInterrupt(vm, INTERRUPT_LCD_STAT);
 			}
 			break;
@@ -88,7 +87,6 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 	}
 
 #undef SWITCH_MODE
-#undef BIT
 }
 
 static inline void switchModePPU(VM* vm, PPU_MODE mode) {

@@ -9,6 +9,11 @@
 #include "../include/cpu.h"
 #include "../include/display.h"
 
+/* Utility macros */
+#define SET_BIT(byte, bit) byte |= 1 << bit
+#define GET_BIT(byte, bit) ((byte >> bit) & 1)
+#define CLEAR_BIT(byte, bit) byte &= ~(1 << bit)
+
 /* Cycles till the DIV timer is increment */
 #define T_CYCLES_PER_DIV      256
 
