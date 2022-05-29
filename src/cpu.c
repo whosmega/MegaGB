@@ -166,7 +166,10 @@ void resetGBC(VM* vm) {
     vm->GPR[R8_L] = 0x0D;
 
     /* Set hardware registers and initialise empty areas */
-    
+   
+	/* These registers are set to values that are recoreded at PC = 0x0100
+	 * this essentially means we dont need to emulate the boot rom */
+
     uint8_t hreg_defaults[80] = {
         0xCF, 0x00, 0x7F, 0xFF, 0xAC, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xE1,                 // 0xFF08 - 0xFF0F
@@ -1229,6 +1232,22 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				
 				vm->MEM[R_STAT] = byte;
 				return;
+			case R_LCDC: {
+				/* Bit 7 = LCD/PPU enable */
+				uint8_t lcdcBit7 = GET_BIT(vm->MEM[R_LCDC], 7);
+				uint8_t byteBit7 = GET_BIT(byte, 7);
+
+				if (lcdcBit7 != byteBit7) {
+					if (byteBit7) {
+						/* Enable PPU */
+						enablePPU(vm);
+					} else {
+						/* Disable PPU */
+						disablePPU(vm);
+					}
+				}
+				break;
+			}
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
 		/* Handle the case when VRAM has been locked by PPU */

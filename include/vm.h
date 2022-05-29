@@ -108,7 +108,9 @@ struct VM {
     MBC_TYPE memControllerType;
 	/* ---------------- PPU ---------------- */
 	FIFO BackgroundFIFO;
-	PPU_MODE ppuMode;	
+	PPU_MODE ppuMode;
+	bool ppuEnabled;
+	bool skipFrame;							/* Skips a frame render */
 	FETCHER_STATE fetcherState;
 	uint8_t currentFetcherTask;
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */

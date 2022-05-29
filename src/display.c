@@ -3,6 +3,8 @@
 #include "../include/debug.h"
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_pixels.h>
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
@@ -224,6 +226,41 @@ static void advancePPU(VM* vm) {
 	}
 }
 
+/* PPU Enable & Disable */
+
+void enablePPU(VM* vm) {
+	vm->ppuEnabled = true;
+
+	switchModePPU(vm, PPU_MODE_2);
+
+	/* Skip first frame after LCD is turned on */
+	vm->skipFrame = true;
+}
+
+void disablePPU(VM* vm) {
+	if (vm->ppuMode != PPU_MODE_1) {
+		/* This is dangerous for any game/rom to do on real hardware
+		 * as it can damage hardware */
+		printf("[WARNING] Turning off LCD when not in VBlank can damage a real gameboy\n");
+	}
+
+	vm->ppuEnabled = false;
+	vm->MEM[R_LY] = 0;
+
+	/* Set STAT mode to 0 */
+	switchModePPU(vm, PPU_MODE_0);
+	
+	/* Reset frame */
+	vm->cyclesSinceLastFrame = 0;
+
+	/* Make the screen go black */
+	SDL_SetRenderDrawColor(vm->sdl_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+	SDL_RenderClear(vm->sdl_renderer);
+	SDL_RenderPresent(vm->sdl_renderer);
+}
+
+/* -------------------- */
+
 void clearFIFO(FIFO *fifo) {
 	fifo->count = 0;
 	fifo->nextPopIndex = 0;
@@ -268,6 +305,10 @@ FIFO_Pixel popFIFO(FIFO* fifo) {
 void syncDisplay(VM* vm, unsigned int cycles) {
     /* We sync the display by running the PPU for the correct number of 
 	 * dots (1 dot = 1 tcycle in normal speed) */
+	if (!vm->ppuEnabled) {
+		lockToFramerate(vm);
+		return;
+	}
 
 	for (unsigned int i = 0; i < cycles; i++) {
 		vm->cyclesSinceLastFrame++;
@@ -276,9 +317,15 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 
 		if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
 			/* End of frame */
-			vm->cyclesSinceLastFrame = 0;
+			vm->cyclesSinceLastFrame = 0;	
+			/* Draw frame */
+
+			if (vm->skipFrame) {
+				vm->skipFrame = false;
+			} else {
+				SDL_RenderPresent(vm->sdl_renderer);
+			}
 			lockToFramerate(vm);
-		}
- 
+		} 
 	}
 }

@@ -49,7 +49,9 @@ static void initVM(VM* vm) {
 	vm->lockVRAM = false;
 	vm->lockOAM = true;
 	vm->lockPalettes = false;
-	vm->ppuMode = PPU_MODE_2;			
+	vm->ppuMode = PPU_MODE_2;
+	vm->ppuEnabled = true;
+	vm->skipFrame = false;
 	vm->fetcherState = FETCHER_SLEEP;
 	vm->currentFetcherTask = 0;
 	/* When the PPU first starts up, it takes 4 cycles less on the first frame,
@@ -283,9 +285,6 @@ int initSDL(VM* vm) {
 
     SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
 	SDL_RenderSetScale(vm->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
-	SDL_SetRenderDrawColor(vm->sdl_renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
-	SDL_RenderClear(vm->sdl_renderer);
-	SDL_RenderPresent(vm->sdl_renderer);
     return 0;
 }
 

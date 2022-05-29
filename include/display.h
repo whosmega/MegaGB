@@ -63,5 +63,7 @@ FIFO_Pixel popFIFO(FIFO* fifo);
 void clearFIFO(FIFO* fifo);
 
 void syncDisplay(struct VM* vm, unsigned int cycles);
+void enablePPU(struct VM* vm);
+void disablePPU(struct VM* vm);
 
 #endif
