@@ -305,7 +305,13 @@ FIFO_Pixel popFIFO(FIFO* fifo) {
 void syncDisplay(VM* vm, unsigned int cycles) {
     /* We sync the display by running the PPU for the correct number of 
 	 * dots (1 dot = 1 tcycle in normal speed) */
+
+	/* About the infinite loop, it seems like im calling lockToFramerate every cycle 
+	 * instead of once per frame. Just keep incrementing cycles per frame to keep
+	 * track of frames and in the end reset it when ppu is enabled again */
+	printf("bro\n");
 	if (!vm->ppuEnabled) {
+		printf("oof\n");
 		lockToFramerate(vm);
 		return;
 	}

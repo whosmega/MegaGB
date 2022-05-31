@@ -291,6 +291,8 @@ int initSDL(VM* vm) {
 void handleSDLEvents(VM *vm) {
     /* We listen for events like keystrokes and window closing */
     SDL_Event event;
+	printf("handling\n");
+	usleep(250000);
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
 			/* We reset the corresponding bit for every scancode 
