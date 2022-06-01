@@ -235,6 +235,9 @@ void enablePPU(VM* vm) {
 
 	/* Skip first frame after LCD is turned on */
 	vm->skipFrame = true;
+
+    /* Reset frame counter so the whole emulator is again aligned with the PPU frames */
+    vm->cyclesSinceLastFrame = 0;
 }
 
 void disablePPU(VM* vm) {
@@ -249,14 +252,6 @@ void disablePPU(VM* vm) {
 
 	/* Set STAT mode to 0 */
 	switchModePPU(vm, PPU_MODE_0);
-	
-	/* Reset frame */
-	vm->cyclesSinceLastFrame = 0;
-
-	/* Make the screen go black */
-	SDL_SetRenderDrawColor(vm->sdl_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-	SDL_RenderClear(vm->sdl_renderer);
-	SDL_RenderPresent(vm->sdl_renderer);
 }
 
 /* -------------------- */
@@ -306,13 +301,17 @@ void syncDisplay(VM* vm, unsigned int cycles) {
     /* We sync the display by running the PPU for the correct number of 
 	 * dots (1 dot = 1 tcycle in normal speed) */
 
-	/* About the infinite loop, it seems like im calling lockToFramerate every cycle 
-	 * instead of once per frame. Just keep incrementing cycles per frame to keep
-	 * track of frames and in the end reset it when ppu is enabled again */
-	printf("bro\n");
 	if (!vm->ppuEnabled) {
-		printf("oof\n");
-		lockToFramerate(vm);
+        /* Keep locking to framerate even if PPU is off */
+        for (unsigned int i = 0; i < cycles; i++) {
+            vm->cyclesSinceLastFrame = 0;
+
+            if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
+                vm->cyclesSinceLastFrame = 0;
+		        lockToFramerate(vm);
+            }
+        }
+
 		return;
 	}
 

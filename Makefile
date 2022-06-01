@@ -1,13 +1,19 @@
+# megagbc
+
 CC = gcc
 CFLAGS = -O3 `sdl2-config --cflags`
 LFLAGS = -O3 `sdl2-config --libs`
 EXE = megagbc
 
-
 BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
+
+# test suite
+
+ASMFLAGS = -i debug/test_suite/
 
 $(EXE): $(BIN)
 	$(CC) $(BIN) $(LFLAGS) -o $(EXE)
+	mkdir -p bin
 	mv *.o bin
 
 cartridge.o : include/cartridge.h \
@@ -45,9 +51,26 @@ display.o : include/display.h \
 debug.o : include/vm.h include/debug.h \
 		 src/debug.c
 	$(CC) -c src/debug.c $(CFLAGS)
+# --------------------------------------------------------------------
+tests: joypad.o print.o
+	rgblink -o joypad.gb joypad.o print.o 
+	rgbfix -v -p 0xFF joypad.gb
+	
+	mkdir -p roms_bin
+	mv *.o roms_bin/
+	mkdir -p roms
+	mv *.gb roms/
+
+joypad.o :
+	rgbasm $(ASMFLAGS) -L -o joypad.o debug/test_suite/joypad.asm
+
+print.o :
+	rgbasm $(ASMFLAGS) -L -o print.o debug/test_suite/common/print.asm
 
 clean:
-	rm bin/*.o
+	rm -r bin
+	rm -r roms_bin
+	rm -r roms
 	rm megagbc
 	
 
