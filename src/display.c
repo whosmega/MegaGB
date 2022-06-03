@@ -11,6 +11,7 @@
 #include <stdbool.h>
 
 #include <SDL2/SDL.h>
+#include <stdint.h>
 
 static void lockToFramerate(VM* vm) {
 	/* The emulator keeps its speed accurate by locking to the framerate
@@ -25,7 +26,7 @@ static void lockToFramerate(VM* vm) {
 	 * because the emulator goes very fast 
 	 *
 	 * In special cases where the emulator needs to be able to go slower than the 
-	 * gba itself (for debugging), we add a special check */
+	 * gb itself (for debugging), we add a special check */
 
 #ifdef DEBUG_SUPPORT_SLOW_EMULATION
 	if (ticksElapsed < (1e6/DEFAULT_FRAMERATE)) {
@@ -123,42 +124,146 @@ static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 	}
 }
 
+static uint8_t* getCurrentFetcherTileData(VM* vm) {
+    /* Returns the tile data pointer (first of the 16 bytes) of the tile the fetcher is currently
+     * on by reading state from the emulator */
+
+    uint16_t tileMapBaseAddress = GET_BIT(vm->MEM[R_LCDC], 3) ? 0x1C00 : 0x1800; 
+    uint8_t useVramBank1 = GET_BIT(vm->fetcherTileAttributes, 3);
+                
+    /* Each row takes 2 bytes from the tile data of every tile per scanline
+     * which 2 bytes are taken is determined by the Y position of the fetcher,
+     * since each tile has a height of 8 pixels */
+            
+    uint8_t* vramBankPointer = NULL;
+    uint8_t* vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? (uint8_t*)&vm->vramBank : &vm->MEM[VRAM_N0_8KB];
+
+    /* Select which pointer to use to fetch tile data */
+    if (useVramBank1) {
+        /* Tile data from vram bank 1 */
+        vramBankPointer = (vm->MEM[R_VBK] == 0xFF) ? &vm->MEM[VRAM_N0_8KB] : (uint8_t*)&vm->vramBank;
+    } else {
+        vramBankPointer = vramBank0Pointer;
+    }
+            
+    uint8_t tileIndex = vramBank0Pointer[vm->fetcherTileAddress];
+    /* Find out the addressing method to use */
+            
+    bool method8k = GET_BIT(vm->MEM[R_LCDC], 4);
+
+    /* Use the tile index to get a pointer to the first byte of the 16 byte tile data */
+    uint8_t* tileData = NULL; 
+
+    if (method8k) {
+        /* $8000 method */
+        tileData = vramBankPointer + (tileIndex * 16);
+    } else {
+        /* $8800 method */
+        if (tileIndex < 128) {
+            /* Use $9000 as base pointer */
+            tileData = vramBankPointer + 0x1000 + (tileIndex * 16);
+        } else {
+            /* Use $8800 as base pointer */
+            tileData = vramBankPointer + 0x800 + (tileIndex * 16);
+        }
+    }
+
+    return tileData;
+}
+
 static void advanceFetcher(VM* vm) {
 	/* Defines the order of the tasks in the fetcher, 
 	* we reuse the sleep state as a way to consume 1 dot when required
 	* because the states usually take 2 dots and the fetcher is stepped every dot */
 
-	const FETCHER_STATE fetcherTasks[7] = {
+	const FETCHER_STATE fetcherTasks[8] = {
 		FETCHER_SLEEP,
 		FETCHER_GET_TILE,
 		FETCHER_SLEEP,
 		FETCHER_GET_DATA_LOW,
-		FETCHER_SLEEP,
-		FETCHER_SLEEP,
+        FETCHER_SLEEP,
+        FETCHER_GET_DATA_HIGH,
+        FETCHER_SLEEP,
 		FETCHER_PUSH			/* The amount of dots this takes isnt fixed */
 	};
 
 	/* Fetcher state machine to handle pixel FIFO */
 	switch (fetcherTasks[vm->currentFetcherTask]) {
 		case FETCHER_GET_TILE: {
-			
+            uint16_t tileMapBaseAddress;
+            
+            /* There are two tile maps, check which one to use */
+            if (GET_BIT(vm->MEM[R_LCDC], 3)) {
+                tileMapBaseAddress = 0x1C00; 
+            } else {
+                tileMapBaseAddress = 0x1800;
+            }
+            
+            uint8_t x = vm->fetcherX;
+            uint8_t y = vm->fetcherY;
+
+            vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
+            vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] :
+                                                                 vm->vramBank[vm->fetcherTileAddress];
+            // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
+            vm->currentFetcherTask++;
 			break;
 		}
 		case FETCHER_GET_DATA_LOW: {
-			
+            uint8_t* tileData = getCurrentFetcherTileData(vm);
+            
+            /* Now retrieve the lower byte of this row */
+            bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
+            uint8_t currentRowInTile = vm->fetcherY % 8;
+            
+            /* If the tile is flipped, we can get the vertically opposite row in the tile */
+            if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+            vm->fetcherTileRowLow = tileData[2 * currentRowInTile];
+            
+            vm->currentFetcherTask++;
 			break;
 		}
 		case FETCHER_GET_DATA_HIGH: {
+            /* Do the same as above but instead get the higher byte */
+            uint8_t* tileData = getCurrentFetcherTileData(vm);
+            bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
+            uint8_t currentRowInTile = vm->fetcherY % 8;
+
+            if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+            vm->fetcherTileRowHigh = tileData[(2 * currentRowInTile) + 1];
+            
+            /*
+            if (currentRowInTile == 7) {
+                for (int i = 0; i < 16; i++) {
+                    printf("%02x ", tileData[i]);
+                }
+                printf("\n");
+            }
+            */
+
+            vm->currentFetcherTask++;
 			break;
 		}	
-		case FETCHER_SLEEP: break;			/* Do nothing */
+		case FETCHER_SLEEP:
+            vm->currentFetcherTask++;
+            break;			/* Do nothing */
 		case FETCHER_PUSH: {
-			vm->currentFetcherTask = 0;
+            /* If the push was successful */
+            if (vm->BackgroundFIFO.count != 0) {
+                /* We cant push yet since all pixels havent been pushed to the LCD yet */
+                break;
+            }
+
+            /* Push pixels to FIFO */
+            for (int i = 0; i < 8; i++) {
+                /* TODO */
+            }
+            vm->fetcherX++;
+
+        	vm->currentFetcherTask = 0;
 			break;
 		}
-	}
-
-	vm->currentFetcherTask++;
+	}	
 }
 
 static void advancePPU(VM* vm) {
@@ -171,26 +276,39 @@ static void advancePPU(VM* vm) {
 			/* Do nothing for PPU mode 2 
 			 *
 			 * Beginning of new scanline */
-			if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) 
+			if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
 				switchModePPU(vm, PPU_MODE_3);
+            }
 
 			break;
 		case PPU_MODE_3:
 			/* Draw Pixels */
+            clearFIFO(&vm->BackgroundFIFO);
 			advanceFetcher(vm);
 
-			if (vm->cyclesSinceLastMode == 172)
+			if (vm->cyclesSinceLastMode == 160) {
+                /* tile pixel row over, reset fetcher X */
+                vm->fetcherX = 0;
 				switchModePPU(vm, PPU_MODE_0);
+            }
 
 			break;
 		case PPU_MODE_0: {
 			/* HBLANK */
-			if (vm->cyclesSinceLastMode == 204) {
+			if (vm->cyclesSinceLastMode == 216) {
 				/* End of scanline */
-				uint8_t nextScanlineNumber = (vm->cyclesSinceLastFrame / T_CYCLES_PER_SCANLINE) + 1;
-				if (nextScanlineNumber == 144) switchModePPU(vm, PPU_MODE_1);
+				uint8_t currentScanlineNumber = vm->cyclesSinceLastFrame / T_CYCLES_PER_SCANLINE;
+
+                /* Set fetcher Y */
+                vm->fetcherY++;
+				if (currentScanlineNumber == 144) {
+                    /* End of scanline */
+                    vm->fetcherY = 0;
+                    switchModePPU(vm, PPU_MODE_1);
+                    requestInterrupt(vm, INTERRUPT_VBLANK);
+                }
 				else switchModePPU(vm, PPU_MODE_2);
-			} else if (vm->cyclesSinceLastMode == 198) {
+			} else if (vm->cyclesSinceLastMode == 210) {
 				/* LY register gets incremented 6 dots before the *true* increment */
 				vm->MEM[R_LY]++;
 				updateSTAT(vm, STAT_UPDATE_LY_LYC);
@@ -199,8 +317,7 @@ static void advancePPU(VM* vm) {
 			break;
 		}
 		case PPU_MODE_1: {
-			/* VBLANK */
-			requestInterrupt(vm, INTERRUPT_VBLANK);	
+			/* VBLANK */	
 			/* LY Resets to 0 after 4 cycles on line 153 
 			 * LY=LYC Interrupt is triggered 12 cycles after line 153 begins */
 
@@ -300,7 +417,6 @@ FIFO_Pixel popFIFO(FIFO* fifo) {
 void syncDisplay(VM* vm, unsigned int cycles) {
     /* We sync the display by running the PPU for the correct number of 
 	 * dots (1 dot = 1 tcycle in normal speed) */
-
 	if (!vm->ppuEnabled) {
         /* Keep locking to framerate even if PPU is off */
         for (unsigned int i = 0; i < cycles; i++) {
@@ -319,7 +435,7 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 		vm->cyclesSinceLastFrame++;
 		
 		advancePPU(vm);	
-
+         
 		if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
 			/* End of frame */
 			vm->cyclesSinceLastFrame = 0;	

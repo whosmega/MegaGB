@@ -1251,7 +1251,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
 		/* Handle the case when VRAM has been locked by PPU */
-		if (vm->lockVRAM) return;
+		if (vm->lockVRAM) return; 
 	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
 		/* Handle the case when OAM has been locked by PPU */
 		if (vm->lockOAM) return;

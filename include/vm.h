@@ -113,6 +113,16 @@ struct VM {
 	bool skipFrame;							/* Skips a frame render */
 	FETCHER_STATE fetcherState;
 	uint8_t currentFetcherTask;
+    uint16_t fetcherTileAddress;            /* Address of the current tile the fetcher is on */
+    uint8_t fetcherTileAttributes;          /* Attributes of the current tile the fetcher is on */
+    uint8_t fetcherX;                       /* X coordinate of the tile in a row */
+    uint8_t fetcherY;                       /* Y coordinate of the tile in pixels */
+                                            /* Note: FetcherX and FetcherY do not reflect the 
+                                             * true coordinates of the tile row being rendered,
+                                             * scrolling is applied to these values and then
+                                             * they are used */
+    uint8_t fetcherTileRowLow;              /* Lower byte of the fetcher tile row data */
+    uint8_t fetcherTileRowHigh;             /* Upper .... */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */
 	unsigned int cyclesSinceLastMode;
 	bool lockVRAM;							/* Locks CPU from accessing VRAM */

@@ -1,8 +1,8 @@
 # megagbc
 
 CC = gcc
-CFLAGS = -O3 `sdl2-config --cflags`
-LFLAGS = -O3 `sdl2-config --libs`
+CFLAGS = -O2 `sdl2-config --cflags`
+LFLAGS = -O2 `sdl2-config --libs`
 EXE = megagbc
 
 BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
@@ -68,9 +68,9 @@ print.o :
 	rgbasm $(ASMFLAGS) -L -o print.o debug/test_suite/common/print.asm
 
 clean:
-	rm -r bin
-	rm -r roms_bin
-	rm -r roms
-	rm megagbc
+	rm -rf bin
+	rm -rf roms_bin
+	rm -rf roms
+	rm -f megagbc
 	
 

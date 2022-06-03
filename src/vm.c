@@ -54,6 +54,12 @@ static void initVM(VM* vm) {
 	vm->skipFrame = false;
 	vm->fetcherState = FETCHER_SLEEP;
 	vm->currentFetcherTask = 0;
+    vm->fetcherTileAddress = 0;
+    vm->fetcherTileAttributes = 0;
+    vm->fetcherX = 0;
+    vm->fetcherY = 0;
+    vm->fetcherTileRowLow = 0;
+    vm->fetcherTileRowHigh = 0;
 	/* When the PPU first starts up, it takes 4 cycles less on the first frame,
 	 * it also doesnt lock OAM */
     vm->cyclesSinceLastFrame = 0;		/* 4 on DMG */

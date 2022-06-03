@@ -6,7 +6,7 @@
 #define HEIGHT_PX 144
 #define WIDTH_PX  160
 
-#define FIFO_MAX_COUNT 16
+#define FIFO_MAX_COUNT 8
 
 #define T_CYCLES_PER_FRAME 70224
 #define T_CYCLES_PER_SCANLINE 456
