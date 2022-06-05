@@ -171,6 +171,51 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
     return tileData;
 }
 
+static inline uint8_t toRGB888(uint8_t rgb555) {
+    /* Input can be red, green or blue value of rgb 555 */
+    return (rgb555 << 5) | (rgb555 >> 2);
+}
+
+static void renderPixel(VM* vm) {
+    if (!vm->ppuEnabled) return;
+    if (vm->BackgroundFIFO.count == 0) return;
+
+    FIFO_Pixel pixel = popFIFO(&vm->BackgroundFIFO);
+   
+/*
+    for (int i = 0; i < 64; i++) {
+        printf("%02x ", vm->colorRAM[i]);
+    }
+
+
+    printf("\n");
+*/
+
+    uint8_t* palettePointer = &vm->colorRAM[pixel.colorPalette * 8];
+ 
+    /* Color is stored as little endian rgb555 */
+    uint8_t colorLow = palettePointer[pixel.colorID * 2];
+    uint8_t colorHigh = palettePointer[(pixel.colorID * 2) + 1];
+    // printf("ci %d cl %02x ch %02x cp %02x x %03d y %03d\n", pixel.colorID, colorLow, colorHigh, pixel.colorPalette, pixel.screenX, pixel.screenY);
+    uint16_t color = (colorHigh << 8) + colorLow;
+
+    /* We need to convert these values to rgb888 
+     * Source for conversion : https://stackoverflow.com/questions/4409763/how-to-convert-from-rgb555-to-rgb888-in-c*/
+
+
+    uint8_t r = toRGB888(color & 0b0000000000011111);
+    uint8_t g = toRGB888(color & 0b0000001111100000 >> 5);
+    uint8_t b = toRGB888(color & 0b0111110000000000 >> 10);
+    
+    // printf("c%04x p%d\n", color, pixel.colorPalette);
+    SDL_SetRenderDrawColor(vm->sdl_renderer, r, g, b, 255);
+    SDL_RenderDrawPoint(vm->sdl_renderer, pixel.screenX, pixel.screenY);
+
+    vm->lastRenderedPixelX = pixel.screenX;
+
+    // printf("rendered pixel at x%d\n", vm->lastRenderedPixelX);
+}
+
 static void advanceFetcher(VM* vm) {
 	/* Defines the order of the tasks in the fetcher, 
 	* we reuse the sleep state as a way to consume 1 dot when required
@@ -205,7 +250,7 @@ static void advanceFetcher(VM* vm) {
             vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
             vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] :
                                                                  vm->vramBank[vm->fetcherTileAddress];
-            // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
+            // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
             vm->currentFetcherTask++;
 			break;
 		}
@@ -232,8 +277,9 @@ static void advanceFetcher(VM* vm) {
             if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
             vm->fetcherTileRowHigh = tileData[(2 * currentRowInTile) + 1];
             
-            /*
+            /*         
             if (currentRowInTile == 7) {
+                printf("tile data for x%d\n", vm->fetcherX * 8);
                 for (int i = 0; i < 16; i++) {
                     printf("%02x ", tileData[i]);
                 }
@@ -241,6 +287,8 @@ static void advanceFetcher(VM* vm) {
             }
             */
 
+                
+    
             vm->currentFetcherTask++;
 			break;
 		}	
@@ -248,18 +296,33 @@ static void advanceFetcher(VM* vm) {
             vm->currentFetcherTask++;
             break;			/* Do nothing */
 		case FETCHER_PUSH: {
-            /* If the push was successful */
             if (vm->BackgroundFIFO.count != 0) {
                 /* We cant push yet since all pixels havent been pushed to the LCD yet */
                 break;
             }
 
-            /* Push pixels to FIFO */
-            for (int i = 0; i < 8; i++) {
-                /* TODO */
-            }
-            vm->fetcherX++;
+            uint8_t tileDataLow = vm->fetcherTileRowLow;
+            uint8_t tileDataHigh = vm->fetcherTileRowHigh;
 
+            /* Push pixels to FIFO */
+            for (int i = 1; i <= 8; i++) {
+                FIFO_Pixel pixel;
+                
+                /* Set color palette */
+                pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
+
+                uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
+                uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));
+                /* Set color ID */
+                // printf("ci %02d ", (lowerBit << 1) | higherBit);
+                pixel.colorID = (lowerBit << 1) | higherBit;
+                pixel.screenX = (vm->fetcherX * 8) + i - 1;
+                pixel.screenY = vm->fetcherY;
+                pushFIFO(&vm->BackgroundFIFO, pixel);
+
+            }
+            // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7); 
+            vm->fetcherX++;
         	vm->currentFetcherTask = 0;
 			break;
 		}
@@ -278,37 +341,56 @@ static void advancePPU(VM* vm) {
 			 * Beginning of new scanline */
 			if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
 				switchModePPU(vm, PPU_MODE_3);
+                /* clear fifo at the start of mode 3 */
+                clearFIFO(&vm->BackgroundFIFO);
             }
 
 			break;
 		case PPU_MODE_3:
-			/* Draw Pixels */
-            clearFIFO(&vm->BackgroundFIFO);
-			advanceFetcher(vm);
-
-			if (vm->cyclesSinceLastMode == 160) {
+            /* Mode 3 has a variable duration */
+			/* Draw Pixels */ 
+            
+			advanceFetcher(vm); 
+            renderPixel(vm);
+            
+            /* The last push should increment fetcher X to 20 
+             * We wont stop it at that exact moment because 
+             * they still have to be rendered, we wait till the last 
+             * rendered pixel was at X 160 */
+			if (vm->lastRenderedPixelX == 159) {
                 /* tile pixel row over, reset fetcher X */
                 vm->fetcherX = 0;
+
+                /* Because the renderer idles for 8 dots, we run mode 3 for 8 dots more 
+                 * this also means the fetcher has prepared an unecessary set of 8 pixels
+                 * that are waiting to be pushed, we can discard them and set the last
+                 * rendered pixel X to 0 so the next scanline continues the same way */
+                vm->lastRenderedPixelX = 0;
+                vm->fetcherState = FETCHER_SLEEP;
+                vm->currentFetcherTask = 0;
+
+                vm->hblankDuration = T_CYCLES_PER_SCANLINE - T_CYCLES_PER_MODE2 - vm->cyclesSinceLastMode;
 				switchModePPU(vm, PPU_MODE_0);
             }
 
 			break;
 		case PPU_MODE_0: {
 			/* HBLANK */
-			if (vm->cyclesSinceLastMode == 216) {
+			if (vm->cyclesSinceLastMode == vm->hblankDuration) {
 				/* End of scanline */
 				uint8_t currentScanlineNumber = vm->cyclesSinceLastFrame / T_CYCLES_PER_SCANLINE;
-
+                // printf("%d\n", currentScanlineNumber);
                 /* Set fetcher Y */
                 vm->fetcherY++;
 				if (currentScanlineNumber == 144) {
-                    /* End of scanline */
+                    /* End of scanline 
+                     * switch to vblank now */
                     vm->fetcherY = 0;
                     switchModePPU(vm, PPU_MODE_1);
                     requestInterrupt(vm, INTERRUPT_VBLANK);
                 }
 				else switchModePPU(vm, PPU_MODE_2);
-			} else if (vm->cyclesSinceLastMode == 210) {
+			} else if (vm->cyclesSinceLastMode == vm->hblankDuration - 6) {
 				/* LY register gets incremented 6 dots before the *true* increment */
 				vm->MEM[R_LY]++;
 				updateSTAT(vm, STAT_UPDATE_LY_LYC);
@@ -319,18 +401,21 @@ static void advancePPU(VM* vm) {
 		case PPU_MODE_1: {
 			/* VBLANK */	
 			/* LY Resets to 0 after 4 cycles on line 153 
-			 * LY=LYC Interrupt is triggered 12 cycles after line 153 begins */
-
+			 * LY=LYC Interrupt is triggered 12 cycles after line 153 begins */ 
 			unsigned cycleAtLYReset = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 4;	
 			unsigned cycleAtLYCInterrupt = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 12;
 			if (cycleAtLYReset != vm->cyclesSinceLastMode && vm->cyclesSinceLastMode % 
 					T_CYCLES_PER_SCANLINE == T_CYCLES_PER_SCANLINE - 6) {
 
 				/* LY register Increments 6 cycles before *true* LY, only when
-				 * the line is other than 153, because on line 153 it resets early */
-				vm->MEM[R_LY]++;
+				 * the line is other than 153, because on line 153 it resets early 
+                 * LY also stays 0 at the end of line 153 so dont increment when its 0 */
+                if (vm->MEM[R_LY] != 0) {
+				    vm->MEM[R_LY]++;
+                } 
 				updateSTAT(vm, STAT_UPDATE_LY_LYC);
 			} else if (vm->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) {
+                /* vblank has ended */
 				switchModePPU(vm, PPU_MODE_2);
 			} else if (vm->cyclesSinceLastMode == cycleAtLYReset) {
 				vm->MEM[R_LY] = 0;
@@ -346,8 +431,8 @@ static void advancePPU(VM* vm) {
 /* PPU Enable & Disable */
 
 void enablePPU(VM* vm) {
+    if (vm->ppuEnabled) return;
 	vm->ppuEnabled = true;
-
 	switchModePPU(vm, PPU_MODE_2);
 
 	/* Skip first frame after LCD is turned on */
@@ -358,6 +443,7 @@ void enablePPU(VM* vm) {
 }
 
 void disablePPU(VM* vm) {
+    if (!vm->ppuEnabled) return;
 	if (vm->ppuMode != PPU_MODE_1) {
 		/* This is dangerous for any game/rom to do on real hardware
 		 * as it can damage hardware */
@@ -433,7 +519,9 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 
 	for (unsigned int i = 0; i < cycles; i++) {
 		vm->cyclesSinceLastFrame++;
-		
+#ifdef DEBUG_PRINT_PPU
+        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d]\n", vm->ppuMode, vm->MEM[R_LY], vm->cyclesSinceLastFrame, vm->cyclesSinceLastMode, vm->BackgroundFIFO.count, vm->lastRenderedPixelX);
+#endif
 		advancePPU(vm);	
          
 		if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {

@@ -109,6 +109,9 @@ struct VM {
 	/* ---------------- PPU ---------------- */
 	FIFO BackgroundFIFO;
 	PPU_MODE ppuMode;
+    unsigned int hblankDuration;            /* HBlank duration depends on mode 3 duration,
+                                               this is set by mode 3 at every scanline to 
+                                               set the hblank wait cycle duration */
 	bool ppuEnabled;
 	bool skipFrame;							/* Skips a frame render */
 	FETCHER_STATE fetcherState;
@@ -123,6 +126,10 @@ struct VM {
                                              * they are used */
     uint8_t fetcherTileRowLow;              /* Lower byte of the fetcher tile row data */
     uint8_t fetcherTileRowHigh;             /* Upper .... */
+    uint8_t lastRenderedPixelX;             /* X coordinate of the last rendered pixel */
+    uint8_t colorRAM[64];                   /* 64 Byte long color ram which stores CGB palettes */
+    uint8_t currentCRAMIndex;               /* Current byte value in color ram which can be 
+                                               addressed by BCPD */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */
 	unsigned int cyclesSinceLastMode;
 	bool lockVRAM;							/* Locks CPU from accessing VRAM */

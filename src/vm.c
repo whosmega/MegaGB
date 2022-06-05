@@ -50,6 +50,7 @@ static void initVM(VM* vm) {
 	vm->lockOAM = true;
 	vm->lockPalettes = false;
 	vm->ppuMode = PPU_MODE_2;
+    vm->hblankDuration = 0;
 	vm->ppuEnabled = true;
 	vm->skipFrame = false;
 	vm->fetcherState = FETCHER_SLEEP;
@@ -60,10 +61,12 @@ static void initVM(VM* vm) {
     vm->fetcherY = 0;
     vm->fetcherTileRowLow = 0;
     vm->fetcherTileRowHigh = 0;
+    vm->lastRenderedPixelX = 0;
 	/* When the PPU first starts up, it takes 4 cycles less on the first frame,
 	 * it also doesnt lock OAM */
     vm->cyclesSinceLastFrame = 0;		/* 4 on DMG */
 	vm->cyclesSinceLastMode = 0;		/* ^^^^^^^^ */
+    vm->currentCRAMIndex = 0;
 
 	/* Initialise FIFO */
 	clearFIFO(&vm->BackgroundFIFO);

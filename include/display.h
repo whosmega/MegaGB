@@ -2,7 +2,7 @@
 #define megagbc_display_h
 #include <SDL2/SDL.h>
 
-#define DISPLAY_SCALING 3
+#define DISPLAY_SCALING 6
 #define HEIGHT_PX 144
 #define WIDTH_PX  160
 
@@ -46,6 +46,8 @@ typedef enum {
 } STAT_UPDATE_TYPE;
 
 typedef struct {
+    uint8_t screenX;
+    uint8_t screenY;
 	uint8_t colorID;
 	uint8_t colorPalette;
 	/* TODO - Add sprite and background priority */

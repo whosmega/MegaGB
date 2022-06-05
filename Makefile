@@ -52,10 +52,13 @@ debug.o : include/vm.h include/debug.h \
 		 src/debug.c
 	$(CC) -c src/debug.c $(CFLAGS)
 # --------------------------------------------------------------------
-tests: joypad.o print.o
+tests: joypad.o ppu_basic.o print.o
 	rgblink -o joypad.gb joypad.o print.o 
 	rgbfix -v -p 0xFF joypad.gb
 	
+	rgblink -o ppu_basic.gb ppu_basic.o print.o
+	rgbfix -v -p 0xFF ppu_basic.gb
+
 	mkdir -p roms_bin
 	mv *.o roms_bin/
 	mkdir -p roms
@@ -63,6 +66,9 @@ tests: joypad.o print.o
 
 joypad.o :
 	rgbasm $(ASMFLAGS) -L -o joypad.o debug/test_suite/joypad.asm
+
+ppu_basic.o :
+	rgbasm $(ASMFLAGS) -L -o ppu_basic.o debug/test_suite/ppu_basic.asm
 
 print.o :
 	rgbasm $(ASMFLAGS) -L -o print.o debug/test_suite/common/print.asm

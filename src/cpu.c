@@ -1214,7 +1214,40 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				return;
 			}
 			case R_BCPD:
-			case R_BCPS:
+                if (vm->lockPalettes) {
+                    if (GET_BIT(vm->MEM[R_BCPS], 7)) {
+                        /* If auto increment is enabled, writes to
+                         * BCPD increment the color ram index address 
+                         *
+                         * Note : This happens even if palettes are inaccessible */
+                        vm->currentCRAMIndex++;
+                        
+                        /* Wrap back to 0 if it exceeds 64 bytes */
+                        if (vm->currentCRAMIndex >= 0x40) {
+                            vm->currentCRAMIndex = 0;
+                        }
+                    }
+                    return;
+                }
+                
+                // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
+                vm->colorRAM[vm->currentCRAMIndex] = byte;
+                if (GET_BIT(vm->MEM[R_BCPS], 7)) {
+                    vm->currentCRAMIndex++;
+
+                    if (vm->currentCRAMIndex >= 0x40) {
+                        vm->currentCRAMIndex = 0;
+                    }
+                }
+                break;
+			case R_BCPS: {
+                if (vm->lockPalettes) return;
+                
+                /* Used to index color ram on CGB */
+                SET_BIT(byte, 6);           // bit 6 unused
+                vm->currentCRAMIndex = byte & 0b00111111;
+                break;
+            }
 			case R_OCPD:
 			case R_OCPS:
 				/* Handle the case when palettes have been locked by PPU */
@@ -1236,7 +1269,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				/* Bit 7 = LCD/PPU enable */
 				uint8_t lcdcBit7 = GET_BIT(vm->MEM[R_LCDC], 7);
 				uint8_t byteBit7 = GET_BIT(byte, 7);
-
+                
 				if (lcdcBit7 != byteBit7) {
 					if (byteBit7) {
 						/* Enable PPU */
@@ -1251,7 +1284,12 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
 		/* Handle the case when VRAM has been locked by PPU */
-		if (vm->lockVRAM) return; 
+		if (vm->lockVRAM) {
+            // printf("vram locked %02x %04x mode %d cy %d ly %d\n", byte, addr, vm->ppuMode, vm->cyclesSinceLastMode, vm->MEM[R_LY]); 
+            return;
+        }
+
+        // printf("vram allowed %02x %04x mode %d cy %d ly %d\n", byte, addr, vm->ppuMode, vm->cyclesSinceLastMode, vm->MEM[R_LY]);
 	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
 		/* Handle the case when OAM has been locked by PPU */
 		if (vm->lockOAM) return;
@@ -1273,7 +1311,10 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
             case R_TIMA :
             case R_TMA  :
             case R_TAC  : syncTimer(vm); break;
-			case R_BCPD:
+			case R_BCPD: {
+                if (vm->lockPalettes) return 0xFF;
+                return vm->colorRAM[vm->currentCRAMIndex];
+            }
 			case R_BCPS:
 			case R_OCPD:
 			case R_OCPS:

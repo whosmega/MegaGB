@@ -68,7 +68,7 @@ void printCBInstruction(VM* vm, uint8_t byte) {
 #ifdef DEBUG_PRINT_TIMERS
 	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
 #endif
-    printf(" %10s", "");
+    printf(" %5s", "");
 
     switch (byte) {
         case 0x00: return simpleInstruction(vm, "RLC B");
@@ -347,7 +347,7 @@ void printInstruction(VM* vm) {
 #ifdef DEBUG_PRINT_TIMERS
 	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
 #endif
-    printf(" %10s", "");
+    printf(" %5s", "");
   
     switch (vm->MEM[vm->PC]) {
         case 0x00: return simpleInstruction(vm, "NOP");

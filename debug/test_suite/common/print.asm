@@ -1,3 +1,4 @@
+INCLUDE "macros.inc"
 SECTION "print_asm", ROM0
 
 ; ------------------------------------------------------
