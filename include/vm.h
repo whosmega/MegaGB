@@ -114,7 +114,6 @@ struct VM {
                                                set the hblank wait cycle duration */
 	bool ppuEnabled;
 	bool skipFrame;							/* Skips a frame render */
-	FETCHER_STATE fetcherState;
 	uint8_t currentFetcherTask;
     uint16_t fetcherTileAddress;            /* Address of the current tile the fetcher is on */
     uint8_t fetcherTileAttributes;          /* Attributes of the current tile the fetcher is on */
@@ -126,6 +125,10 @@ struct VM {
                                              * they are used */
     uint8_t fetcherTileRowLow;              /* Lower byte of the fetcher tile row data */
     uint8_t fetcherTileRowHigh;             /* Upper .... */
+    bool firstTileInScanline;               /* Is true if the current tile the fetcher is on
+                                               is the first tile in the current scanline */
+    bool doOptionalPush;                    /* If set to true, the fetcher does a push on the second
+                                               dot */
     uint8_t lastRenderedPixelX;             /* X coordinate of the last rendered pixel */
     uint8_t colorRAM[64];                   /* 64 Byte long color ram which stores CGB palettes */
     uint8_t currentCRAMIndex;               /* Current byte value in color ram which can be 

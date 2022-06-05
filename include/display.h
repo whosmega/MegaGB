@@ -2,7 +2,7 @@
 #define megagbc_display_h
 #include <SDL2/SDL.h>
 
-#define DISPLAY_SCALING 6
+#define DISPLAY_SCALING 4
 #define HEIGHT_PX 144
 #define WIDTH_PX  160
 
@@ -32,7 +32,8 @@ typedef enum {
 	FETCHER_GET_DATA_LOW,
 	FETCHER_GET_DATA_HIGH,
 	FETCHER_SLEEP,
-	FETCHER_PUSH
+	FETCHER_PUSH,
+    FETCHER_OPTIONAL_PUSH
 } FETCHER_STATE;
 
 /* Different types of STAT updates */

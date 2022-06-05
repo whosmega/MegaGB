@@ -53,7 +53,8 @@ static void initVM(VM* vm) {
     vm->hblankDuration = 0;
 	vm->ppuEnabled = true;
 	vm->skipFrame = false;
-	vm->fetcherState = FETCHER_SLEEP;
+    vm->firstTileInScanline = true;
+    vm->doOptionalPush = false;
 	vm->currentFetcherTask = 0;
     vm->fetcherTileAddress = 0;
     vm->fetcherTileAttributes = 0;

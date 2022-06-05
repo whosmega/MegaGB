@@ -216,6 +216,31 @@ static void renderPixel(VM* vm) {
     // printf("rendered pixel at x%d\n", vm->lastRenderedPixelX);
 }
 
+static void pushPixels(VM* vm) {
+    uint8_t tileDataLow = vm->fetcherTileRowLow;
+    uint8_t tileDataHigh = vm->fetcherTileRowHigh;
+
+    /* Push pixels to FIFO */
+    for (int i = 1; i <= 8; i++) {
+        FIFO_Pixel pixel;
+                
+        /* Set color palette */
+        pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
+
+        uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
+        uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));
+        /* Set color ID */
+        // printf("ci %02d ", (lowerBit << 1) | higherBit);
+        pixel.colorID = (lowerBit << 1) | higherBit;
+        pixel.screenX = (vm->fetcherX * 8) + i - 1;
+        pixel.screenY = vm->fetcherY;
+        pushFIFO(&vm->BackgroundFIFO, pixel);
+
+    }
+    // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7); 
+    vm->fetcherX++;
+}
+
 static void advanceFetcher(VM* vm) {
 	/* Defines the order of the tasks in the fetcher, 
 	* we reuse the sleep state as a way to consume 1 dot when required
@@ -228,8 +253,12 @@ static void advanceFetcher(VM* vm) {
 		FETCHER_GET_DATA_LOW,
         FETCHER_SLEEP,
         FETCHER_GET_DATA_HIGH,
-        FETCHER_SLEEP,
-		FETCHER_PUSH			/* The amount of dots this takes isnt fixed */
+        FETCHER_PUSH,
+		FETCHER_OPTIONAL_PUSH			
+        /* The push is attempted on the first dot, if it succeeds, the second dot is slept 
+         * otherwise the push is retried on the second dot and then it indefinitely retries till
+         * the push can be made
+        */
 	};
 
 	/* Fetcher state machine to handle pixel FIFO */
@@ -287,45 +316,48 @@ static void advanceFetcher(VM* vm) {
             }
             */
 
-                
-    
+            if (vm->firstTileInScanline) {
+                vm->currentFetcherTask = 0;
+                vm->firstTileInScanline = false;
+                break;
+            }
+
+            /* We reset it on the 6th cycle itself instead of doing it on the 7th 
+             * because we only need to wait 6 dots in total */
+            if (vm->fetcherX > 19) {
+                /* Dont push if the pixel X coordinate exceeds 160 
+                 * we just reset it back to the top */
+                vm->currentFetcherTask = 0;
+                vm->fetcherX = 0;
+                break;
+            }
             vm->currentFetcherTask++;
 			break;
 		}	
 		case FETCHER_SLEEP:
             vm->currentFetcherTask++;
             break;			/* Do nothing */
-		case FETCHER_PUSH: {
+		case FETCHER_PUSH: { 
             if (vm->BackgroundFIFO.count != 0) {
                 /* We cant push yet since all pixels havent been pushed to the LCD yet */
+                vm->doOptionalPush = true;
+                vm->currentFetcherTask++;
                 break;
-            }
+            } 
 
-            uint8_t tileDataLow = vm->fetcherTileRowLow;
-            uint8_t tileDataHigh = vm->fetcherTileRowHigh;
-
-            /* Push pixels to FIFO */
-            for (int i = 1; i <= 8; i++) {
-                FIFO_Pixel pixel;
-                
-                /* Set color palette */
-                pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
-
-                uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
-                uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));
-                /* Set color ID */
-                // printf("ci %02d ", (lowerBit << 1) | higherBit);
-                pixel.colorID = (lowerBit << 1) | higherBit;
-                pixel.screenX = (vm->fetcherX * 8) + i - 1;
-                pixel.screenY = vm->fetcherY;
-                pushFIFO(&vm->BackgroundFIFO, pixel);
-
-            }
-            // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7); 
-            vm->fetcherX++;
-        	vm->currentFetcherTask = 0;
+            pushPixels(vm);
+            vm->doOptionalPush = false;
+        	vm->currentFetcherTask++;
 			break;
 		}
+        case FETCHER_OPTIONAL_PUSH: {
+            if (vm->doOptionalPush) {
+                pushPixels(vm);
+                vm->doOptionalPush = false;
+            }
+
+            vm->currentFetcherTask = 0;
+        }
 	}	
 }
 
@@ -343,32 +375,31 @@ static void advancePPU(VM* vm) {
 				switchModePPU(vm, PPU_MODE_3);
                 /* clear fifo at the start of mode 3 */
                 clearFIFO(&vm->BackgroundFIFO);
+
+                /* When the fetcher is on the first tile in a scanline,
+                 * it rolls back to task 0 after getting the higher
+                 * tile data, this consumes a total of 6 dots */ 
+                vm->firstTileInScanline = true;
             }
 
 			break;
 		case PPU_MODE_3:
             /* Mode 3 has a variable duration */
 			/* Draw Pixels */ 
-            
+
+            /* Because the renderer idles for 6 dots, we run mode 3 for 6 dots more 
+             * this also means that the fetcher has to idle (not push) for 6 dots while the renderer fully
+             * renders the last tile in the scanline */
 			advanceFetcher(vm); 
             renderPixel(vm);
             
-            /* The last push should increment fetcher X to 20 
-             * We wont stop it at that exact moment because 
-             * they still have to be rendered, we wait till the last 
-             * rendered pixel was at X 160 */
+            /* The last push should increment fetcher X to 20, the fetcher will reset back to 
+             * step 1 and not do anything for 1 tile after that (because mode 3 is still waiting
+             * for the rendering to complete which is delayed by 6 dots) as running it further
+             * will push uneeded pixels */
 			if (vm->lastRenderedPixelX == 159) {
-                /* tile pixel row over, reset fetcher X */
-                vm->fetcherX = 0;
-
-                /* Because the renderer idles for 8 dots, we run mode 3 for 8 dots more 
-                 * this also means the fetcher has prepared an unecessary set of 8 pixels
-                 * that are waiting to be pushed, we can discard them and set the last
-                 * rendered pixel X to 0 so the next scanline continues the same way */
+                /* tile pixel row over */ 
                 vm->lastRenderedPixelX = 0;
-                vm->fetcherState = FETCHER_SLEEP;
-                vm->currentFetcherTask = 0;
-
                 vm->hblankDuration = T_CYCLES_PER_SCANLINE - T_CYCLES_PER_MODE2 - vm->cyclesSinceLastMode;
 				switchModePPU(vm, PPU_MODE_0);
             }
