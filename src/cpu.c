@@ -190,7 +190,7 @@ void resetGBC(VM* vm) {
     }
 
     /* Reset all background colors to white (ffff) */
-    // memset(&vm->colorRAM, 0xFF, 64);
+    memset(&vm->colorRAM, 0xFF, 64);
 
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(vm);
