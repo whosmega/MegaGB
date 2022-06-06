@@ -190,7 +190,6 @@ static void renderPixel(VM* vm) {
 
     printf("\n");
 */
-
     uint8_t* palettePointer = &vm->colorRAM[pixel.colorPalette * 8];
  
     /* Color is stored as little endian rgb555 */
@@ -198,14 +197,14 @@ static void renderPixel(VM* vm) {
     uint8_t colorHigh = palettePointer[(pixel.colorID * 2) + 1];
     // printf("ci %d cl %02x ch %02x cp %02x x %03d y %03d\n", pixel.colorID, colorLow, colorHigh, pixel.colorPalette, pixel.screenX, pixel.screenY);
     uint16_t color = (colorHigh << 8) + colorLow;
-
+    
     /* We need to convert these values to rgb888 
      * Source for conversion : https://stackoverflow.com/questions/4409763/how-to-convert-from-rgb555-to-rgb888-in-c*/
 
 
     uint8_t r = toRGB888(color & 0b0000000000011111);
-    uint8_t g = toRGB888(color & 0b0000001111100000 >> 5);
-    uint8_t b = toRGB888(color & 0b0111110000000000 >> 10);
+    uint8_t g = toRGB888((color & 0b0000001111100000) >> 5);
+    uint8_t b = toRGB888((color & 0b0111110000000000) >> 10);
     
     // printf("c%04x p%d\n", color, pixel.colorPalette);
     SDL_SetRenderDrawColor(vm->sdl_renderer, r, g, b, 255);
@@ -273,8 +272,10 @@ static void advanceFetcher(VM* vm) {
                 tileMapBaseAddress = 0x1800;
             }
             
+            /* Fetcher X and Y are not the final x and y coordinates we get the tile from 
+             * First scrolling has to be calculated */
             uint8_t x = vm->fetcherX;
-            uint8_t y = vm->fetcherY;
+            uint8_t y = (uint16_t)(vm->fetcherY + vm->MEM[R_SCY]) & 0xFF;
 
             vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
             vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] :

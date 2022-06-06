@@ -189,6 +189,9 @@ void resetGBC(VM* vm) {
         vm->MEM[0xFF00 + i] = hreg_defaults[i];
     }
 
+    /* Reset all background colors to white (ffff) */
+    // memset(&vm->colorRAM, 0xFF, 64);
+
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(vm);
 }
@@ -1175,7 +1178,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				/* Perform Checks */
 				if ((byte & 0xF) != (vm->MEM[addr] & 0xF)) {
 					/* Attempt to write to read only area,
-					 * we ignore the value the user gave for the read only bits */
+					 * we ignore the value the rom gave for the read only bits */
 					byte &= 0xF;
 					byte |= vm->MEM[addr] & 0xF;
 				}
@@ -1379,11 +1382,6 @@ static void dispatchInterrupt(VM* vm, INTERRUPT interrupt) {
         default: break;
     }
 
-}
-
-static INTERRUPT getInterrupt(VM* vm) {
-
-	return -1;
 }
 
 static void handleInterrupts(VM* vm) {
