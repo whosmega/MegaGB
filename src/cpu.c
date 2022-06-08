@@ -182,16 +182,48 @@ void resetGBC(VM* vm) {
         0x91, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
         0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
     };
-
-    /* 0xFF50 to 0xFFFE = 0xFF */
-
+ 
     for (int i = 0x00; i < 0x50; i++) {
         vm->MEM[0xFF00 + i] = hreg_defaults[i];
     }
 
     /* Reset all background colors to white (ffff) */
     memset(&vm->colorRAM, 0xFF, 64);
+    /* 0xFF50 to 0xFFFE = 0xFF */
+    memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
+    INTERRUPT_MASTER_DISABLE(vm);
+}
 
+void resetGB(VM* vm) {
+    vm->PC = 0x0100;
+    set_reg16(vm, R16_SP, 0xFFFE);
+    vm->GPR[R8_A] = 0x01;
+    vm->GPR[R8_F] = 0xF0;
+    vm->GPR[R8_B] = 0x00;
+    vm->GPR[R8_C] = 0x13;
+    vm->GPR[R8_D] = 0x00;
+    vm->GPR[R8_E] = 0xD8;
+    vm->GPR[R8_H] = 0x01;
+    vm->GPR[R8_L] = 0x4D;
+
+    uint8_t hreg_defaults[80] = {
+        0xCF, 0x00, 0x7E, 0xFF, 0xAB, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xE1,                 // 0xFF08 - 0xFF0F
+        0x80, 0xBF, 0xF3, 0xFF, 0xBF, 0xFF, 0x3F, 0x00,                 // 0xFF10 - 0xFF17
+        0xFF, 0xBF, 0x7F, 0xFF, 0x9F, 0xFF, 0xBF, 0xFF,                 // 0xFF18 - 0xFF1F
+        0xFF, 0x00, 0x00, 0xBF, 0x77, 0xF3, 0xF1, 0xFF,                 // 0xFF20 - 0xFF27
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF28 - 0xFF2F
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF30 - 0xFF37
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF38 - 0xFF3F
+        0x91, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
+    };
+
+    for (int i = 0x00; i < 0x50; i++) {
+        vm->MEM[0xFF00 + i] = hreg_defaults[i];
+    }
+
+    /* 0xFF50 to 0xFFFE = 0xFF */
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(vm);
 }
@@ -1045,7 +1077,6 @@ static void jumpCondition(VM* vm, bool isTrue) {
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
     int8_t jumpCount = (int8_t)readByte_4C(vm);
-
     if (isTrue) {
         vm->PC += jumpCount;
 
@@ -1109,8 +1140,9 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         return;
     } else if ((addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) || 
             (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END)) {
-
+#ifdef DEBUG_MEM_LOGGING
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
+#endif
         return;
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* We perform some actions before writing in some 
@@ -1194,6 +1226,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				updateJoypadRegBuffer(vm, selected);
 				return;
 			case R_SVBK: {
+                if (vm->emuMode != EMU_CGB) return;
 				/* In CGB Mode, switch WRAM banks */
 				uint8_t oldBankNumber = vm->MEM[R_SVBK] & 0b00000111;
 				uint8_t bankNumber = byte & 0b00000111;
@@ -1205,18 +1238,20 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				return;	
 			}
 			case R_VBK: {
+                if (vm->emuMode != EMU_CGB) return;
 				/* In CGB Mode, switch VRAM banks 
-				 *
-				 * Only bit 0 matters */
+			     *
+			     * Only bit 0 matters */
 				uint8_t oldBankNumber = vm->MEM[R_VBK] & 1;
 				uint8_t bankNumber = byte & 1;
-				
+				    
 				switchCGB_VRAM(vm, oldBankNumber, bankNumber);
 				/* Ignore all bits other than bit 0 */
 				vm->MEM[R_VBK] = byte | ~1;
 				return;
 			}
 			case R_BCPD:
+                if (vm->emuMode != EMU_CGB) return;
                 if (vm->lockPalettes) {
                     if (GET_BIT(vm->MEM[R_BCPS], 7)) {
                         /* If auto increment is enabled, writes to
@@ -1244,6 +1279,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                 }
                 break;
 			case R_BCPS: {
+                if (vm->emuMode != EMU_CGB) return;
                 if (vm->lockPalettes) return;
                 
                 /* Used to index color ram on CGB */
@@ -1253,9 +1289,20 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
             }
 			case R_OCPD:
 			case R_OCPS:
+                if (vm->emuMode != EMU_CGB) return;
 				/* Handle the case when palettes have been locked by PPU */
 				if (vm->lockPalettes) return;
 				break;
+            case R_BGP: {
+                if (vm->emuMode != EMU_DMG) return;
+                if (vm->lockPalettes) return;
+                break;
+            }
+            case R_OBP0:
+            case R_OBP1:
+                if (vm->emuMode != EMU_DMG) return;
+                if (vm->lockPalettes) return;
+                break;
 			case R_STAT:
 				/* Bit 7 in STAT is unused so it has to always be 1.
 				 * Bit 2-0 are read only, and are left unchanged */
@@ -1772,7 +1819,7 @@ void dispatch(VM* vm) {
 			/* Normal Read */
 			byte = readByte_4C(vm);	
 		}
-	
+        
 		/* Do the dispatch */
         switch (byte) {
             // nop

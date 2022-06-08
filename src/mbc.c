@@ -56,7 +56,7 @@ void mbc_writeExternalRAM(VM* vm, uint16_t addr, uint8_t byte) {
     /* The address has already been identified as an external ram address
      * so we dont have to check */
     switch (vm->memControllerType) {
-        case MBC_NONE: log_fatal(vm, "Attempt to write to external RAM without MBC"); break;
+        case MBC_NONE: log_warning(vm, "Attempt to write to external RAM without MBC"); break;
         case MBC_TYPE_1: mbc1_writeExternalRAM(vm, addr, byte); break;
         case MBC_TYPE_2: mbc2_writeBuiltInRAM(vm, addr, byte); break;
         default: break;
@@ -65,19 +65,19 @@ void mbc_writeExternalRAM(VM* vm, uint16_t addr, uint8_t byte) {
 
 uint8_t mbc_readExternalRAM(VM* vm, uint16_t addr) {
     switch (vm->memControllerType) {
-        case MBC_NONE: log_fatal(vm, "Attempt to read from external RAM without MBC"); break;
+        case MBC_NONE: log_warning(vm, "Attempt to read from external RAM without MBC"); break;
         case MBC_TYPE_1: return mbc1_readExternalRAM(vm, addr);
         case MBC_TYPE_2: return mbc2_readBuiltInRAM(vm, addr);
-        default: return 0;
+        default: return 0xFF;
     }
 
-    return 0;
+    return 0xFF;
 }
 
 void mbc_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
     switch (vm->memControllerType) {
         case MBC_NONE: 
-            log_fatal(vm, "No MBC exists and write to ROM address doesn't make sense"); break;
+            log_warning(vm, "No MBC exists and write to ROM address doesn't make sense"); break;
 
         case MBC_TYPE_1: mbc1_interceptROMWrite(vm, addr, byte); break;
         case MBC_TYPE_2: mbc2_interceptROMWrite(vm, addr, byte); break;

@@ -43,6 +43,11 @@ typedef enum {
     INTERRUPT_ENABLE = 0xFFFF                   /* register which stores if interrupts are enabled */
 } MEM_ADDR;
 
+typedef enum {
+    EMU_DMG,                    /* Emulate gameboy */
+    EMU_CGB                     /* Emulate gameboy color */
+} EMULATION_MODE;
+
 /* Joypad key select modes */
 
 typedef enum {
@@ -67,6 +72,9 @@ typedef enum {
 #define R_SCX       0xFF43
 #define R_LY		0xFF44
 #define R_LYC		0xFF45
+#define R_BGP       0xFF47
+#define R_OBP0      0xFF48
+#define R_OBP1      0xFF49
 #define R_VBK		0xFF4F
 #define R_BCPS		0xFF68
 #define R_BCPD		0xFF69
@@ -87,6 +95,7 @@ struct VM {
 	JOYPAD_SELECT joypadSelectedMode;		
     /* -------------- Emulator ------------- */
     Cartridge* cartridge;
+    EMULATION_MODE emuMode;                 /* Which behaviour are we emulating, dmg, cgb, ect */
     bool run;                               /* A flag that when set to false, quits the emulator */
     bool IME;                               /* Interrupt Master Enable Flag */ 
     unsigned long lastDIVSync;              /* Holds the clock's state when DIV timer was last synced
@@ -104,9 +113,9 @@ struct VM {
 	bool scheduleHaltBug;				/* If set to true,the CPU recreates the halt bug */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
-	uint8_t wramBanks[0x1000 * 7];	     /* 7 Banks for WRAM when on CGB mode */
-	uint8_t vramBank[0x2000];			 /* Switchable VRAM Bank when on CGB mode */
-    void* memController;                 /* Memory Bank Controller */
+	uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
+	uint8_t* vramBank;			        /* Switchable VRAM Bank when on CGB mode */
+    void* memController;                /* Memory Bank Controller */
     MBC_TYPE memControllerType;
 	/* ---------------- PPU ---------------- */
 	FIFO BackgroundFIFO;
@@ -137,7 +146,7 @@ struct VM {
     uint8_t lastPushedPixelX;               /* X coordinate of the last pushed pixel */
     uint8_t scxOffsetForScanline;           /* Fixed offset or the lower 3 bits of scx during 
                                                the start of a scanline */
-    uint8_t colorRAM[64];                   /* 64 Byte long color ram which stores CGB palettes */
+    uint8_t* colorRAM;                      /* 64 Byte long color ram which stores CGB palettes */
     uint8_t currentCRAMIndex;               /* Current byte value in color ram which can be 
                                                addressed by BCPD */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */

@@ -30,18 +30,17 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
     uint8_t cgbCode = data[0x143];
 
     if (cgbCode == 0x80) {
-        c->cgbCode = CGB_LEGACY_MODE;
+        c->cgbCode = CGB_DMG_MODE;
     } else if (cgbCode == 0xC0) {
-        c->cgbCode = CGB_ONLY_MODE;
+        c->cgbCode = CGB_MODE;
     } else if ((cgbCode >> 7) && (((cgbCode >> 2) & 0x1) || ((cgbCode >> 3) & 0x1))) {
         /* If 7th bit is set and either 3rd or 2nd is set, then we have PGB mode
          * it isnt supported yet */
-        printf("Error : PGB mode isnt supported yet\n");
-        return false;
+        c->cgbCode = DMG_MODE;
     } else {
         
         /* This is probably an older cartridge */
-        c->cgbCode = CGB_LEGACY_MODE;
+        c->cgbCode = DMG_MODE;
     }
 
     /* New Licencee Code */
@@ -49,7 +48,10 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
     /* SGB functions arent supported, so we exit if we find
      * the cartridge requiring them */ 
     c->supportsSGB = data[0x146] == 0x03;
-
+    if (c->supportsSGB) {
+        printf("Error : SGB isnt supported yet\n");
+        return false;
+    }
     /* Set the cartridge type */
     c->cType = data[0x147];
     /* Set the rom size */
@@ -157,9 +159,9 @@ static char* toStrRamSize(RAM_SIZE code) {
 
 static char* toStrCGBCode(CGB_CODE code) {
     switch (code) {
-        case CGB_LEGACY_MODE: return "CGB + Legacy";
-        case CGB_ONLY_MODE: return "CGB";
-        case PGB_MODE: return "PGB";
+        case DMG_MODE: return "DMG";
+        case CGB_MODE: return "CGB";
+        case CGB_DMG_MODE: return "CGB + DMG";
     }
 }
 

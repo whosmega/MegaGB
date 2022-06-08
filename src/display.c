@@ -129,20 +129,32 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
      * on by reading state from the emulator */
 
     uint16_t tileMapBaseAddress = GET_BIT(vm->MEM[R_LCDC], 3) ? 0x1C00 : 0x1800; 
-    uint8_t useVramBank1 = GET_BIT(vm->fetcherTileAttributes, 3);
-                
+
     /* Each row takes 2 bytes from the tile data of every tile per scanline
      * which 2 bytes are taken is determined by the Y position of the fetcher,
      * since each tile has a height of 8 pixels */
-            
-    uint8_t* vramBankPointer = NULL;
-    uint8_t* vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? (uint8_t*)&vm->vramBank : &vm->MEM[VRAM_N0_8KB];
 
-    /* Select which pointer to use to fetch tile data */
-    if (useVramBank1) {
-        /* Tile data from vram bank 1 */
-        vramBankPointer = (vm->MEM[R_VBK] == 0xFF) ? &vm->MEM[VRAM_N0_8KB] : (uint8_t*)&vm->vramBank;
-    } else {
+    /* On CGB, Vram bank 0 pointer points to the bank 0 of the vram, while vram bank pointer 
+     * can point to either one (because which bank to fetch the tile from depends on 
+     * bg tile attributes) 
+     *
+     * On DMG, there is only 1 vram bank and therefore both variables will point to the same */
+    uint8_t* vramBankPointer = NULL;
+    uint8_t* vramBank0Pointer = NULL;
+
+    if (vm->emuMode == EMU_CGB) {
+        uint8_t useVramBank1 = GET_BIT(vm->fetcherTileAttributes, 3);    
+        vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? (uint8_t*)&vm->vramBank : &vm->MEM[VRAM_N0_8KB];
+
+        /* Select which pointer to use to fetch tile data */
+        if (useVramBank1) {
+            /* Tile data from vram bank 1 */
+            vramBankPointer = (vm->MEM[R_VBK] == 0xFF) ? &vm->MEM[VRAM_N0_8KB] : (uint8_t*)&vm->vramBank;
+        } else {
+            vramBankPointer = vramBank0Pointer;
+        }
+    } else if (vm->emuMode == EMU_DMG) {
+        vramBank0Pointer = &vm->MEM[VRAM_N0_8KB];
         vramBankPointer = vramBank0Pointer;
     }
             
@@ -176,20 +188,7 @@ static inline uint8_t toRGB888(uint8_t rgb555) {
     return (rgb555 << 5) | (rgb555 >> 2);
 }
 
-static void renderPixel(VM* vm) {
-    if (!vm->ppuEnabled) return;
-    if (vm->BackgroundFIFO.count == 0) return;
-
-    FIFO_Pixel pixel = popFIFO(&vm->BackgroundFIFO);
-   
-/*
-    for (int i = 0; i < 64; i++) {
-        printf("%02x ", vm->colorRAM[i]);
-    }
-
-
-    printf("\n");
-*/
+static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b) {
     uint8_t* palettePointer = &vm->colorRAM[pixel.colorPalette * 8];
  
     /* Color is stored as little endian rgb555 */
@@ -200,18 +199,74 @@ static void renderPixel(VM* vm) {
     
     /* We need to convert these values to rgb888 
      * Source for conversion : https://stackoverflow.com/questions/4409763/how-to-convert-from-rgb555-to-rgb888-in-c*/
-
-
-    uint8_t r = toRGB888(color & 0b0000000000011111);
-    uint8_t g = toRGB888((color & 0b0000001111100000) >> 5);
-    uint8_t b = toRGB888((color & 0b0111110000000000) >> 10);
-    
     // printf("c%04x p%d\n", color, pixel.colorPalette);
+
+    *r = toRGB888(color & 0b0000000000011111);
+    *g = toRGB888((color & 0b0000001111100000) >> 5);
+    *b = toRGB888((color & 0b0111110000000000) >> 10);
+
+    /*
+    for (int i = 0; i < 64; i++) {
+        printf("%02x ", vm->colorRAM[i]);
+    }
+
+
+    printf("\n");
+    */
+}
+
+static void getPixelColor_DMG(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b) {
+    uint8_t shade = (vm->MEM[R_BGP] >> (pixel.colorID * 2)) & 0b00000011;
+
+    switch (shade) {
+        case 0: {
+            /* White */
+            *r = 0xFF;
+            *g = 0xFF;
+            *b = 0xFF;
+            break;
+        }
+        case 1: {
+            /* Light Gray */
+            *r = 0xCF;
+            *g = 0xCF;
+            *b = 0xCF;
+            break;
+        }
+        case 2: {
+            /* Dark Gray */
+            *r = 0x8F;
+            *g = 0x8F;
+            *b = 0x8F;
+            break;
+        }
+        case 3: {
+            /* Black */
+            *r = 0x00;
+            *g = 0x00;
+            *b = 0x00;
+            break;
+        }
+    }
+}
+
+static void renderPixel(VM* vm) {
+    if (!vm->ppuEnabled) return;
+    if (vm->BackgroundFIFO.count == 0) return;
+    FIFO_Pixel pixel = popFIFO(&vm->BackgroundFIFO);
+   
+    uint8_t r, g, b = 0;  
+    
+    if (vm->emuMode == EMU_CGB) {
+        getPixelColor_CGB(vm, pixel, &r, &g, &b);
+    } else if (vm->emuMode == EMU_DMG) {
+        getPixelColor_DMG(vm, pixel, &r, &g, &b);
+    }
+    
     SDL_SetRenderDrawColor(vm->sdl_renderer, r, g, b, 255);
     SDL_RenderDrawPoint(vm->sdl_renderer, pixel.screenX, pixel.screenY);
 
     vm->lastRenderedPixelX = pixel.screenX;
-
     // printf("rendered pixel at x%d\n", vm->lastRenderedPixelX);
 }
 
@@ -235,11 +290,16 @@ static void pushPixels(VM* vm) {
         FIFO_Pixel pixel;
                 
         /* Set color palette */
-        pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
+        if (vm->emuMode == EMU_CGB) {
+            pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
+        } else if (vm->emuMode == EMU_DMG) {
+            pixel.colorPalette = 0;
+        }
 
         uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
         uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));
-        /* Set color ID */
+        /* Set color ID 
+         * We flip the lower and upper bits */
         // printf("ci %02d ", (lowerBit << 1) | higherBit);
         pixel.colorID = (lowerBit << 1) | higherBit;
         pixel.screenX = (vm->fetcherX * 8) + i - pixelsToDiscard - 1;
@@ -296,8 +356,13 @@ static void advanceFetcher(VM* vm) {
             uint8_t y = (uint16_t)(vm->fetcherY + vm->MEM[R_SCY]) & 0xFF;
 
             vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
-            vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] :
-                                                                 vm->vramBank[vm->fetcherTileAddress];
+
+            if (vm->emuMode == EMU_CGB) {
+                /* Handle tile attributes if on a CGB */
+                vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] : vm->vramBank[vm->fetcherTileAddress];
+            } else if (vm->emuMode == EMU_DMG) {
+                vm->fetcherTileAttributes = 0;
+            }
             // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
             vm->currentFetcherTask++;
 			break;
@@ -306,11 +371,13 @@ static void advanceFetcher(VM* vm) {
             uint8_t* tileData = getCurrentFetcherTileData(vm);
             
             /* Now retrieve the lower byte of this row */
-            bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
             uint8_t currentRowInTile = vm->fetcherY % 8;
-            
-            /* If the tile is flipped, we can get the vertically opposite row in the tile */
-            if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+
+            if (vm->emuMode == EMU_CGB) { 
+                bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6); 
+                /* If the tile is flipped, we can get the vertically opposite row in the tile */
+                if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+            }
             vm->fetcherTileRowLow = tileData[2 * currentRowInTile];
             
             vm->currentFetcherTask++;
@@ -318,11 +385,14 @@ static void advanceFetcher(VM* vm) {
 		}
 		case FETCHER_GET_DATA_HIGH: {
             /* Do the same as above but instead get the higher byte */
-            uint8_t* tileData = getCurrentFetcherTileData(vm);
-            bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
+            uint8_t* tileData = getCurrentFetcherTileData(vm); 
             uint8_t currentRowInTile = vm->fetcherY % 8;
 
-            if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+            if (vm->emuMode == EMU_CGB) {
+                bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
+                if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+            }
+
             vm->fetcherTileRowHigh = tileData[(2 * currentRowInTile) + 1];
             
             /*         

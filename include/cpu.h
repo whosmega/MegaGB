@@ -40,7 +40,8 @@ typedef enum {
 
 /* Resets the registers in the GBC */
 void resetGBC(struct VM* vm);
-
+/* Resets the registers in the GB */
+void resetGB(struct VM* vm);
 /* This function is invoked to run the CPU thread */
 void dispatch(struct VM* vm);
 

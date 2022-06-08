@@ -33,9 +33,9 @@ typedef enum {
 } OLD_LICENCEE_CODE;
 
 typedef enum {
-    CGB_LEGACY_MODE = 0x80,
-    CGB_ONLY_MODE = 0xC0,
-    PGB_MODE
+    DMG_MODE,
+    CGB_MODE,
+    CGB_DMG_MODE
 } CGB_CODE;
 
 typedef enum {
@@ -114,7 +114,6 @@ typedef struct {
     bool supportsSGB;                        /* Are SGB functions supported */
     uint8_t headerChecksum;                  /* A value computed beforehand, used by cpu to verify */
     uint8_t globalChecksum;                  /* Another kind of checksum, but doesnt get verified */
-
     bool inserted;
 } Cartridge;
 

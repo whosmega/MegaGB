@@ -17,6 +17,7 @@
 
 static void initVM(VM* vm) {
     vm->cartridge = NULL;
+    vm->emuMode = EMU_DMG;
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
     vm->run = false;
@@ -45,10 +46,35 @@ static void initVM(VM* vm) {
 	 * -> OAM isnt locked
 	 * -> cycle counters shouldnt be set to 0 but 4 for reasons described below 
 	 * -> No STAT checks are necessary because the inital value has already been set */
+    
+    if (vm->emuMode == EMU_CGB) {
+	    vm->lockVRAM = false;
+	    vm->lockOAM = true;
+	    vm->lockPalettes = false;
+        vm->cyclesSinceLastFrame = 0;
+        vm->cyclesSinceLastMode = 0;
 
-	vm->lockVRAM = false;
-	vm->lockOAM = true;
-	vm->lockPalettes = false;
+        /* CGB needs WRAM, VRAM and CRAM banks allocated */
+        vm->wramBanks = (uint8_t*)malloc(0x1000 * 7);
+        vm->vramBank = (uint8_t*)malloc(0x2000);
+        vm->colorRAM = (uint8_t*)malloc(64);
+
+        if (vm->wramBanks == NULL || vm->vramBank == NULL || vm->colorRAM == NULL) {
+            log_fatal(vm, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
+        }
+    } else if (vm->emuMode == EMU_DMG) {
+        /* When the PPU first starts up, it takes 4 cycles less on the first frame,
+	     * it also doesnt lock OAM */
+        vm->lockOAM = false;
+        vm->lockPalettes = false;
+        vm->lockVRAM = false;
+        vm->cyclesSinceLastFrame = 4;		/* 4 on DMG */
+	    vm->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */
+
+        vm->wramBanks = NULL;
+        vm->colorRAM = NULL;
+        vm->vramBank = NULL;
+    }
 	vm->ppuMode = PPU_MODE_2;
     vm->hblankDuration = 0;
 	vm->ppuEnabled = true;
@@ -66,10 +92,6 @@ static void initVM(VM* vm) {
     vm->lastPushedPixelX = 0;
     vm->pauseDotClock = 0;
     vm->scxOffsetForScanline = 0;
-	/* When the PPU first starts up, it takes 4 cycles less on the first frame,
-	 * it also doesnt lock OAM */
-    vm->cyclesSinceLastFrame = 0;		/* 4 on DMG */
-	vm->cyclesSinceLastMode = 0;		/* ^^^^^^^^ */
     vm->currentCRAMIndex = 0;
 
 	/* Initialise FIFO */
@@ -79,17 +101,20 @@ static void initVM(VM* vm) {
 	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
 	vm->joypadActionBuffer = 0xF;
 	vm->joypadDirectionBuffer = 0xF;
-
-    /* Set registers & flags to GBC specifics */
-    resetGBC(vm);
-
-	/* Set WRAM/VRAM banks if in CGB mode 
-	 * Because the default value of SVBK is 0xFF, which means bank 7 is selected 
-	 * by default 
-	 * Same goes for VBK, bank 1 will be selected by default*/
-	switchCGB_WRAM(vm, 1, 7);
-	switchCGB_VRAM(vm, 0, 1);
-
+    
+    if (vm->emuMode == EMU_CGB) {
+        /* Set registers & flags to GBC specifics */
+        resetGBC(vm);
+    
+	    /* Set WRAM/VRAM banks if in CGB mode 
+	    * Because the default value of SVBK is 0xFF, which means bank 7 is selected 
+	    * by default 
+	    * Same goes for VBK, bank 1 will be selected by default*/
+	    switchCGB_WRAM(vm, 1, 7);
+	    switchCGB_VRAM(vm, 0, 1);
+    } else if (vm->emuMode == EMU_DMG) {
+        resetGB(vm);
+    }
 }
 
 
@@ -450,10 +475,17 @@ void startEmulator(Cartridge* cartridge) {
     vm.cartridge = cartridge;
     vm.cartridge->inserted = true;
     
+    if (cartridge->cgbCode == CGB_MODE || cartridge->cgbCode == CGB_DMG_MODE) {
+        vm.emuMode = EMU_CGB;
+    } else if (cartridge->cgbCode == DMG_MODE) {
+        vm.emuMode = EMU_DMG;
+    }
+
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge); 
 #endif
 #ifdef DEBUG_LOGGING
+    printf("Emulation mode: %s\n", vm.emuMode == EMU_CGB ? "Gameboy Color" : vm.emuMode == EMU_DMG ? "Gameboy" : "");
     printf("Booting into ROM\n");
 #endif
     bootROM(&vm);
@@ -481,6 +513,14 @@ void stopEmulator(VM* vm) {
     freeSDL(vm);
     /* Free up MBC allocations */
     mbc_free(vm);
+    
+    if (vm->emuMode == EMU_CGB) {
+        /* Free memory allocated specifically for CGB */
+        free(vm->vramBank);
+        free(vm->wramBanks);
+        free(vm->colorRAM);
+    }
+
     /* Reset VM */
     initVM(vm);
 }

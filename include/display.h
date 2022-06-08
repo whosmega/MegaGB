@@ -50,7 +50,7 @@ typedef struct {
     uint8_t screenX;
     uint8_t screenY;
 	uint8_t colorID;
-	uint8_t colorPalette;
+	uint8_t colorPalette;                       /* CGB only */
 	/* TODO - Add sprite and background priority */
 } FIFO_Pixel;
 
