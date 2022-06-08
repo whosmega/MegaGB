@@ -63,6 +63,9 @@ static void initVM(VM* vm) {
     vm->fetcherTileRowLow = 0;
     vm->fetcherTileRowHigh = 0;
     vm->lastRenderedPixelX = 0;
+    vm->lastPushedPixelX = 0;
+    vm->pauseDotClock = 0;
+    vm->scxOffsetForScanline = 0;
 	/* When the PPU first starts up, it takes 4 cycles less on the first frame,
 	 * it also doesnt lock OAM */
     vm->cyclesSinceLastFrame = 0;		/* 4 on DMG */

@@ -131,7 +131,12 @@ struct VM {
                                                is the first tile in the current scanline */
     bool doOptionalPush;                    /* If set to true, the fetcher does a push on the second
                                                dot */
+    uint8_t pauseDotClock;                  /* If this is non zero, the ppu is paused for 
+                                               that many dots */
     uint8_t lastRenderedPixelX;             /* X coordinate of the last rendered pixel */
+    uint8_t lastPushedPixelX;               /* X coordinate of the last pushed pixel */
+    uint8_t scxOffsetForScanline;           /* Fixed offset or the lower 3 bits of scx during 
+                                               the start of a scanline */
     uint8_t colorRAM[64];                   /* 64 Byte long color ram which stores CGB palettes */
     uint8_t currentCRAMIndex;               /* Current byte value in color ram which can be 
                                                addressed by BCPD */

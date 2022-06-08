@@ -217,10 +217,21 @@ static void renderPixel(VM* vm) {
 
 static void pushPixels(VM* vm) {
     uint8_t tileDataLow = vm->fetcherTileRowLow;
-    uint8_t tileDataHigh = vm->fetcherTileRowHigh;
+    uint8_t tileDataHigh = vm->fetcherTileRowHigh; 
+    uint8_t pixelsToDiscard = vm->scxOffsetForScanline;
 
-    /* Push pixels to FIFO */
+    /* Push pixels to FIFO 
+     *
+     * When SCX % 8 != 0 at the start of the scanline,
+     * the extra pixels are stored and then used to adjust tile fetching
+     *
+     * On the first tile we skip the pixels which are not to be rendered for a tile
+     * and then continue rendering normally. This also means in the end we might not 
+     * fully render the rightmost tile, we exit the pushing when the last tile that can 
+     * be rendered is pushed, i.e screen X = 159*/
     for (int i = 1; i <= 8; i++) {
+        if (vm->fetcherX == 0 && i <= pixelsToDiscard) continue;
+
         FIFO_Pixel pixel;
                 
         /* Set color palette */
@@ -231,10 +242,15 @@ static void pushPixels(VM* vm) {
         /* Set color ID */
         // printf("ci %02d ", (lowerBit << 1) | higherBit);
         pixel.colorID = (lowerBit << 1) | higherBit;
-        pixel.screenX = (vm->fetcherX * 8) + i - 1;
+        pixel.screenX = (vm->fetcherX * 8) + i - pixelsToDiscard - 1;
         pixel.screenY = vm->fetcherY;
         pushFIFO(&vm->BackgroundFIFO, pixel);
 
+        /* When it reaches 159, the scanline is over */
+        vm->lastPushedPixelX = pixel.screenX;
+        /* Even if we didnt complete the tile, we need to exit after rendering the last pixel */
+        if (vm->lastPushedPixelX == 159) break;
+        
     }
     // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7); 
     vm->fetcherX++;
@@ -253,7 +269,7 @@ static void advanceFetcher(VM* vm) {
         FETCHER_SLEEP,
         FETCHER_GET_DATA_HIGH,
         FETCHER_PUSH,
-		FETCHER_OPTIONAL_PUSH			
+		FETCHER_OPTIONAL_PUSH,
         /* The push is attempted on the first dot, if it succeeds, the second dot is slept 
          * otherwise the push is retried on the second dot and then it indefinitely retries till
          * the push can be made
@@ -274,7 +290,9 @@ static void advanceFetcher(VM* vm) {
             
             /* Fetcher X and Y are not the final x and y coordinates we get the tile from 
              * First scrolling has to be calculated */
-            uint8_t x = vm->fetcherX;
+            uint8_t scx = vm->MEM[R_SCX] & ~0b00000111;         // clear the last 3 bits
+            uint8_t x = (scx/8 + vm->fetcherX); 
+            x &= 0x1F;                                          // wrap it around if it exceeds
             uint8_t y = (uint16_t)(vm->fetcherY + vm->MEM[R_SCY]) & 0xFF;
 
             vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
@@ -325,11 +343,12 @@ static void advanceFetcher(VM* vm) {
 
             /* We reset it on the 6th cycle itself instead of doing it on the 7th 
              * because we only need to wait 6 dots in total */
-            if (vm->fetcherX > 19) {
+            if (vm->lastPushedPixelX == 159) {
                 /* Dont push if the pixel X coordinate exceeds 160 
                  * we just reset it back to the top */
                 vm->currentFetcherTask = 0;
                 vm->fetcherX = 0;
+                vm->lastPushedPixelX = 0;
                 break;
             }
             vm->currentFetcherTask++;
@@ -374,6 +393,16 @@ static void advancePPU(VM* vm) {
 			 * Beginning of new scanline */
 			if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
 				switchModePPU(vm, PPU_MODE_3);
+            }
+
+			break;
+		case PPU_MODE_3:
+            if (vm->pauseDotClock > 0) {
+                vm->pauseDotClock--;
+                break;
+            }
+
+            if (vm->cyclesSinceLastMode == 1) {
                 /* clear fifo at the start of mode 3 */
                 clearFIFO(&vm->BackgroundFIFO);
 
@@ -381,28 +410,36 @@ static void advancePPU(VM* vm) {
                  * it rolls back to task 0 after getting the higher
                  * tile data, this consumes a total of 6 dots */ 
                 vm->firstTileInScanline = true;
+
+                /* If SCX % 8 is not zero at the start of a scanline, the ppu pauses for as many
+                 * dots as the remainder pixels,
+                 * we pause the first dot aswell */
+                uint8_t remainderPixels = vm->MEM[R_SCX] % 8;
+                vm->scxOffsetForScanline = vm->MEM[R_SCX] & 0b00000111;
+                vm->pauseDotClock = 0;
+
+                if (remainderPixels != 0) {
+                    vm->pauseDotClock = remainderPixels - 1;
+                    break;
+                }
+
             }
-
-			break;
-		case PPU_MODE_3:
             /* Mode 3 has a variable duration */
-			/* Draw Pixels */ 
-
             /* Because the renderer idles for 6 dots, we run mode 3 for 6 dots more 
              * this also means that the fetcher has to idle (not push) for 6 dots while the renderer fully
              * renders the last tile in the scanline */
 			advanceFetcher(vm); 
             renderPixel(vm);
-            
-            /* The last push should increment fetcher X to 20, the fetcher will reset back to 
-             * step 1 and not do anything for 1 tile after that (because mode 3 is still waiting
-             * for the rendering to complete which is delayed by 6 dots) as running it further
-             * will push uneeded pixels */
+            /* The last push should increment fetcher X to 20, after the last pixel in the scanline
+             * has been pushed, we wait for 6 more dots (because we need to wait for the renderer
+             * to finish which is 6 dots behind). At the end of the 6th dot itself, it resets back 
+             * to its initial state for the next scanline */
 			if (vm->lastRenderedPixelX == 159) {
                 /* tile pixel row over */ 
                 vm->lastRenderedPixelX = 0;
                 vm->hblankDuration = T_CYCLES_PER_SCANLINE - T_CYCLES_PER_MODE2 - vm->cyclesSinceLastMode;
-				switchModePPU(vm, PPU_MODE_0);
+
+				switchModePPU(vm, PPU_MODE_0); 
             }
 
 			break;
