@@ -33,48 +33,8 @@ static void initVM(VM* vm) {
     vm->sdl_window = NULL;
     vm->sdl_renderer = NULL;
 	vm->ticksAtLastRender = 0;
-	vm->ticksAtStartup = 0;
-	
-	/* UPDATE : The following is only true for DMG */
-	/* The STAT register is supposed to start with mode VBLANK,
-	 * (DMG has the first 4 cycles in vblank)
-	 * but we start with an initial value that has mode 2
-	 *
-	 * we also dont use the switch mode function because there are special conditions 
-	 * when the ppu is first started, 
-	 *
-	 * -> OAM isnt locked
-	 * -> cycle counters shouldnt be set to 0 but 4 for reasons described below 
-	 * -> No STAT checks are necessary because the inital value has already been set */
-    
-    if (vm->emuMode == EMU_CGB) {
-	    vm->lockVRAM = false;
-	    vm->lockOAM = true;
-	    vm->lockPalettes = false;
-        vm->cyclesSinceLastFrame = 0;
-        vm->cyclesSinceLastMode = 0;
-
-        /* CGB needs WRAM, VRAM and CRAM banks allocated */
-        vm->wramBanks = (uint8_t*)malloc(0x1000 * 7);
-        vm->vramBank = (uint8_t*)malloc(0x2000);
-        vm->colorRAM = (uint8_t*)malloc(64);
-
-        if (vm->wramBanks == NULL || vm->vramBank == NULL || vm->colorRAM == NULL) {
-            log_fatal(vm, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
-        }
-    } else if (vm->emuMode == EMU_DMG) {
-        /* When the PPU first starts up, it takes 4 cycles less on the first frame,
-	     * it also doesnt lock OAM */
-        vm->lockOAM = false;
-        vm->lockPalettes = false;
-        vm->lockVRAM = false;
-        vm->cyclesSinceLastFrame = 4;		/* 4 on DMG */
-	    vm->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */
-
-        vm->wramBanks = NULL;
-        vm->colorRAM = NULL;
-        vm->vramBank = NULL;
-    }
+	vm->ticksAtStartup = 0;	
+ 
 	vm->ppuMode = PPU_MODE_2;
     vm->hblankDuration = 0;
 	vm->ppuEnabled = true;
@@ -101,8 +61,46 @@ static void initVM(VM* vm) {
 	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
 	vm->joypadActionBuffer = 0xF;
 	vm->joypadDirectionBuffer = 0xF;
+}
+
+static void initVMCartridge(VM* vm, Cartridge* cartridge) {
+    /* UPDATE : The following is only true for DMG */
+	/* The STAT register is supposed to start with mode VBLANK,
+	 * (DMG has the first 4 cycles in vblank)
+	 * but we start with an initial value that has mode 2
+	 *
+	 * we also dont use the switch mode function because there are special conditions 
+	 * when the ppu is first started, 
+	 *
+	 * -> OAM isnt locked
+	 * -> cycle counters shouldnt be set to 0 but 4 for reasons described below 
+	 * -> No STAT checks are necessary because the inital value has already been set */
     
+    vm->cartridge = cartridge;
+    vm->cartridge->inserted = true;
+
+    if (cartridge->cgbCode == CGB_MODE || cartridge->cgbCode == CGB_DMG_MODE) {
+        vm->emuMode = EMU_CGB;
+    } else if (cartridge->cgbCode == DMG_MODE) {
+        vm->emuMode = EMU_DMG;
+    }
+
     if (vm->emuMode == EMU_CGB) {
+	    vm->lockVRAM = false;
+	    vm->lockOAM = true;
+	    vm->lockPalettes = false;
+        vm->cyclesSinceLastFrame = 0;
+        vm->cyclesSinceLastMode = 0;
+
+        /* CGB needs WRAM, VRAM and CRAM banks allocated */
+        vm->wramBanks = (uint8_t*)malloc(sizeof(uint8_t) * 0x1000 * 7);
+        vm->vramBank = (uint8_t*)malloc(sizeof(uint8_t) * 0x2000);
+        vm->colorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
+        
+        if (vm->wramBanks == NULL || vm->vramBank == NULL || vm->colorRAM == NULL) {
+            log_fatal(vm, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
+        }
+
         /* Set registers & flags to GBC specifics */
         resetGBC(vm);
     
@@ -113,10 +111,20 @@ static void initVM(VM* vm) {
 	    switchCGB_WRAM(vm, 1, 7);
 	    switchCGB_VRAM(vm, 0, 1);
     } else if (vm->emuMode == EMU_DMG) {
+        /* When the PPU first starts up, it takes 4 cycles less on the first frame,
+	     * it also doesnt lock OAM */
+        vm->lockOAM = false;
+        vm->lockPalettes = false;
+        vm->lockVRAM = false;
+        vm->cyclesSinceLastFrame = 4;		/* 4 on DMG */
+	    vm->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */ 
+        vm->wramBanks = NULL;
+        vm->colorRAM = NULL;
+        vm->vramBank = NULL;
+
         resetGB(vm);
     }
 }
-
 
 static void bootROM(VM* vm) {
     /* This is only a temporary boot rom function,
@@ -149,7 +157,8 @@ static void bootROM(VM* vm) {
     if ((checksum & 0xFF) != vm->cartridge->headerChecksum) {
         log_fatal(vm, "Header Checksum Doesn't Match, it is possibly corrupted");
     }
-#endif
+#endif 
+
     /* Map the cartridge rom to the GBC rom space 
      * occupying bank 0 and 1, a total of 32 KB*/
     memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
@@ -460,7 +469,7 @@ void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode) {
 void startEmulator(Cartridge* cartridge) {
     VM vm;
     initVM(&vm);
-
+    initVMCartridge(&vm, cartridge);
     /* Start up SDL */
     int status = initSDL(&vm);
     if (status != 0) {
@@ -470,16 +479,7 @@ void startEmulator(Cartridge* cartridge) {
          * and we immediately quit */
         log_fatal(&vm, "Error Starting SDL2");
         return;
-    }
-    /* Load the cartridge */
-    vm.cartridge = cartridge;
-    vm.cartridge->inserted = true;
-    
-    if (cartridge->cgbCode == CGB_MODE || cartridge->cgbCode == CGB_DMG_MODE) {
-        vm.emuMode = EMU_CGB;
-    } else if (cartridge->cgbCode == DMG_MODE) {
-        vm.emuMode = EMU_DMG;
-    }
+    } 
 
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge); 

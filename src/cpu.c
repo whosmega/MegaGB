@@ -188,7 +188,7 @@ void resetGBC(VM* vm) {
     }
 
     /* Reset all background colors to white (ffff) */
-    memset(&vm->colorRAM, 0xFF, 64);
+    memset(vm->colorRAM, 0xFF, 64);
     /* 0xFF50 to 0xFFFE = 0xFF */
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(vm);
@@ -221,6 +221,11 @@ void resetGB(VM* vm) {
 
     for (int i = 0x00; i < 0x50; i++) {
         vm->MEM[0xFF00 + i] = hreg_defaults[i];
+    }
+
+    if (vm->emuMode == EMU_DMG) {
+        /* On a DMG, the value of F depends on the header checksum */
+        vm->GPR[R8_F] = vm->cartridge->headerChecksum == 0 ? 0xF0 : 0xB0;
     }
 
     /* 0xFF50 to 0xFFFE = 0xFF */
@@ -1307,7 +1312,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				/* Bit 7 in STAT is unused so it has to always be 1.
 				 * Bit 2-0 are read only, and are left unchanged */
 				SET_BIT(byte, 7);
-				
+			    	
 				/* Clear last 3 bits */
 				byte &= ~0x7;
 				/* Set the last 3 bits of STAT to byte */
@@ -1329,6 +1334,10 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 						disablePPU(vm);
 					}
 				}
+                
+                if (vm->MEM[R_LY] == 10) {
+                    printf("%02x\n", byte);
+                }
 				break;
 			}
         }
@@ -1428,7 +1437,6 @@ static void dispatchInterrupt(VM* vm, INTERRUPT interrupt) {
 
         default: break;
     }
-
 }
 
 static void handleInterrupts(VM* vm) {

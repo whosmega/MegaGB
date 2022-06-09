@@ -42,7 +42,7 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 	/* This function updates the STAT register depending on the type of update 
 	 * that is requested */
 
-#define SWITCH_MODE(mode) vm->MEM[R_STAT] &= 0x3; \
+#define SWITCH_MODE(mode) vm->MEM[R_STAT] &= ~0x3; \
 						  vm->MEM[R_STAT] |= mode
 
 	switch (type) {
@@ -50,7 +50,7 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 			if (vm->MEM[R_LY] == vm->MEM[R_LYC]) {
 				/* Set bit 2 */
 				SET_BIT(vm->MEM[R_STAT], 2);
-	
+	            
 				if (GET_BIT(vm->MEM[R_STAT], 6)) {
 					/* If bit 6 is set, we can trigger the STAT interrupt */
 					requestInterrupt(vm, INTERRUPT_LCD_STAT);
@@ -63,7 +63,6 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 		case STAT_UPDATE_SWITCH_MODE0:
 			/* Switch to mode 0 */
 			SWITCH_MODE(PPU_MODE_0);
-
 			if (GET_BIT(vm->MEM[R_STAT], 3)) {
 				/* If mode 0 interrupt source is enabled */
 				requestInterrupt(vm, INTERRUPT_LCD_STAT);
@@ -144,12 +143,12 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
 
     if (vm->emuMode == EMU_CGB) {
         uint8_t useVramBank1 = GET_BIT(vm->fetcherTileAttributes, 3);    
-        vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? (uint8_t*)&vm->vramBank : &vm->MEM[VRAM_N0_8KB];
+        vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? vm->vramBank : &vm->MEM[VRAM_N0_8KB];
 
         /* Select which pointer to use to fetch tile data */
         if (useVramBank1) {
             /* Tile data from vram bank 1 */
-            vramBankPointer = (vm->MEM[R_VBK] == 0xFF) ? &vm->MEM[VRAM_N0_8KB] : (uint8_t*)&vm->vramBank;
+            vramBankPointer = (vm->MEM[R_VBK] == 0xFF) ? &vm->MEM[VRAM_N0_8KB] : vm->vramBank;
         } else {
             vramBankPointer = vramBank0Pointer;
         }
@@ -190,7 +189,6 @@ static inline uint8_t toRGB888(uint8_t rgb555) {
 
 static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b) {
     uint8_t* palettePointer = &vm->colorRAM[pixel.colorPalette * 8];
- 
     /* Color is stored as little endian rgb555 */
     uint8_t colorLow = palettePointer[pixel.colorID * 2];
     uint8_t colorHigh = palettePointer[(pixel.colorID * 2) + 1];
@@ -201,7 +199,7 @@ static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
      * Source for conversion : https://stackoverflow.com/questions/4409763/how-to-convert-from-rgb555-to-rgb888-in-c*/
     // printf("c%04x p%d\n", color, pixel.colorPalette);
 
-    *r = toRGB888(color & 0b0000000000011111);
+    *r = toRGB888((color & 0b0000000000011111));
     *g = toRGB888((color & 0b0000001111100000) >> 5);
     *b = toRGB888((color & 0b0111110000000000) >> 10);
 
@@ -216,45 +214,41 @@ static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
 }
 
 static void getPixelColor_DMG(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b) {
-    uint8_t shade = (vm->MEM[R_BGP] >> (pixel.colorID * 2)) & 0b00000011;
+    uint8_t shadeId = (vm->MEM[R_BGP] >> (pixel.colorID * 2)) & 0b00000011;
+    uint8_t shade = 0x00;
 
-    switch (shade) {
+    switch (shadeId) {
         case 0: {
             /* White */
-            *r = 0xFF;
-            *g = 0xFF;
-            *b = 0xFF;
+            shade = 0xFF;
             break;
         }
         case 1: {
             /* Light Gray */
-            *r = 0xCF;
-            *g = 0xCF;
-            *b = 0xCF;
+            shade = 0xCF;
             break;
         }
         case 2: {
             /* Dark Gray */
-            *r = 0x8F;
-            *g = 0x8F;
-            *b = 0x8F;
+            shade = 0x8F;
             break;
         }
         case 3: {
             /* Black */
-            *r = 0x00;
-            *g = 0x00;
-            *b = 0x00;
+            shade = 0x00;
             break;
         }
     }
+
+    *r = shade;
+    *g = shade;
+    *b = shade;
 }
 
 static void renderPixel(VM* vm) {
     if (!vm->ppuEnabled) return;
     if (vm->BackgroundFIFO.count == 0) return;
     FIFO_Pixel pixel = popFIFO(&vm->BackgroundFIFO);
-   
     uint8_t r, g, b = 0;  
     
     if (vm->emuMode == EMU_CGB) {
@@ -288,20 +282,24 @@ static void pushPixels(VM* vm) {
         if (vm->fetcherX == 0 && i <= pixelsToDiscard) continue;
 
         FIFO_Pixel pixel;
-                
-        /* Set color palette */
+        uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
+        uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));   
+
+        /* Set color palette & color ID */
         if (vm->emuMode == EMU_CGB) {
             pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
+            pixel.colorID = (higherBit << 1) | lowerBit;
         } else if (vm->emuMode == EMU_DMG) {
             pixel.colorPalette = 0;
+            
+            /* On DMG, if background/window is disabled through lcdc, bgp color 0 is rendered */
+            if (GET_BIT(vm->MEM[R_LCDC], 0)) {
+                pixel.colorID = (higherBit << 1) | lowerBit;
+            } else {
+                pixel.colorID = 0;
+            }
         }
-
-        uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
-        uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));
-        /* Set color ID 
-         * We flip the lower and upper bits */
-        // printf("ci %02d ", (lowerBit << 1) | higherBit);
-        pixel.colorID = (lowerBit << 1) | higherBit;
+        
         pixel.screenX = (vm->fetcherX * 8) + i - pixelsToDiscard - 1;
         pixel.screenY = vm->fetcherY;
         pushFIFO(&vm->BackgroundFIFO, pixel);
