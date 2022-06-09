@@ -225,12 +225,12 @@ static void getPixelColor_DMG(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
         }
         case 1: {
             /* Light Gray */
-            shade = 0xCF;
+            shade = 0xAA;
             break;
         }
         case 2: {
             /* Dark Gray */
-            shade = 0x8F;
+            shade = 0x55;
             break;
         }
         case 3: {

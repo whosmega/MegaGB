@@ -49,8 +49,8 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
      * the cartridge requiring them */ 
     c->supportsSGB = data[0x146] == 0x03;
     if (c->supportsSGB) {
-        printf("Error : SGB isnt supported yet\n");
-        return false;
+        // printf("Error : SGB isnt supported yet\n");
+        // return false;
     }
     /* Set the cartridge type */
     c->cType = data[0x147];

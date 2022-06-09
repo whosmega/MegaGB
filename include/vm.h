@@ -75,6 +75,8 @@ typedef enum {
 #define R_BGP       0xFF47
 #define R_OBP0      0xFF48
 #define R_OBP1      0xFF49
+#define R_WY        0xFF4A
+#define R_WX        0xFF4B
 #define R_VBK		0xFF4F
 #define R_BCPS		0xFF68
 #define R_BCPD		0xFF69
@@ -138,6 +140,9 @@ struct VM {
     uint8_t fetcherTileRowHigh;             /* Upper .... */
     bool firstTileInScanline;               /* Is true if the current tile the fetcher is on
                                                is the first tile in the current scanline */
+    uint8_t windowYCounter;                 /* Internal window Y counter, it counts the current 
+                                               Y coordinate of the window scanline */
+    bool lyWasWY;                           /* Set to true when LY = WY, reset every frame */
     bool doOptionalPush;                    /* If set to true, the fetcher does a push on the second
                                                dot */
     uint8_t pauseDotClock;                  /* If this is non zero, the ppu is paused for 
