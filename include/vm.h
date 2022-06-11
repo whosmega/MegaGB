@@ -143,14 +143,16 @@ struct VM {
     uint8_t windowYCounter;                 /* Internal window Y counter, it counts the current 
                                                Y coordinate of the window scanline */
     bool lyWasWY;                           /* Set to true when LY = WY, reset every frame */
+    bool renderingWindow;
     bool doOptionalPush;                    /* If set to true, the fetcher does a push on the second
                                                dot */
     uint8_t pauseDotClock;                  /* If this is non zero, the ppu is paused for 
                                                that many dots */
-    uint8_t lastRenderedPixelX;             /* X coordinate of the last rendered pixel */
-    uint8_t lastPushedPixelX;               /* X coordinate of the last pushed pixel */
-    uint8_t scxOffsetForScanline;           /* Fixed offset or the lower 3 bits of scx during 
-                                               the start of a scanline */
+    uint8_t nextRenderPixelX;             /* X coordinate of the next pixel to be rendered */
+    uint8_t nextPushPixelX;               /* X coordinate of the next pixel to be pushed */
+    uint8_t pixelsToDiscard;                /* Fixed offset of pixels to discard at start of a
+                                             * scanline. This is decided by the lower 3 bits of 
+                                             * SCX for BG tiles and when WX < 7 for window tiles */
     uint8_t* colorRAM;                      /* 64 Byte long color ram which stores CGB palettes */
     uint8_t currentCRAMIndex;               /* Current byte value in color ram which can be 
                                                addressed by BCPD */

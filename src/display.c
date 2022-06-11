@@ -125,7 +125,9 @@ static inline void switchModePPU(VM* vm, PPU_MODE mode) {
 
 static uint8_t* getCurrentFetcherTileData(VM* vm) {
     /* Returns the tile data pointer (first of the 16 bytes) of the tile the fetcher is currently
-     * on by reading state from the emulator */
+     * on by reading state from the emulator 
+     *
+     * can be BG or window */
 
     uint16_t tileMapBaseAddress = GET_BIT(vm->MEM[R_LCDC], 3) ? 0x1C00 : 0x1800; 
 
@@ -140,11 +142,11 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
      * On DMG, there is only 1 vram bank and therefore both variables will point to the same */
     uint8_t* vramBankPointer = NULL;
     uint8_t* vramBank0Pointer = NULL;
-
+    
     if (vm->emuMode == EMU_CGB) {
         uint8_t useVramBank1 = GET_BIT(vm->fetcherTileAttributes, 3);    
         vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? vm->vramBank : &vm->MEM[VRAM_N0_8KB];
-
+    
         /* Select which pointer to use to fetch tile data */
         if (useVramBank1) {
             /* Tile data from vram bank 1 */
@@ -156,6 +158,7 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
         vramBank0Pointer = &vm->MEM[VRAM_N0_8KB];
         vramBankPointer = vramBank0Pointer;
     }
+
             
     uint8_t tileIndex = vramBank0Pointer[vm->fetcherTileAddress];
     /* Find out the addressing method to use */
@@ -184,7 +187,7 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
 
 static inline uint8_t toRGB888(uint8_t rgb555) {
     /* Input can be red, green or blue value of rgb 555 */
-    return (rgb555 << 5) | (rgb555 >> 2);
+    return (rgb555 << 3) | (rgb555 >> 2);
 }
 
 static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b) {
@@ -260,15 +263,15 @@ static void renderPixel(VM* vm) {
     SDL_SetRenderDrawColor(vm->sdl_renderer, r, g, b, 255);
     SDL_RenderDrawPoint(vm->sdl_renderer, pixel.screenX, pixel.screenY);
 
-    vm->lastRenderedPixelX = pixel.screenX;
-    // printf("rendered pixel at x%d\n", vm->lastRenderedPixelX);
+    vm->nextRenderPixelX = pixel.screenX + 1;
+    // printf("rendered pixel at x%d\n", pixel.screenX);
 }
 
 static void pushPixels(VM* vm) {
     uint8_t tileDataLow = vm->fetcherTileRowLow;
     uint8_t tileDataHigh = vm->fetcherTileRowHigh; 
-    uint8_t pixelsToDiscard = vm->scxOffsetForScanline;
-
+    uint8_t pixelsToDiscard = vm->pixelsToDiscard;
+    bool switchedToWindowRender = false;
     /* Push pixels to FIFO 
      *
      * When SCX % 8 != 0 at the start of the scanline,
@@ -279,11 +282,41 @@ static void pushPixels(VM* vm) {
      * fully render the rightmost tile, we exit the pushing when the last tile that can 
      * be rendered is pushed, i.e screen X = 159*/
     for (int i = 1; i <= 8; i++) {
+        if (GET_BIT(vm->MEM[R_LCDC], 5) && 
+            vm->lyWasWY && ((vm->fetcherX * 8) + i - 1 == vm->MEM[R_WX] - 7)) {
+            /* Window layer is enabled, and the current pixel to render is a window 
+             * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow 
+             * as the BG fetch is aborted
+             */
+            uint8_t fx = vm->fetcherX;
+            vm->renderingWindow = true;
+            clearFIFO(&vm->BackgroundFIFO);
+            vm->fetcherX = 0;
+            switchedToWindowRender = true;
+            /* We set the fetcher task to 1 because the fetcher is supposed to switch to 
+             * window rendering immediately after the last bg pixel in the row is pushed,
+             * we're detecting that the next pixel is a window pixel one cycle after the last 
+             * bg push (or this is the first cycle anyway if the window tile is the first tile)
+             * This means the current cycle does the job of sleeping automatically */
+            vm->currentFetcherTask = 1;
+            vm->pixelsToDiscard = 0;
+
+            if (vm->MEM[R_WX] <= 7) {
+                vm->pixelsToDiscard = 7 - vm->MEM[R_WX];
+            }
+            break;
+        }
+
+        /* This would work for BG tiles and Window tiles both as when fetcherX is set to 0 
+         * after switching to window mode, pixelsToDiscard is also automatically set to the
+         * correct value */
         if (vm->fetcherX == 0 && i <= pixelsToDiscard) continue;
 
         FIFO_Pixel pixel;
-        uint8_t higherBit = GET_BIT(tileDataHigh, (8 - i));
-        uint8_t lowerBit = GET_BIT(tileDataLow, (8 - i));   
+        /* Check for horizontal bit flip */
+        uint8_t index = GET_BIT(vm->fetcherTileAttributes, 5) ? i - 1 : 8 - i;
+        uint8_t higherBit = GET_BIT(tileDataHigh, index);
+        uint8_t lowerBit = GET_BIT(tileDataLow, index);   
 
         /* Set color palette & color ID */
         if (vm->emuMode == EMU_CGB) {
@@ -291,7 +324,7 @@ static void pushPixels(VM* vm) {
             pixel.colorID = (higherBit << 1) | lowerBit;
         } else if (vm->emuMode == EMU_DMG) {
             pixel.colorPalette = 0;
-            
+           
             /* On DMG, if background/window is disabled through lcdc, bgp color 0 is rendered */
             if (GET_BIT(vm->MEM[R_LCDC], 0)) {
                 pixel.colorID = (higherBit << 1) | lowerBit;
@@ -299,19 +332,19 @@ static void pushPixels(VM* vm) {
                 pixel.colorID = 0;
             }
         }
-        
-        pixel.screenX = (vm->fetcherX * 8) + i - pixelsToDiscard - 1;
+
+        pixel.screenX = vm->nextPushPixelX;
         pixel.screenY = vm->fetcherY;
         pushFIFO(&vm->BackgroundFIFO, pixel);
 
         /* When it reaches 159, the scanline is over */
-        vm->lastPushedPixelX = pixel.screenX;
+        vm->nextPushPixelX++;
         /* Even if we didnt complete the tile, we need to exit after rendering the last pixel */
-        if (vm->lastPushedPixelX == 159) break;
+        if (vm->nextPushPixelX == 160) break;
         
     }
     // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7); 
-    vm->fetcherX++;
+    if (!switchedToWindowRender) vm->fetcherX++;
 }
 
 static void advanceFetcher(VM* vm) {
@@ -338,53 +371,95 @@ static void advanceFetcher(VM* vm) {
 	switch (fetcherTasks[vm->currentFetcherTask]) {
 		case FETCHER_GET_TILE: {
             uint16_t tileMapBaseAddress;
-            
-            /* There are two tile maps, check which one to use */
-            if (GET_BIT(vm->MEM[R_LCDC], 3)) {
-                tileMapBaseAddress = 0x1C00; 
-            } else {
-                tileMapBaseAddress = 0x1800;
-            }
-            
-            /* Fetcher X and Y are not the final x and y coordinates we get the tile from 
-             * First scrolling has to be calculated */
-            uint8_t scx = vm->MEM[R_SCX] & ~0b00000111;         // clear the last 3 bits
-            uint8_t x = (scx/8 + vm->fetcherX); 
-            x &= 0x1F;                                          // wrap it around if it exceeds
-            uint8_t y = (uint16_t)(vm->fetcherY + vm->MEM[R_SCY]) & 0xFF;
 
-            vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
+            if (vm->renderingWindow) {
+                /* Fetch Window Tile 
+                 *
+                 * If a scanline enters window rendering mode, it cant exit it till the next 
+                 * scanline begins, mid scanline writes to window enable bit in lcdc are supposed 
+                 * to make it switch back to bg tiles for the scanline but we dont emulate that 
+                 * yet */
+                if (GET_BIT(vm->MEM[R_LCDC], 6)) {
+                    tileMapBaseAddress = 0x1C00;
+                } else {
+                    tileMapBaseAddress = 0x1800;
+                }
+
+                /* Fetcher X contains the window coords since its reset when we start rendering 
+                 * the window. Fetcher Y is left unchanged as it preserves the line number of the 
+                 * entire frame. Instead we use the internal window counter */
+                uint8_t x = vm->fetcherX;
+                uint8_t y = vm->windowYCounter;
+
+                vm->fetcherTileAddress = tileMapBaseAddress + x + (y/8) * 32;
+            } else {
+                /* Fetch BG Tiles */
+                /* There are two tile maps, check which one to use */
+                if (GET_BIT(vm->MEM[R_LCDC], 3)) {
+                    tileMapBaseAddress = 0x1C00; 
+                } else {
+                    tileMapBaseAddress = 0x1800;
+                }
+            
+                /* Fetcher X and Y are not the final x and y coordinates we get the tile from 
+                 * First scrolling has to be calculated */
+                uint8_t scx = vm->MEM[R_SCX] & ~0b00000111;         // clear the last 3 bits
+                uint8_t x = (scx/8 + vm->fetcherX); 
+                x &= 0x1F;                                          // wrap it around if it exceeds
+                uint8_t y = (uint16_t)(vm->fetcherY + vm->MEM[R_SCY]) & 0xFF;
+
+                vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32; 
+                // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
+            }
 
             if (vm->emuMode == EMU_CGB) {
-                /* Handle tile attributes if on a CGB */
+                /* Handle tile attributes if on a CGB 
+                 *
+                 * This works for both BG and Window */
                 vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] : vm->vramBank[vm->fetcherTileAddress];
             } else if (vm->emuMode == EMU_DMG) {
                 vm->fetcherTileAttributes = 0;
             }
-            // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
+
             vm->currentFetcherTask++;
 			break;
 		}
 		case FETCHER_GET_DATA_LOW: {
             uint8_t* tileData = getCurrentFetcherTileData(vm);
-            
-            /* Now retrieve the lower byte of this row */
-            uint8_t currentRowInTile = vm->fetcherY % 8;
+            uint8_t currentRowInTile;
 
+            if (vm->renderingWindow) {
+                /* For window tiles */
+                currentRowInTile = vm->windowYCounter % 8;
+            } else {
+                /* For BG tiles 
+                 * Now retrieve the lower byte of this row */
+                currentRowInTile = vm->fetcherY % 8; 
+            }
+
+            /* This works for both BG and Window */
             if (vm->emuMode == EMU_CGB) { 
                 bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6); 
                 /* If the tile is flipped, we can get the vertically opposite row in the tile */
                 if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
             }
+
             vm->fetcherTileRowLow = tileData[2 * currentRowInTile];
-            
             vm->currentFetcherTask++;
 			break;
 		}
 		case FETCHER_GET_DATA_HIGH: {
             /* Do the same as above but instead get the higher byte */
             uint8_t* tileData = getCurrentFetcherTileData(vm); 
-            uint8_t currentRowInTile = vm->fetcherY % 8;
+            uint8_t currentRowInTile;
+
+            if (vm->renderingWindow) {
+                /* WIndow tiles */
+                currentRowInTile = vm->windowYCounter % 8;
+            } else {
+                /* BG Tiles */
+                currentRowInTile = vm->fetcherY % 8; 
+            }
 
             if (vm->emuMode == EMU_CGB) {
                 bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
@@ -411,12 +486,12 @@ static void advanceFetcher(VM* vm) {
 
             /* We reset it on the 6th cycle itself instead of doing it on the 7th 
              * because we only need to wait 6 dots in total */
-            if (vm->lastPushedPixelX == 159) {
+            if (vm->nextPushPixelX == 160) {
                 /* Dont push if the pixel X coordinate exceeds 160 
                  * we just reset it back to the top */
                 vm->currentFetcherTask = 0;
                 vm->fetcherX = 0;
-                vm->lastPushedPixelX = 0;
+                vm->nextPushPixelX = 0;
                 break;
             }
             vm->currentFetcherTask++;
@@ -432,10 +507,13 @@ static void advanceFetcher(VM* vm) {
                 vm->currentFetcherTask++;
                 break;
             } 
-
+            
+            bool renderingWindowOld = vm->renderingWindow;
             pushPixels(vm);
+
+            /* We dont modify fetcher task if the pusher just switched to window rendering */
+            if (renderingWindowOld == vm->renderingWindow) vm->currentFetcherTask++;
             vm->doOptionalPush = false;
-        	vm->currentFetcherTask++;
 			break;
 		}
         case FETCHER_OPTIONAL_PUSH: {
@@ -456,10 +534,23 @@ static void advancePPU(VM* vm) {
 
 	switch (vm->ppuMode) {
 		case PPU_MODE_2:
-			/* Do nothing for PPU mode 2 
+			/* Do nothing for PPU mode 2 except some basic checks which are 
+             * necessary for timing, for example WY value 
 			 *
 			 * Beginning of new scanline */
-			if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
+            if (vm->cyclesSinceLastMode == 1) {
+                if (!GET_BIT(vm->MEM[R_LCDC], 5)) break;
+
+                uint8_t wx = vm->MEM[R_WX];
+                uint8_t wy = vm->MEM[R_WY];
+                /* On the first cycle, read WY */
+                if (wy == vm->MEM[R_LY]) {
+                    /* TODO - Still need to confirm if the check is done with the internal LY
+                     * counter or what the LY register reads, since LY is incremented 6 cycles 
+                     * earlier, its safe to assume the latter for now */
+                    vm->lyWasWY = true;
+                }
+            } else if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
 				switchModePPU(vm, PPU_MODE_3);
             }
 
@@ -483,7 +574,7 @@ static void advancePPU(VM* vm) {
                  * dots as the remainder pixels,
                  * we pause the first dot aswell */
                 uint8_t remainderPixels = vm->MEM[R_SCX] % 8;
-                vm->scxOffsetForScanline = vm->MEM[R_SCX] & 0b00000111;
+                vm->pixelsToDiscard = vm->MEM[R_SCX] & 0b00000111;
                 vm->pauseDotClock = 0;
 
                 if (remainderPixels != 0) {
@@ -502,10 +593,19 @@ static void advancePPU(VM* vm) {
              * has been pushed, we wait for 6 more dots (because we need to wait for the renderer
              * to finish which is 6 dots behind). At the end of the 6th dot itself, it resets back 
              * to its initial state for the next scanline */
-			if (vm->lastRenderedPixelX == 159) {
+			if (vm->nextRenderPixelX == 160) {
                 /* tile pixel row over */ 
-                vm->lastRenderedPixelX = 0;
+                vm->nextRenderPixelX = 0;
                 vm->hblankDuration = T_CYCLES_PER_SCANLINE - T_CYCLES_PER_MODE2 - vm->cyclesSinceLastMode;
+                if (vm->renderingWindow) {
+                    /* If we were rendering the window in this line, 
+                     * increment the window line counter 
+                     *
+                     * This means if window gets disabled between scanlines,
+                     * the window line counter is still preserved */
+                    vm->renderingWindow = false;
+                    vm->windowYCounter++;
+                }
 
 				switchModePPU(vm, PPU_MODE_0); 
             }
@@ -520,9 +620,13 @@ static void advancePPU(VM* vm) {
                 /* Set fetcher Y */
                 vm->fetcherY++;
 				if (currentScanlineNumber == 144) {
-                    /* End of scanline 
+                    /* End of frame rendering 
                      * switch to vblank now */
                     vm->fetcherY = 0;
+                    vm->renderingWindow = false; 
+                    vm->lyWasWY = false;
+                    vm->windowYCounter = 0;
+
                     switchModePPU(vm, PPU_MODE_1);
                     requestInterrupt(vm, INTERRUPT_VBLANK);
                 }
@@ -657,13 +761,13 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 	for (unsigned int i = 0; i < cycles; i++) {
 		vm->cyclesSinceLastFrame++;
 #ifdef DEBUG_PRINT_PPU
-        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d]\n", vm->ppuMode, vm->MEM[R_LY], vm->cyclesSinceLastFrame, vm->cyclesSinceLastMode, vm->BackgroundFIFO.count, vm->lastRenderedPixelX);
+        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", vm->ppuMode, vm->MEM[R_LY], vm->cyclesSinceLastFrame, vm->cyclesSinceLastMode, vm->BackgroundFIFO.count, vm->nextRenderPixelX, vm->renderingWindow ? "win" : "bg");
 #endif
 		advancePPU(vm);	
          
 		if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
 			/* End of frame */
-			vm->cyclesSinceLastFrame = 0;	
+			vm->cyclesSinceLastFrame = 0; 
 			/* Draw frame */
 
 			if (vm->skipFrame) {

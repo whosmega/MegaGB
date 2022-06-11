@@ -1336,10 +1336,6 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 						disablePPU(vm);
 					}
 				}
-                
-                if (vm->MEM[R_LY] == 10) {
-                    printf("%02x\n", byte);
-                }
 				break;
 			}
         }

@@ -48,11 +48,14 @@ static void initVM(VM* vm) {
     vm->fetcherY = 0;
     vm->fetcherTileRowLow = 0;
     vm->fetcherTileRowHigh = 0;
-    vm->lastRenderedPixelX = 0;
-    vm->lastPushedPixelX = 0;
+    vm->nextRenderPixelX = 0;
+    vm->nextPushPixelX = 0;
     vm->pauseDotClock = 0;
-    vm->scxOffsetForScanline = 0;
+    vm->pixelsToDiscard = 0;
     vm->currentCRAMIndex = 0;
+    vm->windowYCounter = 0;
+    vm->lyWasWY = false;
+    vm->renderingWindow = false;
 
 	/* Initialise FIFO */
 	clearFIFO(&vm->BackgroundFIFO);
