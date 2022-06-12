@@ -1214,18 +1214,18 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 #endif
                 break;
 			case R_P1_JOYP:
-				/* Perform Checks */
-				if ((byte & 0xF) != (vm->MEM[addr] & 0xF)) {
-					/* Attempt to write to read only area,
-					 * we ignore the value the rom gave for the read only bits */
-					byte &= 0xF;
-					byte |= vm->MEM[addr] & 0xF;
-				}
+                /* Set the upper 2 bits because they're unused */
+                SET_BIT(byte, 6);
+                SET_BIT(byte, 7);
+
+				/* Make sure the lower nibble if unaffected */
+				byte &= 0xF0;
+				byte |= vm->MEM[addr] & 0xF;
 				
 				/* Check bit 4-5to get selected mode */
 				uint8_t selected = ((byte >> 4) & 0b11);
 				vm->joypadSelectedMode = selected;
-				
+			    
 				/* Write the selected mode */
 				vm->MEM[addr] = byte;
 				
@@ -1336,6 +1336,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 						disablePPU(vm);
 					}
 				}
+
 				break;
 			}
         }

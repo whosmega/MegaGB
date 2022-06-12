@@ -63,7 +63,8 @@ void printCBInstruction(VM* vm, uint8_t byte) {
     printf("[%ld]", vm->clock);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
-	printf("[0x%x]", vm->MEM[R_P1_JOYP] & 0xF);
+    printf("[sel:%x|", (vm->MEM[R_P1_JOYP] >> 4) & 0x3);
+    printf("sig:%x]", (vm->MEM[R_P1_JOYP] & 0b00001111));
 #endif
 #ifdef DEBUG_PRINT_TIMERS
 	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
@@ -342,7 +343,8 @@ void printInstruction(VM* vm) {
     printf("[%ld]", vm->clock * 4);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
-	printf("[0x%x]", vm->MEM[R_P1_JOYP] & 0xF);
+    printf("[sel:%x|", (vm->MEM[R_P1_JOYP] >> 4) & 0x3);
+    printf("sig:%x]", (vm->MEM[R_P1_JOYP] & 0b00001111));
 #endif
 #ifdef DEBUG_PRINT_TIMERS
 	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);

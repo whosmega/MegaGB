@@ -178,7 +178,7 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
             tileData = vramBankPointer + 0x1000 + (tileIndex * 16);
         } else {
             /* Use $8800 as base pointer */
-            tileData = vramBankPointer + 0x800 + (tileIndex * 16);
+            tileData = vramBankPointer + 0x800 + ((tileIndex - 128) * 16);
         }
     }
 
@@ -288,7 +288,6 @@ static void pushPixels(VM* vm) {
              * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow 
              * as the BG fetch is aborted
              */
-            uint8_t fx = vm->fetcherX;
             vm->renderingWindow = true;
             clearFIFO(&vm->BackgroundFIFO);
             vm->fetcherX = 0;
@@ -298,12 +297,18 @@ static void pushPixels(VM* vm) {
              * we're detecting that the next pixel is a window pixel one cycle after the last 
              * bg push (or this is the first cycle anyway if the window tile is the first tile)
              * This means the current cycle does the job of sleeping automatically */
-            vm->currentFetcherTask = 1;
-            vm->pixelsToDiscard = 0;
+            vm->currentFetcherTask = 1; 
 
             if (vm->MEM[R_WX] <= 7) {
+                if (vm->MEM[R_WX] == 0 && vm->pixelsToDiscard != 0) {
+                    /* Shorten mode 3 by 1 dot (bug) */ 
+                    vm->cyclesSinceLastMode++;
+                }
                 vm->pixelsToDiscard = 7 - vm->MEM[R_WX];
+            } else {
+                vm->pixelsToDiscard = 0; 
             }
+
             break;
         }
 
@@ -311,7 +316,7 @@ static void pushPixels(VM* vm) {
          * after switching to window mode, pixelsToDiscard is also automatically set to the
          * correct value */
         if (vm->fetcherX == 0 && i <= pixelsToDiscard) continue;
-
+         
         FIFO_Pixel pixel;
         /* Check for horizontal bit flip */
         uint8_t index = GET_BIT(vm->fetcherTileAttributes, 5) ? i - 1 : 8 - i;
@@ -441,7 +446,7 @@ static void advanceFetcher(VM* vm) {
             if (vm->emuMode == EMU_CGB) { 
                 bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6); 
                 /* If the tile is flipped, we can get the vertically opposite row in the tile */
-                if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+                if (verticallyFlipped) currentRowInTile = 7 - currentRowInTile; 
             }
 
             vm->fetcherTileRowLow = tileData[2 * currentRowInTile];
@@ -463,9 +468,9 @@ static void advanceFetcher(VM* vm) {
 
             if (vm->emuMode == EMU_CGB) {
                 bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
-                if (verticallyFlipped) currentRowInTile = 8 - currentRowInTile;
+                if (verticallyFlipped) currentRowInTile = 7 - currentRowInTile;
             }
-
+            
             vm->fetcherTileRowHigh = tileData[(2 * currentRowInTile) + 1];
             
             /*         
