@@ -279,7 +279,7 @@ static void pushPixels(VM* vm) {
      *
      * On the first tile we skip the pixels which are not to be rendered for a tile
      * and then continue rendering normally. This also means in the end we might not 
-     * fully render the rightmost tile, we exit the pushing when the last tile that can 
+     * fully render the rightmost tile, we exit the pushing when the last pixel that can 
      * be rendered is pushed, i.e screen X = 159*/
     for (int i = 1; i <= 8; i++) {
         if (GET_BIT(vm->MEM[R_LCDC], 5) && 
@@ -302,7 +302,7 @@ static void pushPixels(VM* vm) {
             if (vm->MEM[R_WX] <= 7) {
                 if (vm->MEM[R_WX] == 0 && vm->pixelsToDiscard != 0) {
                     /* Shorten mode 3 by 1 dot (bug) */ 
-                    vm->cyclesSinceLastMode++;
+                    vm->cyclesSinceLastMode--;
                 }
                 vm->pixelsToDiscard = 7 - vm->MEM[R_WX];
             } else {
@@ -523,11 +523,14 @@ static void advanceFetcher(VM* vm) {
 		}
         case FETCHER_OPTIONAL_PUSH: {
             if (vm->doOptionalPush) {
+                if (vm->BackgroundFIFO.count != 0) break;
+
                 pushPixels(vm);
                 vm->doOptionalPush = false;
             }
 
             vm->currentFetcherTask = 0;
+            break;
         }
 	}	
 }

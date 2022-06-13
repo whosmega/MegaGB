@@ -1302,13 +1302,11 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				break;
             case R_BGP: {
                 if (vm->emuMode != EMU_DMG) return;
-                if (vm->lockPalettes) return;
                 break;
             }
             case R_OBP0:
             case R_OBP1:
                 if (vm->emuMode != EMU_DMG) return;
-                if (vm->lockPalettes) return;
                 break;
 			case R_STAT:
 				/* Bit 7 in STAT is unused so it has to always be 1.
