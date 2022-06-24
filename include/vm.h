@@ -121,6 +121,7 @@ struct VM {
     MBC_TYPE memControllerType;
 	/* ---------------- PPU ---------------- */
 	FIFO BackgroundFIFO;
+    FIFO OAMFIFO;
 	PPU_MODE ppuMode;
     unsigned int hblankDuration;            /* HBlank duration depends on mode 3 duration,
                                                this is set by mode 3 at every scanline to 
@@ -153,9 +154,27 @@ struct VM {
     uint8_t pixelsToDiscard;                /* Fixed offset of pixels to discard at start of a
                                              * scanline. This is decided by the lower 3 bits of 
                                              * SCX for BG tiles and when WX < 7 for window tiles */
-    uint8_t* colorRAM;                      /* 64 Byte long color ram which stores CGB palettes */
-    uint8_t currentCRAMIndex;               /* Current byte value in color ram which can be 
-                                               addressed by BCPD */
+    uint8_t preservedFetcherTileLow;
+    uint8_t preservedFetcherTileHigh;
+    uint8_t preservedFetcherTileAttributes;
+    uint8_t* spriteData;                    /* Pointer to the data of the sprite being rendered rn */
+    bool renderingSprites;
+    uint8_t oamDataBuffer[50];              /* OAM Data is read and written to this area on every 
+                                               scanline in mode 2, it stores only 10 sprites at 
+                                               max as its the limit, each sprite occupies 5 bytes 
+                                               (4 bytes for the normal data + 5th byte has the
+                                               index in OAM) */
+    uint8_t spritesInScanline;              /* Number of sprites to be rendered in the current 
+                                               scanline */
+    uint8_t spriteSize;                     /* 0 = 8x8, 1 = 8x16, read every scanline */
+    bool isLastSpriteOverlap;
+    uint8_t lastSpriteOverlapPushIndex;     /* Index of the last overlapping sprite that was pushed fully */
+    uint8_t lastSpriteOverlapX;             /* X Coordinate of the last overlapping sprite that was pushed fully */
+    uint8_t* bgColorRAM;                    /* 64 Byte long color ram which stores CGB palettes */
+    uint8_t* spriteColorRAM;                /* ^^^ for sprites */
+    uint8_t currentBackgroundCRAMIndex;     /* Current byte value in color ram which can be 
+                                               addressed by BCPS */
+    uint8_t currentSpriteCRAMIndex;         /* ^^^^ addressed by OCPS */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */
 	unsigned int cyclesSinceLastMode;
 	bool lockVRAM;							/* Locks CPU from accessing VRAM */

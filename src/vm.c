@@ -10,6 +10,7 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_timer.h>
 #include <bits/time.h>
+#include <stdint.h>
 #include <time.h>
 #include <string.h>
 #include <SDL2/SDL.h>
@@ -52,13 +53,28 @@ static void initVM(VM* vm) {
     vm->nextPushPixelX = 0;
     vm->pauseDotClock = 0;
     vm->pixelsToDiscard = 0;
-    vm->currentCRAMIndex = 0;
+    vm->currentBackgroundCRAMIndex = 0;
+    vm->currentSpriteCRAMIndex = 0;
     vm->windowYCounter = 0;
     vm->lyWasWY = false;
     vm->renderingWindow = false;
+    vm->renderingSprites = false;
+    vm->spriteData = NULL;
+    vm->preservedFetcherTileLow = 0;
+    vm->preservedFetcherTileHigh = 0;
+    vm->preservedFetcherTileAttributes = 0;
+    vm->spriteSize = 0;
+    vm->isLastSpriteOverlap = false;
+    vm->lastSpriteOverlapPushIndex = 0;
+    vm->lastSpriteOverlapX = 0;
+    
+    /* Initialise OAM Buffer */
+    memset(&vm->oamDataBuffer, 0xFF, 50);
+    vm->spritesInScanline = 0;
 
 	/* Initialise FIFO */
 	clearFIFO(&vm->BackgroundFIFO);
+    clearFIFO(&vm->OAMFIFO);
 
 	/* bit 3-0 in joypad register is set to 1 on boot (0xCF) */
 	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
@@ -98,9 +114,12 @@ static void initVMCartridge(VM* vm, Cartridge* cartridge) {
         /* CGB needs WRAM, VRAM and CRAM banks allocated */
         vm->wramBanks = (uint8_t*)malloc(sizeof(uint8_t) * 0x1000 * 7);
         vm->vramBank = (uint8_t*)malloc(sizeof(uint8_t) * 0x2000);
-        vm->colorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
+        vm->bgColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
+        vm->spriteColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
         
-        if (vm->wramBanks == NULL || vm->vramBank == NULL || vm->colorRAM == NULL) {
+        if (vm->wramBanks == NULL || vm->vramBank == NULL || vm->bgColorRAM == NULL ||
+            vm->spriteColorRAM == NULL) {
+
             log_fatal(vm, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
         }
 
@@ -122,7 +141,8 @@ static void initVMCartridge(VM* vm, Cartridge* cartridge) {
         vm->cyclesSinceLastFrame = 4;		/* 4 on DMG */
 	    vm->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */ 
         vm->wramBanks = NULL;
-        vm->colorRAM = NULL;
+        vm->bgColorRAM = NULL;
+        vm->spriteColorRAM = NULL;
         vm->vramBank = NULL;
 
         resetGB(vm);
@@ -521,7 +541,8 @@ void stopEmulator(VM* vm) {
         /* Free memory allocated specifically for CGB */
         free(vm->vramBank);
         free(vm->wramBanks);
-        free(vm->colorRAM);
+        free(vm->bgColorRAM);
+        free(vm->spriteColorRAM);
     }
 
     /* Reset VM */

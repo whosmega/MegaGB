@@ -180,17 +180,18 @@ void resetGBC(VM* vm) {
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF30 - 0xFF37
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF38 - 0xFF3F
         0x91, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
-        0xFF, 0xFF, 0x00, 0x07, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
     };
-
-    /* WX initially set to 0x7 for testing */
  
     for (int i = 0x00; i < 0x50; i++) {
         vm->MEM[0xFF00 + i] = hreg_defaults[i];
     }
 
+    /* Initialise OAM to off screen */
+    memset(&vm->MEM[OAM_N0_160B], 0xFF, 160);
     /* Reset all background colors to white (ffff) */
-    memset(vm->colorRAM, 0xFF, 64);
+    memset(vm->bgColorRAM, 0xFF, 64);
+    memset(vm->spriteColorRAM, 0xFF, 64);
     /* 0xFF50 to 0xFFFE = 0xFF */
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(vm);
@@ -218,7 +219,7 @@ void resetGB(VM* vm) {
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF30 - 0xFF37
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF38 - 0xFF3F
         0x91, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
-        0xFF, 0xFF, 0x00, 0x07, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
+        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
     };
 
     for (int i = 0x00; i < 0x50; i++) {
@@ -229,6 +230,9 @@ void resetGB(VM* vm) {
         /* On a DMG, the value of F depends on the header checksum */
         vm->GPR[R8_F] = vm->cartridge->headerChecksum == 0 ? 0xF0 : 0xB0;
     }
+
+    /* Initialise OAM to off screen */
+    memset(&vm->MEM[OAM_N0_160B], 0xFF, 160);
 
     /* 0xFF50 to 0xFFFE = 0xFF */
     memset(&vm->MEM[0xFF50], 0xFF, 0xAF);
@@ -1257,7 +1261,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 				vm->MEM[R_VBK] = byte | ~1;
 				return;
 			}
-			case R_BCPD:
+			case R_BCPD: {
                 if (vm->emuMode != EMU_CGB) return;
                 if (vm->lockPalettes) {
                     if (GET_BIT(vm->MEM[R_BCPS], 7)) {
@@ -1265,41 +1269,74 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                          * BCPD increment the color ram index address 
                          *
                          * Note : This happens even if palettes are inaccessible */
-                        vm->currentCRAMIndex++;
+                        vm->currentBackgroundCRAMIndex++;
                         
                         /* Wrap back to 0 if it exceeds 64 bytes */
-                        if (vm->currentCRAMIndex >= 0x40) {
-                            vm->currentCRAMIndex = 0;
+                        if (vm->currentBackgroundCRAMIndex >= 0x40) {
+                            vm->currentBackgroundCRAMIndex = 0;
                         }
                     }
                     return;
                 }
                 
                 // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
-                vm->colorRAM[vm->currentCRAMIndex] = byte;
+                vm->bgColorRAM[vm->currentBackgroundCRAMIndex] = byte;
                 if (GET_BIT(vm->MEM[R_BCPS], 7)) {
-                    vm->currentCRAMIndex++;
+                    vm->currentBackgroundCRAMIndex++;
 
-                    if (vm->currentCRAMIndex >= 0x40) {
-                        vm->currentCRAMIndex = 0;
+                    if (vm->currentBackgroundCRAMIndex >= 0x40) {
+                        vm->currentBackgroundCRAMIndex = 0;
                     }
                 }
                 break;
+            }
 			case R_BCPS: {
                 if (vm->emuMode != EMU_CGB) return;
                 if (vm->lockPalettes) return;
                 
                 /* Used to index color ram on CGB */
                 SET_BIT(byte, 6);           // bit 6 unused
-                vm->currentCRAMIndex = byte & 0b00111111;
+                vm->currentBackgroundCRAMIndex = byte & 0b00111111;
                 break;
             }
-			case R_OCPD:
-			case R_OCPS:
+			case R_OCPD: {
                 if (vm->emuMode != EMU_CGB) return;
-				/* Handle the case when palettes have been locked by PPU */
-				if (vm->lockPalettes) return;
+                if (vm->lockPalettes) {
+                    if (GET_BIT(vm->MEM[R_OCPS], 7)) {
+                        /* If auto increment is enabled, writes to
+                         * OCPD increment the color ram index address 
+                         *
+                         * Note : This happens even if palettes are inaccessible */
+                        vm->currentSpriteCRAMIndex++;
+                        
+                        /* Wrap back to 0 if it exceeds 64 bytes */
+                        if (vm->currentSpriteCRAMIndex >= 0x40) {
+                            vm->currentSpriteCRAMIndex = 0;
+                        }
+                    }
+                    return;
+                }
+                
+                // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
+                vm->spriteColorRAM[vm->currentSpriteCRAMIndex] = byte;
+                if (GET_BIT(vm->MEM[R_OCPS], 7)) {
+                    vm->currentSpriteCRAMIndex++;
+
+                    if (vm->currentSpriteCRAMIndex >= 0x40) {
+                        vm->currentSpriteCRAMIndex = 0;
+                    }
+                }
+                break;
+            }
+			case R_OCPS: {
+                if (vm->emuMode != EMU_CGB) return;
+                if (vm->lockPalettes) return;
+                
+                /* Used to index color ram on CGB */
+                SET_BIT(byte, 6);           // bit 6 unused
+                vm->currentSpriteCRAMIndex = byte & 0b00111111;
 				break;
+            }
             case R_BGP: {
                 if (vm->emuMode != EMU_DMG) return;
                 break;
@@ -1335,6 +1372,14 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 					}
 				}
 
+                /*
+
+                if ((GET_BIT(vm->MEM[R_LCDC], 2) != GET_BIT(byte, 2)) && 
+                        GET_BIT(byte, 2) == 1) {
+                    printf("set obj size to 8x16 %lu\n", vm->clock);
+                }
+
+                */
 				break;
 			}
         }
@@ -1369,10 +1414,13 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
             case R_TAC  : syncTimer(vm); break;
 			case R_BCPD: {
                 if (vm->lockPalettes) return 0xFF;
-                return vm->colorRAM[vm->currentCRAMIndex];
+                return vm->bgColorRAM[vm->currentBackgroundCRAMIndex];
+            }
+            case R_OCPD: {
+                if (vm->lockPalettes) return 0xFF;
+                return vm->spriteColorRAM[vm->currentSpriteCRAMIndex];
             }
 			case R_BCPS:
-			case R_OCPD:
 			case R_OCPS:
 				/* Handle the case when Palettes have been locked by the PPU */
 				if (vm->lockPalettes) return 0xFF;

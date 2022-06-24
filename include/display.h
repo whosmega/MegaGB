@@ -47,11 +47,17 @@ typedef enum {
 } STAT_UPDATE_TYPE;
 
 typedef struct {
+    /* Internal */
     uint8_t screenX;
     uint8_t screenY;
+
+    /* Main Data */
 	uint8_t colorID;
-	uint8_t colorPalette;                       /* CGB only */
-	/* TODO - Add sprite and background priority */
+	uint8_t colorPalette;                       /* CGB only normally, also used to store OBP color 
+                                                   palette*/
+    uint8_t bgPriority;                         /* On DMG this stores the OAM priority bit, 
+                                                   on CGB it also stored bg map attribute bit 
+                                                   for background pixels */
 } FIFO_Pixel;
 
 typedef struct {
@@ -63,6 +69,8 @@ typedef struct {
 
 void pushFIFO(FIFO* fifo, FIFO_Pixel pixel);
 FIFO_Pixel popFIFO(FIFO* fifo);
+FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index);
+void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index);
 void clearFIFO(FIFO* fifo);
 
 void syncDisplay(struct VM* vm, unsigned int cycles);
