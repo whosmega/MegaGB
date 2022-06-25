@@ -382,13 +382,12 @@ static void pushPixels(VM* vm) {
         }
 
         if (GET_BIT(vm->MEM[R_LCDC], 5) && 
-            vm->lyWasWY && !vm->renderingWindow && ((vm->fetcherX * 8) + i - 1 == vm->MEM[R_WX] - 7)) {
+            vm->lyWasWY && !vm->renderingWindow && (vm->nextPushPixelX == vm->MEM[R_WX] - 7 || vm->MEM[R_WX] < 7)) {
             /* Window layer is enabled, and the current pixel to render is a window 
              * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow 
              * as the BG fetch is aborted
              */
             vm->renderingWindow = true;
-            clearFIFO(&vm->BackgroundFIFO);
             vm->fetcherX = 0;
             switchedToWindowRender = true;
             /* We set the fetcher task to 1 because the fetcher is supposed to switch to 
