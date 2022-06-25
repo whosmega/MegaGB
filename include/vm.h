@@ -72,6 +72,7 @@ typedef enum {
 #define R_SCX       0xFF43
 #define R_LY		0xFF44
 #define R_LYC		0xFF45
+#define R_DMA       0xFF46
 #define R_BGP       0xFF47
 #define R_OBP0      0xFF48
 #define R_OBP1      0xFF49
@@ -105,6 +106,10 @@ struct VM {
     unsigned long lastTIMASync;             /* Same but for the TIMA timer */
     unsigned long clock;                    /* Main clock of the whole emulator 
 											   Counts in T-Cycles */
+	bool scheduleHaltBug;				    /* If set to true,the CPU recreates the halt bug */
+    bool doingDMA;
+    uint16_t mCyclesSinceDMA;               /* M-Cycles elapsed since DMA began */
+    uint16_t dmaSource;                     /* DMA Source Address */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
@@ -112,7 +117,6 @@ struct VM {
                                            dispatch of the next instruction */
 	bool haltMode;						/* If set to true, the CPU enters the halt 
 										   procedure */
-	bool scheduleHaltBug;				/* If set to true,the CPU recreates the halt bug */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
 	uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
@@ -206,6 +210,10 @@ void handleSDLEvents(VM* vm);
 /* Sync timer */
 void syncTimer(VM* vm);
 void incrementTIMA(VM* vm);
+
+/* DMA */
+void syncDMA(VM* vm);
+void startDMATransfer(VM* vm, uint8_t byte);
 
 /* CGB Only, WRAM/VRAM bank switching */
 void switchCGB_WRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber);

@@ -382,7 +382,7 @@ static void pushPixels(VM* vm) {
         }
 
         if (GET_BIT(vm->MEM[R_LCDC], 5) && 
-            vm->lyWasWY && ((vm->fetcherX * 8) + i - 1 == vm->MEM[R_WX] - 7)) {
+            vm->lyWasWY && !vm->renderingWindow && ((vm->fetcherX * 8) + i - 1 == vm->MEM[R_WX] - 7)) {
             /* Window layer is enabled, and the current pixel to render is a window 
              * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow 
              * as the BG fetch is aborted
@@ -448,6 +448,7 @@ static void pushPixels(VM* vm) {
 
         pixel.screenX = vm->nextPushPixelX;
         pixel.screenY = vm->fetcherY;
+
         pushFIFO(&vm->BackgroundFIFO, pixel);
 
         /* When it reaches 159, the scanline is over */
@@ -479,14 +480,9 @@ static void pushSpritePixels(VM* vm) {
     uint8_t tileAttributes = vm->fetcherTileAttributes;
     uint8_t spriteOAMIndex = vm->spriteData[4];
     bool partiallyOverlaps = false;
-    uint8_t startX = vm->nextPushPixelX;
 
     /* Fill the OAM fifo with transparent pixels of lowest priority if its not full */
     if (vm->OAMFIFO.count > 0 && vm->OAMFIFO.count < 8) partiallyOverlaps = true;
-
-    if (vm->emuMode == EMU_CGB && vm->OAMFIFO.count != 0) {
-        
-    }
 
     for (int i = 0; i < 8 && vm->OAMFIFO.count != 8; i++) {
         if (vm->nextPushPixelX + i == 160) break;
@@ -564,10 +560,11 @@ static void pushSpritePixels(VM* vm) {
 
     /* Since a part of the BG/Window tiles might be already pushed, we can calculate 
      * how many pixels to discard when continuing pushing */
-    vm->pixelsToDiscard = startX % 8;
+    vm->pixelsToDiscard = vm->nextPushPixelX % 8;
+    // printf("pixels to discard %d, X%d, Y%d\n", vm->pixelsToDiscard, vm->nextPushPixelX, vm->fetcherY);
     vm->isLastSpriteOverlap = true;
     vm->lastSpriteOverlapPushIndex = spriteOAMIndex;
-    vm->lastSpriteOverlapX = startX;
+    vm->lastSpriteOverlapX = vm->nextPushPixelX;
     /* Restore State */
     vm->fetcherTileAttributes = vm->preservedFetcherTileAttributes;
     vm->fetcherTileRowHigh = vm->preservedFetcherTileHigh;
@@ -749,16 +746,13 @@ static void advanceFetcher(VM* vm) {
                 break;
             }
 
-            if (vm->renderingSprites) {
-                // printf("%02x %02x ", vm->fetcherTileRowHigh, vm->fetcherTileRowLow);
-            }
             vm->currentFetcherTask++;
 			break;
 		}	
 		case FETCHER_SLEEP:
             vm->currentFetcherTask++;
             break;			/* Do nothing */
-		case FETCHER_PUSH: { 
+		case FETCHER_PUSH: {
             if (vm->BackgroundFIFO.count != 0) {
                 /* We cant push yet since all pixels havent been pushed to the LCD yet */
                 vm->doOptionalPush = true;
@@ -841,7 +835,6 @@ static void advancePPU(VM* vm) {
 	/* We use a state machine to handle different PPU modes */
 	vm->cyclesSinceLastMode++;
 
-
 	switch (vm->ppuMode) {
 		case PPU_MODE_2: 
 			/* Reading oam data
@@ -909,6 +902,7 @@ static void advancePPU(VM* vm) {
              * renders the last tile in the scanline */
 			advanceFetcher(vm); 
             renderPixel(vm);
+
             /* The last push should increment fetcher X to 20, after the last pixel in the scanline
              * has been pushed, we wait for 6 more dots (because we need to wait for the renderer
              * to finish which is 6 dots behind). At the end of the 6th dot itself, it resets back 
@@ -1038,7 +1032,7 @@ void clearFIFO(FIFO *fifo) {
 
 void pushFIFO(FIFO* fifo, FIFO_Pixel pixel) {
 	if (fifo->count == FIFO_MAX_COUNT) {
-		printf("FIFO Error : Pushing beyond max limit\n");
+		// printf("FIFO Error : Pushing beyond max limit\n");
 		return;
 	}
 
@@ -1056,7 +1050,7 @@ FIFO_Pixel popFIFO(FIFO* fifo) {
 	FIFO_Pixel pixel;
 
 	if (fifo->count == 0) {
-		printf("FIFO Error : Popping when no pixels are pushed\n");
+		// printf("FIFO Error : Popping when no pixels are pushed\n");
 		return pixel;
 	}
 
@@ -1075,7 +1069,7 @@ FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index) {
     FIFO_Pixel pixel;
 
     if (fifo->count < index + 1) {
-        printf("FIFO Error : Peek index out of range\n");
+        // printf("FIFO Error : Peek index out of range\n");
         return pixel;
     }
 
@@ -1089,7 +1083,7 @@ FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index) {
 
 void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index) {
     if (fifo->count < index + 1) {
-        printf("FIFO Error : Insert index out of range\n");
+        // printf("FIFO Error : Insert index out of range\n");
         return;
     }
 

@@ -8,6 +8,7 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_render.h>
+#include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_timer.h>
 #include <bits/time.h>
 #include <stdint.h>
@@ -67,6 +68,9 @@ static void initVM(VM* vm) {
     vm->isLastSpriteOverlap = false;
     vm->lastSpriteOverlapPushIndex = 0;
     vm->lastSpriteOverlapX = 0;
+    vm->doingDMA = false;
+    vm->mCyclesSinceDMA = 0;
+    vm->dmaSource = 0;
     
     /* Initialise OAM Buffer */
     memset(&vm->oamDataBuffer, 0xFF, 50);
@@ -314,6 +318,48 @@ void syncTimer(VM* vm) {
     }
 }
 
+/* DMA Transfers */
+void startDMATransfer(VM* vm, uint8_t byte) {
+    if (byte > 0xDF) {
+#ifdef DEBUG_LOGGING
+        printf("[WARNING] Starting DMA Transfer with address > DFXX, wrapping to DFXX\n");
+#endif
+        byte = 0xDF;
+    }
+
+    uint16_t address = byte * 0x100;
+
+    vm->dmaSource = address;
+    vm->doingDMA = true;
+    vm->mCyclesSinceDMA = 0;
+}
+
+void syncDMA(VM* vm) {
+    /* DMA Transfers take 160 machine cycles to complete = 640 T-Cycles
+     *
+     * It needs to be done sequentially sprite by sprite as it is possible to do dma 
+     * transfers during mode 2, which can cause the values to be read by the ppu in real time 
+     *
+     * Calling this function once does 4 tcycles or 1 mcycle of syncing */
+
+    vm->mCyclesSinceDMA++;
+
+    if (vm->mCyclesSinceDMA % 4 == 0) {
+        /* it takes 4 M-Cycles to load 1 sprite, as there are 40 OAM entries and 160 M-Cycles 
+         * in total */
+        
+        uint8_t currentSpriteIndex = (vm->mCyclesSinceDMA / 4) - 1;
+        uint8_t addressLow = currentSpriteIndex * 4;
+        memcpy(&vm->MEM[OAM_N0_160B + addressLow], &vm->MEM[vm->dmaSource + addressLow], 4);
+    }
+
+    if (vm->mCyclesSinceDMA == 160) {
+        vm->dmaSource = 0;
+        vm->mCyclesSinceDMA = 0;
+        vm->doingDMA = false;
+    }
+}
+
 /* ------------------ */ 
 
 static void run(VM* vm) {
@@ -341,7 +387,9 @@ void cyclesSync_4(VM* vm) {
 	 */
     vm->clock += 4;
 	
-    syncDisplay(vm, 4); 
+    syncDisplay(vm, 4);
+
+    if (vm->doingDMA) syncDMA(vm);
 }
 
 /* SDL */
@@ -366,19 +414,19 @@ void handleSDLEvents(VM *vm) {
 			/* We reset the corresponding bit for every scancode 
 			 * in the buffer for keydown and set for keyup */
 			switch (event.key.keysym.scancode) {
-				case SDL_SCANCODE_W:
+				case SDL_SCANCODE_UP:
 					/* Joypad Up */
 					vm->joypadDirectionBuffer &= ~(1 << 2);
 					break;
-				case SDL_SCANCODE_A:
+				case SDL_SCANCODE_LEFT:
 					/* Joypad Left */
 					vm->joypadDirectionBuffer &= ~(1 << 1);
 					break;
-				case SDL_SCANCODE_S:
+				case SDL_SCANCODE_DOWN:
 					/* Joypad Down */
 					vm->joypadDirectionBuffer &= ~(1 << 3);
 					break;
-				case SDL_SCANCODE_D:
+				case SDL_SCANCODE_RIGHT:
 					/* Joypad Right */
 					vm->joypadDirectionBuffer &= ~(1 << 0);
 					break;
@@ -390,11 +438,11 @@ void handleSDLEvents(VM *vm) {
 					/* A */
 					vm->joypadActionBuffer &= ~(1 << 0);
 					break;
-				case SDL_SCANCODE_I:
+				case SDL_SCANCODE_RETURN:
 					/* Start */
 					vm->joypadActionBuffer &= ~(1 << 3);
 					break;
-				case SDL_SCANCODE_O:
+				case SDL_SCANCODE_TAB:
 					/* Select */
 					vm->joypadActionBuffer &= ~(1 << 2);
 					break;
@@ -409,19 +457,19 @@ void handleSDLEvents(VM *vm) {
 			}
 		} else if (event.type == SDL_KEYUP && event.key.repeat == 0) {
 			switch (event.key.keysym.scancode) {
-				case SDL_SCANCODE_W:
+				case SDL_SCANCODE_UP:
 					/* Joypad Up */
 					vm->joypadDirectionBuffer |= 1 << 2;
 					break;
-				case SDL_SCANCODE_A:
+				case SDL_SCANCODE_LEFT:
 					/* Joypad Left */
 					vm->joypadDirectionBuffer |= 1 << 1;
 					break;
-				case SDL_SCANCODE_S:
+				case SDL_SCANCODE_DOWN:
 					/* Joypad Down */
 					vm->joypadDirectionBuffer |= 1 << 3;
 					break;
-				case SDL_SCANCODE_D:
+				case SDL_SCANCODE_RIGHT:
 					/* Joypad Right */
 					vm->joypadDirectionBuffer |= 1 << 0;
 					break;
@@ -433,11 +481,11 @@ void handleSDLEvents(VM *vm) {
 					/* A */
 					vm->joypadActionBuffer |= 1 << 0;
 					break;
-				case SDL_SCANCODE_I:
+				case SDL_SCANCODE_RETURN:
 					/* Start */
 					vm->joypadActionBuffer |= 1 << 3;
 					break;
-				case SDL_SCANCODE_O:
+				case SDL_SCANCODE_TAB:
 					/* Select */
 					vm->joypadActionBuffer |= 1 << 2;
 					break;

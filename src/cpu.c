@@ -1140,6 +1140,13 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 #ifdef DEBUG_MEM_LOGGING
     printf("Writing 0x%02x to address 0x%04x\n", byte, addr);
 #endif
+    if (addr >= HRAM_N0 && addr <= HRAM_N0_END) {
+        vm->MEM[addr] = byte;
+        return;
+    }
+
+    /* During DMA, the cpu can only access HRAM */
+    if (vm->doingDMA) return;
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* External RAM write request */
         mbc_writeExternalRAM(vm, addr, byte);
@@ -1382,6 +1389,10 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                 */
 				break;
 			}
+            case R_DMA: {
+                startDMATransfer(vm, byte);
+                break;
+            }
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
 		/* Handle the case when VRAM has been locked by PPU */
@@ -1399,6 +1410,12 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 }
 
 static uint8_t readAddr(VM* vm, uint16_t addr) {
+    if (addr >= HRAM_N0 && addr <= HRAM_N0_END) {
+        return vm->MEM[addr];
+    }
+
+    if (vm->doingDMA) return 0xFF;
+
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* Read from external RAM */
         return mbc_readExternalRAM(vm, addr);
