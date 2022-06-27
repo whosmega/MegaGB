@@ -23,6 +23,7 @@ static void initVM(VM* vm) {
     vm->memController = NULL;
     vm->memControllerType = MBC_NONE;
     vm->run = false;
+    vm->paused = false;
 
     vm->scheduleInterruptEnable = false;
 	vm->haltMode = false;
@@ -446,6 +447,10 @@ void handleSDLEvents(VM *vm) {
 					/* Select */
 					vm->joypadActionBuffer &= ~(1 << 2);
 					break;
+                case SDL_SCANCODE_SPACE:
+                    /* Pause Emulator */
+                    pauseEmulator(vm);
+                    break;
 				default: return;
 			}
 
@@ -489,6 +494,10 @@ void handleSDLEvents(VM *vm) {
 					/* Select */
 					vm->joypadActionBuffer |= 1 << 2;
 					break;
+                case SDL_SCANCODE_SPACE:
+                    /* Unpause */ 
+                    unpauseEmulator(vm);
+                    break;
 				default: return;			 
 			}
 			updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
@@ -570,6 +579,23 @@ void startEmulator(Cartridge* cartridge) {
 	 
     run(&vm);
     stopEmulator(&vm);
+}
+
+void pauseEmulator(VM* vm) {
+    if (vm->paused) return;
+    vm->paused = true;
+
+    while (true) {
+        handleSDLEvents(vm);
+
+        if (!vm->paused) break;
+    }
+}
+
+void unpauseEmulator(VM* vm) {
+    if (!vm->paused) return;
+
+    vm->paused = false;
 }
 
 void stopEmulator(VM* vm) {

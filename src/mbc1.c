@@ -85,7 +85,7 @@ void mbc1_writeExternalRAM(VM* vm, uint16_t addr, uint8_t byte) {
     MBC_1* mbc = (MBC_1*)vm->memController;
 
     if (mbc->ramBanks == NULL) {
-        log_fatal(vm, "Attempt to write to external RAM when none is present");
+        // log_fatal(vm, "Attempt to write to external RAM when none is present");
         return;
     }
         
@@ -114,7 +114,7 @@ uint8_t mbc1_readExternalRAM(VM* vm, uint16_t addr) {
     MBC_1* mbc = (MBC_1*)vm->memController;
 
     if (mbc->ramBanks == NULL) {
-        log_fatal(vm, "Attempt to read to external RAM when none is present");
+        // log_fatal(vm, "Attempt to read to external RAM when none is present");
         return 0;
     }
 

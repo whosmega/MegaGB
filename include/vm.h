@@ -100,6 +100,7 @@ struct VM {
     Cartridge* cartridge;
     EMULATION_MODE emuMode;                 /* Which behaviour are we emulating, dmg, cgb, ect */
     bool run;                               /* A flag that when set to false, quits the emulator */
+    bool paused;
     bool IME;                               /* Interrupt Master Enable Flag */ 
     unsigned long lastDIVSync;              /* Holds the clock's state when DIV timer was last synced
                                              * this helps in getting the cycles elapsed */
@@ -173,7 +174,7 @@ struct VM {
     uint8_t spriteSize;                     /* 0 = 8x8, 1 = 8x16, read every scanline */
     bool isLastSpriteOverlap;
     uint8_t lastSpriteOverlapPushIndex;     /* Index of the last overlapping sprite that was pushed fully */
-    uint8_t lastSpriteOverlapX;             /* X Coordinate of the last overlapping sprite that was pushed fully */
+    int lastSpriteOverlapX;                 /* X Coordinate of the last overlapping sprite that was pushed fully */
     uint8_t* bgColorRAM;                    /* 64 Byte long color ram which stores CGB palettes */
     uint8_t* spriteColorRAM;                /* ^^^ for sprites */
     uint8_t currentBackgroundCRAMIndex;     /* Current byte value in color ram which can be 
@@ -191,6 +192,8 @@ typedef struct VM VM;
 /* Loads in the cartridge into the VM and starts the overall emulator */
 void startEmulator(Cartridge* cartridge);
 
+void pauseEmulator(VM* vm);
+void unpauseEmulator(VM* vm);
 /* will perform a memory cleanup by freeing the VM state and then safely exiting */
 void stopEmulator(VM* vm);
 

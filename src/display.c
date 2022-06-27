@@ -336,16 +336,20 @@ static uint8_t* getSprite(VM* vm) {
     for (int i = 0; i < vm->spritesInScanline; i++) {
         uint8_t spriteIndex = i * 5;
         uint8_t spriteX = vm->oamDataBuffer[spriteIndex + 1];
+
+        /* Dont render invisible sprites */
+        if (spriteX == 0 || spriteX >= 168) continue;
         /* Only when theres a full overlap, the index of the current sprite has to be 
          * greater than the index of the last overlapping sprite, to prevent infinite loop
          * and ensure none are repeated */
 
-        if (vm->nextPushPixelX == spriteX - 8) {
-            if (vm->isLastSpriteOverlap && vm->nextPushPixelX == vm->lastSpriteOverlapX) {
+        int startX = spriteX - 8;
+        if (vm->nextPushPixelX == startX || (vm->nextPushPixelX == 0 && startX < 0)) {
+            if (vm->isLastSpriteOverlap && startX == vm->lastSpriteOverlapX) {
                 if (vm->oamDataBuffer[spriteIndex + 4] > vm->lastSpriteOverlapPushIndex)
                     return &vm->oamDataBuffer[spriteIndex]; 
             } else return &vm->oamDataBuffer[spriteIndex];
-        } 
+        }
     }
 
     return NULL;
@@ -368,8 +372,28 @@ static void pushPixels(VM* vm) {
      * be rendered is pushed, i.e screen X = 159*/
     for (int i = 1; i <= 8; i++) {
         uint8_t* sprite = getSprite(vm);
-        if (sprite != NULL) {
-            // printf("starting sprite render at X%d, %s\n", vm->nextPushPixelX, vm->spriteSize ? "8x16" : "8x8");
+        if (sprite != NULL) { 
+
+            /*
+            if (vm->fetcherY % 8 == 0) {
+                printf("Switching to sprite render %dx %dy\n", vm->nextPushPixelX, vm->fetcherY);
+            }
+
+            */
+
+            /* Since a part of the BG/Window tiles might be already pushed, we can calculate 
+             * how many pixels to discard when continuing pushing for BG 
+             *
+             * This can happen when either the sprite is not aligned with the 8 pixel alignment 
+             * of the BG/Window grid i.e Sprite X % 8 != 0
+             *
+             * or when the initial bg scrolling is not aligned with the 8 pixel grid 
+             * which causes a few pixels in the bg to be discarded at the start of the scanline 
+             * Since this affects the position of the pixels in the rest of the scanline,
+             * this has to be calculated when discarding pixels for the sprite which are already 
+             * pushed */
+            vm->pixelsToDiscard = i - 1;
+            // if (vm->fetcherY % 8 == 0) printf("pixels to discard %d %d\n", vm->pixelsToDiscard, vm->nextPushPixelX);
             vm->renderingSprites = true;
             switchedToSpriteRender = true;
             vm->spriteData = sprite;
@@ -387,6 +411,13 @@ static void pushPixels(VM* vm) {
              * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow 
              * as the BG fetch is aborted
              */
+
+            /*
+            if (vm->fetcherY % 8 == 0) {
+                printf("Switching to window render %dx %dy\n", vm->nextPushPixelX, vm->fetcherY);
+            }
+
+            */
             vm->renderingWindow = true;
             vm->fetcherX = 0;
             switchedToWindowRender = true;
@@ -417,7 +448,14 @@ static void pushPixels(VM* vm) {
          * For OBJs, pixels to discard is also used to discard pixels which are already pushed 
          * for window/background when dealing with sprites which are not fully aligned with 
          * BG tiles */
-        if (i <= pixelsToDiscard) continue;
+        if (i <= pixelsToDiscard) {
+            /*
+            if (vm->fetcherY % 8 == 0) {
+                printf("Skipping Pixel\n");
+            }
+            */
+            continue;
+        }
         // if (pixelsToDiscard > 0 && vm->fetcherX != 0 && !vm->renderingSprites && !vm->renderingWindow) printf("fuck x%d y%d %d\n", vm->nextPushPixelX - 1, vm->fetcherY, vm->pixelsToDiscard);
         FIFO_Pixel pixel;
         /* Check for horizontal bit flip */
@@ -449,7 +487,6 @@ static void pushPixels(VM* vm) {
         pixel.screenY = vm->fetcherY;
 
         pushFIFO(&vm->BackgroundFIFO, pixel);
-
         /* When it reaches 159, the scanline is over */
         vm->nextPushPixelX++;
         /* Even if we didnt complete the tile, we need to exit after rendering the last pixel */
@@ -467,6 +504,12 @@ static void pushPixels(VM* vm) {
         vm->fetcherX++;
         vm->currentFetcherTask++;
         vm->pixelsToDiscard = 0;
+
+        /*
+        if (vm->fetcherY % 8 == 0) {
+            printf("BG Pushed %dx-%dx %dy\n", vm->nextPushPixelX - 8, vm->nextPushPixelX - 1, vm->fetcherY);
+
+        } */
     }
 }
 
@@ -477,6 +520,7 @@ static void pushSpritePixels(VM* vm) {
     uint8_t tileDataLow = vm->fetcherTileRowLow;
     uint8_t tileDataHigh = vm->fetcherTileRowHigh;
     uint8_t tileAttributes = vm->fetcherTileAttributes;
+    int startX = vm->spriteData[1] - 8;
     uint8_t spriteOAMIndex = vm->spriteData[4];
     bool partiallyOverlaps = false;
 
@@ -485,7 +529,12 @@ static void pushSpritePixels(VM* vm) {
 
     for (int i = 0; i < 8 && vm->OAMFIFO.count != 8; i++) {
         if (vm->nextPushPixelX + i == 160) break;
-        
+        /* If the sprite is off screen towards the left, because only a portion of 
+         * the sprite is rendered, we dont fill the fifo completely but only make 
+         * sure it has the minimum size it needs. Overlapping sprites are also taken 
+         * into account as the fifo count as a whole is checked */
+        if (startX < 0 && vm->OAMFIFO.count >= 8 + startX) break; 
+
         FIFO_Pixel p;
         p.bgPriority = 1;
         p.colorID = 0;
@@ -496,12 +545,20 @@ static void pushSpritePixels(VM* vm) {
         pushFIFO(&vm->OAMFIFO, p);
     }
 
-    /* Compare and replace OAM FIFO with the sprite tile data */
-    for (int i = 1; i <= 8; i++) {
+    /* Compare and replace OAM FIFO with the sprite tile data 
+     *
+     * In case the sprite starts a bit off screen to the left, we discard the correct amount 
+     * of pixels */
+    for (int i = startX < 0 ? -startX + 1 : 1; i <= 8; i++) {
         /* Check for horizontal bit flip */
-        uint8_t index = GET_BIT(tileAttributes, 5) ? i - 1 : 8 - i;
-        uint8_t higherBit = GET_BIT(tileDataHigh, index);
-        uint8_t lowerBit = GET_BIT(tileDataLow, index);
+        uint8_t pixelIndex = GET_BIT(tileAttributes, 5) ? i - 1 : 8 - i;
+        /* Make adjustments to the index in the fifo that is utilized when sprite is 
+         * off screen to the left 
+         *
+         * Note : startX is a negative value so its subtracted */
+        uint8_t fifoIndex = (i - 1) + (startX < 0 ? startX : 0);
+        uint8_t higherBit = GET_BIT(tileDataHigh, pixelIndex);
+        uint8_t lowerBit = GET_BIT(tileDataLow, pixelIndex);
         uint8_t colorID = (higherBit << 1) | lowerBit;
         uint8_t bgPriority = GET_BIT(tileAttributes, 7);
         uint8_t colorPalette = 0;
@@ -519,19 +576,19 @@ static void pushSpritePixels(VM* vm) {
          * After they are pushed, the shifter calculates which pixels overlap BG and which dont
          * using the BG priority */
 
-        FIFO_Pixel fifoPixel = peekFIFO(&vm->OAMFIFO, i - 1);
+        FIFO_Pixel fifoPixel = peekFIFO(&vm->OAMFIFO, fifoIndex);
         FIFO_Pixel pixel;
         pixel.colorID = colorID;
         pixel.colorPalette = colorPalette;
         pixel.bgPriority = bgPriority;
-        pixel.screenX = vm->nextPushPixelX + i - 1;
+        pixel.screenX = vm->nextPushPixelX + fifoIndex;
         pixel.screenY = vm->fetcherY;
         /* Compare */ 
 
         if (fifoPixel.colorID == 0 && pixel.colorID != 0) {
             /* Overwrite FIFO pixel if the current pixel in fifo is transparent and 
              * the new pixel isnt */
-            insertFIFO(&vm->OAMFIFO, pixel, i - 1);
+            insertFIFO(&vm->OAMFIFO, pixel, fifoIndex);
         } else if (fifoPixel.colorID != 0 && pixel.colorID != 0) {
             /* If both are opaque */
             if (vm->emuMode == EMU_DMG) {
@@ -542,13 +599,13 @@ static void pushSpritePixels(VM* vm) {
                  * Otherwise if the X coordinate is the same, and this sprite's index is 
                  * lesser than the last sprite's index, the pixel is overwritten */
                 if (!partiallyOverlaps && spriteOAMIndex < vm->lastSpriteOverlapPushIndex) {
-                    insertFIFO(&vm->OAMFIFO, pixel, i - 1);
+                    insertFIFO(&vm->OAMFIFO, pixel, fifoIndex);
                 }
             } else if (vm->emuMode == EMU_CGB) {
                 /* On CGB, the pixel is overwritten if the current sprite's index is greater 
                  * than the previous sprite in any condition */
                 if (spriteOAMIndex < vm->lastSpriteOverlapPushIndex) {
-                    insertFIFO(&vm->OAMFIFO, pixel, i - 1);
+                    insertFIFO(&vm->OAMFIFO, pixel, fifoIndex);
                 }
             }
         }
@@ -556,14 +613,12 @@ static void pushSpritePixels(VM* vm) {
         /* If fifoPixel is opaque and current pixel is transparent, even if current pixel has a 
          * higher priority we dont overwrite */
     }
-
-    /* Since a part of the BG/Window tiles might be already pushed, we can calculate 
-     * how many pixels to discard when continuing pushing */
-    vm->pixelsToDiscard = vm->nextPushPixelX % 8;
+ 
     // printf("pixels to discard %d, X%d, Y%d\n", vm->pixelsToDiscard, vm->nextPushPixelX, vm->fetcherY);
+     
     vm->isLastSpriteOverlap = true;
     vm->lastSpriteOverlapPushIndex = spriteOAMIndex;
-    vm->lastSpriteOverlapX = vm->nextPushPixelX;
+    vm->lastSpriteOverlapX = startX;
     /* Restore State */
     vm->fetcherTileAttributes = vm->preservedFetcherTileAttributes;
     vm->fetcherTileRowHigh = vm->preservedFetcherTileHigh;
@@ -734,6 +789,22 @@ static void advanceFetcher(VM* vm) {
                 vm->firstTileInScanline = false;
                 break;
             }
+
+            /* 
+            if (currentRowInTile == 0) {
+                if (!vm->renderingSprites) {
+                    printf("BG %dx %dy: Fetched ", vm->fetcherX * 8, vm->fetcherY);  
+                } else {
+                    printf("Sprite %dx %dy: Fetched ", vm->fetcherX * 8, vm->fetcherY);
+                }
+
+                for (int i = 0; i < 16; i++) {
+                    printf("%02x ", tileData[i]);
+                }
+                printf("\n");
+            }
+
+            */
 
             /* After the fetcher is done fetching for the scanline, it goes 
              * in a loop where it stops right before moving on to the pushing stage 
