@@ -2,6 +2,9 @@ debug/mts
 debug/blargg
 games
 *.o
-bin/*
+bin
 megagbc
 *.txt
+roms
+roms_bin
+
