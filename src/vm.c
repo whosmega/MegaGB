@@ -10,7 +10,6 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_timer.h>
-#include <bits/time.h>
 #include <stdint.h>
 #include <time.h>
 #include <string.h>
@@ -371,7 +370,7 @@ static void run(VM* vm) {
 		/* Handle Events */
         handleSDLEvents(vm);
 
-		for (int i = 0; (i < 1000) && vm->run; i++) {
+		for (int i = 0; (i < 500) && vm->run; i++) {
 			/* Run the next CPU instruction */
 			dispatch(vm);
 		}
@@ -448,8 +447,8 @@ void handleSDLEvents(VM *vm) {
 					vm->joypadActionBuffer &= ~(1 << 2);
 					break;
                 case SDL_SCANCODE_SPACE:
-                    /* Pause Emulator */
-                    pauseEmulator(vm);
+                    if (!vm->paused) pauseEmulator(vm);
+                    else unpauseEmulator(vm);
                     break;
 				default: return;
 			}
@@ -494,10 +493,6 @@ void handleSDLEvents(VM *vm) {
 					/* Select */
 					vm->joypadActionBuffer |= 1 << 2;
 					break;
-                case SDL_SCANCODE_SPACE:
-                    /* Unpause */ 
-                    unpauseEmulator(vm);
-                    break;
 				default: return;			 
 			}
 			updateJoypadRegBuffer(vm, vm->joypadSelectedMode);

@@ -1,6 +1,4 @@
-INCLUDE "macros.inc"
-SECTION "print_asm", ROM0
-
+INCLUDE "interface.inc"
 ; ------------------------------------------------------
 printStringNL::         ; Print string with newline character 
     push af
@@ -36,6 +34,3 @@ printChar::
 	pop hl
 	ret
 ; ------------------------------------------------------
-
-
-EXPORT printChar, printString, printStringNL
