@@ -369,7 +369,6 @@ static uint8_t* getSprite(VM* vm) {
 static void pushPixels(VM* vm) {
     uint8_t tileDataLow = vm->fetcherTileRowLow;
     uint8_t tileDataHigh = vm->fetcherTileRowHigh; 
-    uint8_t pixelsToDiscard = vm->pixelsToDiscard;
     bool switchedToWindowRender = false;
     bool switchedToSpriteRender = false;
     /* Push pixels to FIFO 
@@ -384,13 +383,6 @@ static void pushPixels(VM* vm) {
     for (int i = 1; i <= 8; i++) {
         uint8_t* sprite = getSprite(vm);
         if (sprite != NULL) {
-            /*
-            if (vm->fetcherY % 8 == 0) {
-                printf("Switching to sprite render %dx %dy\n", vm->nextPushPixelX, vm->fetcherY);
-            }
-
-            */
-
             /* Since a part of the BG/Window tiles might be already pushed, we can calculate 
              * how many pixels to discard when continuing pushing for BG 
              *
@@ -409,14 +401,23 @@ static void pushPixels(VM* vm) {
              * pixels of another sprite positioned 1X after it, the first sprite calculates 4 
              * pixels to be discarded, but because the overlapping sprite causes 1 more pixel to
              * be rendered, pixels to discard has to be adjusted to discard 1 more pixel
-             * calculates 4 */
+             */
             if (!vm->isLastSpriteOverlap) {
-                /* If sprite is slightly off screen, add it to the already calculated scx offset */
-                if (vm->nextPushPixelX == 0 && sprite[1] < 8 && vm->pixelsToDiscard != 0) {
-                    vm->pixelsToDiscard += i - 1;
-                    // printf("off screen %d\n", vm->pixelsToDiscard - (i - 1));
+                /* If sprite is slightly off screen, leave the scx offset unchanged as the sprite
+                 * technically starts at 0X, the part of the tile that should be discarded is 
+                 * already calculated */
+                if (vm->nextPushPixelX == 0 && sprite[1] < 8 && vm->pixelsToDiscard != 0); // do nothing
+                else {
+                    /* If the sprite starts rendering at the start of a BG/Window tile,
+                     * i - 1 == 0, so there are no pixels to discard for the sprite
+                     * If it starts in the middle of a tile, the number of pixels in tile already 
+                     * pushed need to be discarded after the fetcher returns back to bg push mode
+                     * after completing sprite push. In that case we safely *overwrite* the pixels
+                     * to be discarded that were calculated for BG offset as atleast 1 bg pixel 
+                     * has been rendered, and the pixels have been discarded, therefore the pixels 
+                     * to discard value has no use now */
+                    if (i - 1 != 0) vm->pixelsToDiscard = i - 1;
                 }
-                else vm->pixelsToDiscard = i - 1;
 
                 // if (vm->pixelsToDiscard > 7 && old <= 7) printf("new %d, old %d, x%d, y%d, i%d\n", vm->pixelsToDiscard, old, vm->nextPushPixelX, vm->fetcherY, i - 1);
             }
@@ -477,7 +478,7 @@ static void pushPixels(VM* vm) {
          * For OBJs, pixels to discard is also used to discard pixels which are already pushed 
          * for window/background when dealing with sprites which are not fully aligned with 
          * BG tiles */
-        if (i <= pixelsToDiscard) {
+        if (i <= vm->pixelsToDiscard) {
             /*
             if (vm->fetcherY % 8 == 0) {
                 printf("Skipping Pixel\n");
