@@ -852,21 +852,24 @@ static void advanceFetcher(VM* vm) {
 static void advanceMode2(VM* vm) {
     if (vm->spritesInScanline >= 10) return;
 
-    uint8_t spriteSize = GET_BIT(vm->MEM[R_LCDC], 2);
+    uint8_t isLargeSprite = GET_BIT(vm->MEM[R_LCDC], 2);
     uint8_t index = (vm->cyclesSinceLastMode / 2) - 1;
 
-    vm->spriteSize = spriteSize;
+    vm->spriteSize = isLargeSprite;
 
     uint16_t spriteIndex = OAM_N0_160B + (index * 4);
     uint8_t spriteY = vm->MEM[spriteIndex];
     uint8_t firstRowY, lastRowY;
-    if (spriteSize) {
+    bool partial = false;
+
+    if (isLargeSprite) {
         /* 8 x 16 sprite mode */
         if (spriteY == 0 || spriteY >= 160) return;
 
         if (spriteY < 16) {
             firstRowY = 0;
             lastRowY = spriteY - 1;
+            partial = true;
         } else {
             firstRowY = spriteY - 16;
             lastRowY = firstRowY + 15;
@@ -878,6 +881,7 @@ static void advanceMode2(VM* vm) {
         if (spriteY < 16) {
             firstRowY = 0;
             lastRowY = spriteY - 9;
+            partial = true;
         } else {
             // if (spriteY - 16 == 0) printf("bruh %d %d\n", spriteY - 16, spriteY - 16 + 7);
             firstRowY = spriteY - 16;
@@ -892,7 +896,14 @@ static void advanceMode2(VM* vm) {
         /* Instead of storing the actual sprite Y value, we can
          * store the current row of the sprite this scanline will render 
          * so it doesnt have to be recalculated */
-        vm->oamDataBuffer[bufferIndex] = vm->MEM[R_LY] - firstRowY;
+        if (partial) {
+            uint8_t row;
+            if (isLargeSprite) row = (15 - lastRowY) + vm->MEM[R_LY];
+            else row = (7 - lastRowY) + vm->MEM[R_LY];
+
+            vm->oamDataBuffer[bufferIndex] = row;
+        } else vm->oamDataBuffer[bufferIndex] = vm->MEM[R_LY] - firstRowY;
+
         memcpy(&vm->oamDataBuffer[bufferIndex+1], &vm->MEM[spriteIndex+1], 3);
         vm->oamDataBuffer[bufferIndex+4] = index;
 
