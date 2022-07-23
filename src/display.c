@@ -418,12 +418,11 @@ static void pushPixels(VM* vm) {
                      * to discard value has no use now */
                     if (i - 1 != 0) vm->pixelsToDiscard = i - 1;
                 }
-
-                // if (vm->pixelsToDiscard > 7 && old <= 7) printf("new %d, old %d, x%d, y%d, i%d\n", vm->pixelsToDiscard, old, vm->nextPushPixelX, vm->fetcherY, i - 1);
             }
-            else vm->pixelsToDiscard += vm->nextPushPixelX - (vm->lastSpriteOverlapX < 0 ? 0 : vm->lastSpriteOverlapX);
+            else {
+                vm->pixelsToDiscard += vm->nextPushPixelX - (vm->lastSpriteOverlapX < 0 ? 0 : vm->lastSpriteOverlapX);
+            }
 
-            // if (vm->fetcherY % 8 == 0) printf("pixels to discard %d %d\n", vm->pixelsToDiscard, vm->nextPushPixelX);
             vm->renderingSprites = true;
             switchedToSpriteRender = true;
             vm->spriteData = sprite;
@@ -442,12 +441,6 @@ static void pushPixels(VM* vm) {
              * as the BG fetch is aborted
              */
 
-            /*
-            if (vm->fetcherY % 8 == 0) {
-                printf("Switching to window render %dx %dy\n", vm->nextPushPixelX, vm->fetcherY);
-            }
-
-            */
             vm->renderingWindow = true;
             vm->fetcherX = 0;
             switchedToWindowRender = true;
@@ -479,11 +472,6 @@ static void pushPixels(VM* vm) {
          * for window/background when dealing with sprites which are not fully aligned with 
          * BG tiles */
         if (i <= vm->pixelsToDiscard) {
-            /*
-            if (vm->fetcherY % 8 == 0) {
-                printf("Skipping Pixel\n");
-            }
-            */
             continue;
         }
         // if (pixelsToDiscard > 0 && vm->fetcherX != 0 && !vm->renderingSprites && !vm->renderingWindow) printf("fuck x%d y%d %d\n", vm->nextPushPixelX - 1, vm->fetcherY, vm->pixelsToDiscard);
@@ -525,6 +513,7 @@ static void pushPixels(VM* vm) {
     }
     // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7); 
     if (switchedToWindowRender) {
+        vm->isLastSpriteOverlap = false;
         vm->currentFetcherTask = 0;
     } else if (switchedToSpriteRender) {
         if (vm->currentFetcherTask == 7) vm->currentFetcherTask = 0;
