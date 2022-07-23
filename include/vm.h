@@ -108,6 +108,7 @@ struct VM {
     unsigned long clock;                    /* Main clock of the whole emulator 
 											   Counts in T-Cycles */
 	bool scheduleHaltBug;				    /* If set to true,the CPU recreates the halt bug */
+    bool scheduleDMA;                       /* If set to true, schedules the DMA to be enabled */
     bool doingDMA;
     uint16_t mCyclesSinceDMA;               /* M-Cycles elapsed since DMA began */
     uint16_t dmaSource;                     /* DMA Source Address */

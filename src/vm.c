@@ -27,6 +27,7 @@ static void initVM(VM* vm) {
     vm->scheduleInterruptEnable = false;
 	vm->haltMode = false;
 	vm->scheduleHaltBug = false;
+    vm->scheduleDMA = false;
 
     vm->clock = 0;
     vm->lastTIMASync = 0;
@@ -330,8 +331,10 @@ void startDMATransfer(VM* vm, uint8_t byte) {
     uint16_t address = byte * 0x100;
 
     vm->dmaSource = address;
-    vm->doingDMA = true;
     vm->mCyclesSinceDMA = 0;
+
+    /* Schedule DMA to begin at the end of this dispatch */
+    vm->scheduleDMA = true;
 }
 
 void syncDMA(VM* vm) {

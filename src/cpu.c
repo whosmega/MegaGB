@@ -1869,6 +1869,13 @@ void dispatch(VM* vm) {
             vm->IME = true;
         }
 
+        if (vm->scheduleDMA) {
+            /* DMA should already be configured through 'startDMATransfer()' before 
+             * scheduling this */
+            vm->scheduleDMA = false;
+            vm->doingDMA = true;
+        }
+
 		if (vm->haltMode) {
 			/* Skip dispatch and directly check for pending interrupts */
 
