@@ -1,16 +1,8 @@
 #include "../include/vm.h"
 #include "../include/display.h"
 #include "../include/debug.h"
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_keycode.h>
-#include <SDL2/SDL_pixels.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_scancode.h>
-#include <SDL2/SDL_timer.h>
-#include <SDL2/SDL_video.h>
 #include <stdbool.h>
 
-#include <SDL2/SDL.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -324,9 +316,6 @@ static void renderPixel(VM* vm) {
     } else if (vm->emuMode == EMU_DMG) {
         getPixelColor_DMG(vm, pixel, &r, &g, &b, isSprite);
     }
-
-    SDL_SetRenderDrawColor(vm->sdl_renderer, r, g, b, 255);
-    SDL_RenderDrawPoint(vm->sdl_renderer, pixel.screenX, pixel.screenY);
 
     vm->nextRenderPixelX = pixel.screenX + 1;
     // printf("rendered pixel at x%d\n", pixel.screenX);
@@ -1204,8 +1193,6 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 
 			if (vm->skipFrame) {
 				vm->skipFrame = false;
-			} else {
-				SDL_RenderPresent(vm->sdl_renderer);
 			}
 			lockToFramerate(vm);
 		} 

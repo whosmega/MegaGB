@@ -1223,26 +1223,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                     vm->MEM[addr] = 0x00;
                 }
 #endif
-                break;
-			case R_P1_JOYP:
-                /* Set the upper 2 bits because they're unused */
-                SET_BIT(byte, 6);
-                SET_BIT(byte, 7);
-
-				/* Make sure the lower nibble if unaffected */
-				byte &= 0xF0;
-				byte |= vm->MEM[addr] & 0xF;
-				
-				/* Check bit 4-5to get selected mode */
-				uint8_t selected = ((byte >> 4) & 0b11);
-				vm->joypadSelectedMode = selected;
-			    
-				/* Write the selected mode */
-				vm->MEM[addr] = byte;
-				
-				/* Update register to show the keys for the new mode */
-				updateJoypadRegBuffer(vm, selected);
-				return;
+                break;	
 			case R_SVBK: {
                 if (vm->emuMode != EMU_CGB) return;
 				/* In CGB Mode, switch WRAM banks */

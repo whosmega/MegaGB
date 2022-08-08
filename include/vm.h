@@ -1,7 +1,5 @@
 #ifndef MGBC_VM_H
 #define MGBC_VM_H
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_render.h>
 #include <stdint.h>
 #include <unistd.h>
 #include "../include/cartridge.h"
@@ -88,14 +86,9 @@ typedef enum {
 
 struct VM {
     /* ---------------- SDL ----------------- */
-    SDL_Window* sdl_window;					/* The window */
-    SDL_Renderer* sdl_renderer;             /* Renderer */
 	unsigned long ticksAtStartup;			/* Stores the ticks at emulator startup (rom boot) */
 	unsigned long ticksAtLastRender;		/* Used to calculate how much time has passed 
-											   since last sdl frame render */
-	uint8_t joypadDirectionBuffer;			/* Stores joypad direction button states */
-	uint8_t joypadActionBuffer;				/* Stores joypad action button states */
-	JOYPAD_SELECT joypadSelectedMode;		
+											   since last sdl frame render */	
     /* -------------- Emulator ------------- */
     Cartridge* cartridge;
     EMULATION_MODE emuMode;                 /* Which behaviour are we emulating, dmg, cgb, ect */
@@ -200,16 +193,6 @@ void stopEmulator(VM* vm);
 
 /* Increments the cycle count by 4 tcycles and syncs all hardware to act accordingly if necessary */
 void cyclesSync_4(VM* vm);
-
-/* Joypad */
-
-/* Updates the register by writing correct values to the lower nibble */
-void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode);
-
-/* SDL */
-int initSDL(VM* vm);
-void freeSDL(VM* vm);
-void handleSDLEvents(VM* vm);
 
 /* Sync timer */
 void syncTimer(VM* vm);

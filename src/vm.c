@@ -5,15 +5,9 @@
 #include "../include/display.h"
 #include "../include/mbc.h"
 
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_pixels.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_scancode.h>
-#include <SDL2/SDL_timer.h>
 #include <stdint.h>
 #include <time.h>
 #include <string.h>
-#include <SDL2/SDL.h>
 #include <sys/time.h>
 
 static void initVM(VM* vm) {
@@ -33,8 +27,6 @@ static void initVM(VM* vm) {
     vm->lastTIMASync = 0;
     vm->lastDIVSync = 0;
 
-    vm->sdl_window = NULL;
-    vm->sdl_renderer = NULL;
 	vm->ticksAtLastRender = 0;
 	vm->ticksAtStartup = 0;	
  
@@ -80,11 +72,6 @@ static void initVM(VM* vm) {
 	/* Initialise FIFO */
 	clearFIFO(&vm->BackgroundFIFO);
     clearFIFO(&vm->OAMFIFO);
-
-	/* bit 3-0 in joypad register is set to 1 on boot (0xCF) */
-	vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
-	vm->joypadActionBuffer = 0xF;
-	vm->joypadDirectionBuffer = 0xF;
 }
 
 static void initVMCartridge(VM* vm, Cartridge* cartridge) {
@@ -370,9 +357,6 @@ static void run(VM* vm) {
 	vm->ticksAtStartup = clock_u();
 
     while (vm->run) {
-		/* Handle Events */
-        handleSDLEvents(vm);
-
 		for (int i = 0; (i < 500) && vm->run; i++) {
 			/* Run the next CPU instruction */
 			dispatch(vm);
@@ -395,169 +379,12 @@ void cyclesSync_4(VM* vm) {
     if (vm->doingDMA) syncDMA(vm);
 }
 
-/* SDL */
-
-int initSDL(VM* vm) {
-    SDL_Init(SDL_INIT_EVERYTHING);
-    SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING, SDL_WINDOW_SHOWN,
-                                &vm->sdl_window, &vm->sdl_renderer);
-
-    if (!vm->sdl_window) return 1;          /* Failed to create screen */
-
-    SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
-	SDL_RenderSetScale(vm->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
-    return 0;
-}
-
-void handleSDLEvents(VM *vm) {
-    /* We listen for events like keystrokes and window closing */
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
-			/* We reset the corresponding bit for every scancode 
-			 * in the buffer for keydown and set for keyup */
-			switch (event.key.keysym.scancode) {
-				case SDL_SCANCODE_UP:
-					/* Joypad Up */
-					vm->joypadDirectionBuffer &= ~(1 << 2);
-					break;
-				case SDL_SCANCODE_LEFT:
-					/* Joypad Left */
-					vm->joypadDirectionBuffer &= ~(1 << 1);
-					break;
-				case SDL_SCANCODE_DOWN:
-					/* Joypad Down */
-					vm->joypadDirectionBuffer &= ~(1 << 3);
-					break;
-				case SDL_SCANCODE_RIGHT:
-					/* Joypad Right */
-					vm->joypadDirectionBuffer &= ~(1 << 0);
-					break;
-				case SDL_SCANCODE_Z:
-					/* B */
-					vm->joypadActionBuffer &= ~(1 << 1);
-					break;
-				case SDL_SCANCODE_X:
-					/* A */
-					vm->joypadActionBuffer &= ~(1 << 0);
-					break;
-				case SDL_SCANCODE_RETURN:
-					/* Start */
-					vm->joypadActionBuffer &= ~(1 << 3);
-					break;
-				case SDL_SCANCODE_TAB:
-					/* Select */
-					vm->joypadActionBuffer &= ~(1 << 2);
-					break;
-                case SDL_SCANCODE_SPACE:
-                    if (!vm->paused) pauseEmulator(vm);
-                    else unpauseEmulator(vm);
-                    break;
-				default: return;
-			}
-
-			updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
-
-			if (vm->joypadSelectedMode != JOYPAD_SELECT_NONE) {
-				/* Request joypad interrupt if atleast 1 of the modes are selected */
-				requestInterrupt(vm, INTERRUPT_JOYPAD);
-			}
-		} else if (event.type == SDL_KEYUP && event.key.repeat == 0) {
-			switch (event.key.keysym.scancode) {
-				case SDL_SCANCODE_UP:
-					/* Joypad Up */
-					vm->joypadDirectionBuffer |= 1 << 2;
-					break;
-				case SDL_SCANCODE_LEFT:
-					/* Joypad Left */
-					vm->joypadDirectionBuffer |= 1 << 1;
-					break;
-				case SDL_SCANCODE_DOWN:
-					/* Joypad Down */
-					vm->joypadDirectionBuffer |= 1 << 3;
-					break;
-				case SDL_SCANCODE_RIGHT:
-					/* Joypad Right */
-					vm->joypadDirectionBuffer |= 1 << 0;
-					break;
-				case SDL_SCANCODE_Z:
-					/* B */
-					vm->joypadActionBuffer |= 1 << 1;
-					break;
-				case SDL_SCANCODE_X:
-					/* A */
-					vm->joypadActionBuffer |= 1 << 0;
-					break;
-				case SDL_SCANCODE_RETURN:
-					/* Start */
-					vm->joypadActionBuffer |= 1 << 3;
-					break;
-				case SDL_SCANCODE_TAB:
-					/* Select */
-					vm->joypadActionBuffer |= 1 << 2;
-					break;
-				default: return;			 
-			}
-			updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
-
-		} else if (event.type == SDL_QUIT) {
-            vm->run = false;
-        }
-    }
-}
-
-void freeSDL(VM* vm) {
-    SDL_DestroyRenderer(vm->sdl_renderer);
-    SDL_DestroyWindow(vm->sdl_window);
-    SDL_Quit();
-}
-/* ---------------------------------------- */
-
-/* Joypad */
-
-void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode) {
-	switch (mode) {
-		case JOYPAD_SELECT_DIRECTION_ACTION:
-			/* The program has selected action and direction both,
-			 * so my best guess is to just bitwise OR them and set the value */
-			vm->MEM[R_P1_JOYP] &= 0xF0;
-			vm->MEM[R_P1_JOYP] |= ~(~vm->joypadDirectionBuffer | ~vm->joypadActionBuffer) & 0xF;
-			break;
-		case JOYPAD_SELECT_ACTION:
-			/* Select Action */
-			vm->MEM[R_P1_JOYP] &= 0xF0;
-			vm->MEM[R_P1_JOYP] |= vm->joypadActionBuffer & 0xF;
-
-			break;
-		case JOYPAD_SELECT_DIRECTION:
-			/* Select Direction */
-			vm->MEM[R_P1_JOYP] &= 0xF0;
-			vm->MEM[R_P1_JOYP] |= vm->joypadDirectionBuffer & 0xF;
-
-			break;
-		case JOYPAD_SELECT_NONE:
-			/* Select None */
-			vm->MEM[R_P1_JOYP] &= 0xF0;
-			break;
-	}
-}
-
 /* ---------------------------------------- */ 
 
 void startEmulator(Cartridge* cartridge) {
     VM vm;
     initVM(&vm);
     initVMCartridge(&vm, cartridge);
-    /* Start up SDL */
-    int status = initSDL(&vm);
-    if (status != 0) {
-        /* An error occurred and SDL wasnt started
-         *
-         * This is fatal as our emulator cannot run without it
-         * and we immediately quit */
-        log_fatal(&vm, "Error Starting SDL2");
-        return;
-    } 
 
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge); 
@@ -584,8 +411,6 @@ void pauseEmulator(VM* vm) {
     vm->paused = true;
 
     while (true) {
-        handleSDLEvents(vm);
-
         if (!vm->paused) break;
     }
 }
@@ -604,8 +429,6 @@ void stopEmulator(VM* vm) {
     printf("Cleaning allocations\n");
 #endif
 
-    /* Free up all SDL allocations and stop it */
-    freeSDL(vm);
     /* Free up MBC allocations */
     mbc_free(vm);
     

@@ -1,7 +1,6 @@
 #ifndef megagbc_display_h
+#include <stdint.h>
 #define megagbc_display_h
-#include <SDL2/SDL.h>
-
 #define DISPLAY_SCALING 4
 #define HEIGHT_PX 144
 #define WIDTH_PX  160
