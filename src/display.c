@@ -1179,10 +1179,16 @@ void syncDisplay(VM* vm, unsigned int cycles) {
 	if (!vm->ppuEnabled) {
         /* Keep locking to framerate even if PPU is off */
         for (unsigned int i = 0; i < cycles; i++) {
-            vm->cyclesSinceLastFrame = 0;
+            vm->cyclesSinceLastFrame++;
 
             if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
                 vm->cyclesSinceLastFrame = 0;
+
+                /* On CGB and DMG, the screen goes blank or white when the PPU is disabled */
+                SDL_SetRenderDrawColor(vm->sdl_renderer, 255, 255, 255, 255);
+                SDL_RenderClear(vm->sdl_renderer);
+                SDL_RenderPresent(vm->sdl_renderer);
+
 		        lockToFramerate(vm);
             }
         }

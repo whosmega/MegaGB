@@ -1,4 +1,3 @@
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,38 +80,27 @@
 #define TEST_C_FLAG_SUB16(vm, x, y) set_flag(vm, FLAG_C, ((int)(x) - (int)(y)) < 0 ? 1 : 0)
 #define TEST_C_FLAG_SUB8(vm, x, y) set_flag(vm, FLAG_C, ((int)(x) - (int)(y)) < 0 ? 1 : 0)
 
-static uint8_t readAddr(VM* vm, uint16_t addr);
-static void writeAddr(VM* vm, uint16_t addr, uint8_t byte);
 static inline void writeAddr_4C(VM* vm, uint16_t addr, uint8_t byte);
 static inline uint8_t readAddr_4C(VM* vm, uint16_t addr);
 
 static inline uint8_t readByte(VM* vm) {
     /* Reads a byte and doesnt consume any cycles */
-    return vm->MEM[vm->PC++];
+    return readAddr(vm, vm->PC++);
 }
 
 static inline uint8_t readByte_4C(VM* vm) {
     /* Reads a byte and consumes 4 cycles */
-    uint8_t byte = vm->MEM[vm->PC++];
-
-    cyclesSync_4(vm);
-    return byte;
+    return readAddr_4C(vm, vm->PC++);
 }
 
 static inline uint16_t read2Bytes(VM* vm) {
     /* Reads 2 bytes and doesnt consume any cycles */
-    return (uint16_t)(vm->MEM[vm->PC++] | (vm->MEM[vm->PC++] << 8));
+    return (uint16_t)(readAddr(vm, vm->PC++) | readAddr(vm, vm->PC++) << 8);
 }
 
 static uint16_t read2Bytes_8C(VM* vm) {
     /* Reads 2 bytes and consumes 8 cycles, 4 per byte */
-    uint8_t low = vm->MEM[vm->PC++]; 
-    cyclesSync_4(vm);
-
-    uint8_t high = vm->MEM[vm->PC++];
-    cyclesSync_4(vm);
-
-    return (uint16_t)(low | (high << 8));
+    return (uint16_t)(readAddr_4C(vm, vm->PC++) | (readAddr_4C(vm, vm->PC++) << 8));
 }
 
 static inline void set_flag(VM* vm, FLAG flag, uint8_t bit) {
@@ -1136,17 +1124,11 @@ static void decimalAdjust(VM* vm) {
 
 /* This function is responsible for writing 1 byte to a memory address */
 
-static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
+void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 #ifdef DEBUG_MEM_LOGGING
     printf("Writing 0x%02x to address 0x%04x\n", byte, addr);
 #endif
-    if (addr >= HRAM_N0 && addr <= HRAM_N0_END) {
-        vm->MEM[addr] = byte;
-        return;
-    }
-
-    /* During DMA, the cpu can only access HRAM */
-    if (vm->doingDMA) return;
+    
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* External RAM write request */
         mbc_writeExternalRAM(vm, addr, byte);
@@ -1156,11 +1138,11 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
          * bank switch */
         mbc_interceptROMWrite(vm, addr, byte); 
         return;
-    } else if ((addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) || 
-            (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END)) {
-#ifdef DEBUG_MEM_LOGGING
+    } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
+        vm->MEM[addr - 0x2000] = byte;
+        return;
+    } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
-#endif
         return;
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* We perform some actions before writing in some 
@@ -1389,10 +1371,7 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
                 */
 				break;
 			}
-            case R_DMA: {
-                startDMATransfer(vm, byte);
-                break;
-            }
+            case R_DMA: scheduleDMATransfer(vm, byte); break;
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
 		/* Handle the case when VRAM has been locked by PPU */
@@ -1404,18 +1383,12 @@ static void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         // printf("vram allowed %02x %04x mode %d cy %d ly %d\n", byte, addr, vm->ppuMode, vm->cyclesSinceLastMode, vm->MEM[R_LY]);
 	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
 		/* Handle the case when OAM has been locked by PPU */
-		if (vm->lockOAM) return;
+		if (vm->lockOAM || vm->doingDMA) return;
 	}
     vm->MEM[addr] = byte; 
 }
 
-static uint8_t readAddr(VM* vm, uint16_t addr) {
-    if (addr >= HRAM_N0 && addr <= HRAM_N0_END) {
-        return vm->MEM[addr];
-    }
-
-    if (vm->doingDMA) return 0xFF;
-
+uint8_t readAddr(VM* vm, uint16_t addr) {
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* Read from external RAM */
         return mbc_readExternalRAM(vm, addr);
@@ -1448,8 +1421,12 @@ static uint8_t readAddr(VM* vm, uint16_t addr) {
 		if (vm->lockVRAM) return 0xFF;
 	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
 		/* Handle the case when OAM has been locked by the PPU */
-		if (vm->lockOAM) return 0xFF;
-	}
+		if (vm->lockOAM || vm->doingDMA) return 0xFF;
+	} else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
+        return 0xFF;
+    } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
+        return vm->MEM[addr - 0x2000];
+    }
 
     return vm->MEM[addr];
 }
@@ -1869,13 +1846,6 @@ void dispatch(VM* vm) {
             vm->IME = true;
         }
 
-        if (vm->scheduleDMA) {
-            /* DMA should already be configured through 'startDMATransfer()' before 
-             * scheduling this */
-            vm->scheduleDMA = false;
-            vm->doingDMA = true;
-        }
-
 		if (vm->haltMode) {
 			/* Skip dispatch and directly check for pending interrupts */
 
@@ -1885,14 +1855,16 @@ void dispatch(VM* vm) {
 			 *
 			 * Other syncs will also continue taking place */
 			cyclesSync_4(vm);
-			goto skipLabel;
+			syncTimer(vm);
+            handleInterrupts(vm);
+            return;
 		} else if (vm->scheduleHaltBug) {
 			/* Revert the PC increment */
 
 			byte = readByte(vm);
 			vm->PC--;
 			cyclesSync_4(vm);
-		} else {
+        } else {
 			/* Normal Read */
 			byte = readByte_4C(vm);	
 		}
@@ -2203,7 +2175,6 @@ void dispatch(VM* vm) {
             case 0xFF: RST(vm, 0x38); break;
     }
 
-skipLabel:
     /* We sync the timer after every dispatch just before checking for interrupts */
     syncTimer(vm);
     /* We handle any interrupts that are requested */

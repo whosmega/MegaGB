@@ -1,6 +1,8 @@
 #ifndef megagbc_cpu_h
 #define megagbc_cpu_h
 
+#include <stdint.h>
+
 struct VM;
 
 typedef enum {
@@ -44,6 +46,10 @@ void resetGBC(struct VM* vm);
 void resetGB(struct VM* vm);
 /* This function is invoked to run the CPU thread */
 void dispatch(struct VM* vm);
+
+/* Reading and Writing bus routines (instant) */
+void writeAddr(struct VM* vm, uint16_t addr, uint8_t byte);
+uint8_t readAddr(struct VM* vm, uint16_t addr);
 
 /* Function to request an interrupt when necessary */
 void requestInterrupt(struct VM* vm, INTERRUPT interrupt);

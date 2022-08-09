@@ -79,6 +79,11 @@ typedef enum {
 #define R_WY        0xFF4A
 #define R_WX        0xFF4B
 #define R_VBK		0xFF4F
+#define R_HDMA1     0xFF51
+#define R_HDMA2     0xFF52
+#define R_HDMA3     0xFF53
+#define R_HDMA4     0xFF54
+#define R_HDMA5     0xFF55
 #define R_BCPS		0xFF68
 #define R_BCPD		0xFF69
 #define R_OCPS		0xFF6A
@@ -111,6 +116,9 @@ struct VM {
     bool scheduleDMA;                       /* If set to true, schedules the DMA to be enabled */
     bool doingDMA;
     uint16_t mCyclesSinceDMA;               /* M-Cycles elapsed since DMA began */
+    uint16_t scheduled_dmaSource;           /* Source of the DMA about to be started */
+    uint8_t scheduled_dmaTimer;             /* Timer that counts no. of tcycles till the DMA begins
+                                               when the DMA is scheduled */
     uint16_t dmaSource;                     /* DMA Source Address */
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
@@ -216,8 +224,7 @@ void syncTimer(VM* vm);
 void incrementTIMA(VM* vm);
 
 /* DMA */
-void syncDMA(VM* vm);
-void startDMATransfer(VM* vm, uint8_t byte);
+void scheduleDMATransfer(VM* vm, uint8_t byte);
 
 /* CGB Only, WRAM/VRAM bank switching */
 void switchCGB_WRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber);

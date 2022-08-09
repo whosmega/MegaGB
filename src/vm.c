@@ -71,8 +71,10 @@ static void initVM(VM* vm) {
     vm->lastSpriteOverlapX = 0;
     vm->doingDMA = false;
     vm->mCyclesSinceDMA = 0;
+    vm->scheduled_dmaSource = 0;
     vm->dmaSource = 0;
-    
+    vm->scheduled_dmaTimer = 0;
+
     /* Initialise OAM Buffer */
     memset(&vm->oamDataBuffer, 0xFF, 50);
     vm->spritesInScanline = 0;
@@ -320,7 +322,7 @@ void syncTimer(VM* vm) {
 }
 
 /* DMA Transfers */
-void startDMATransfer(VM* vm, uint8_t byte) {
+void scheduleDMATransfer(VM* vm, uint8_t byte) {
     if (byte > 0xDF) {
 #ifdef DEBUG_LOGGING
         printf("[WARNING] Starting DMA Transfer with address > DFXX, wrapping to DFXX\n");
@@ -330,14 +332,22 @@ void startDMATransfer(VM* vm, uint8_t byte) {
 
     uint16_t address = byte * 0x100;
 
-    vm->dmaSource = address;
-    vm->mCyclesSinceDMA = 0;
-
-    /* Schedule DMA to begin at the end of this dispatch */
+    vm->scheduled_dmaSource = address;
+    /* Schedule DMA to begin on the next mcycle (4 tcycles for the current, 4 for next */
+    vm->scheduled_dmaTimer = 8;
     vm->scheduleDMA = true;
 }
 
-void syncDMA(VM* vm) {
+static void startDMATransfer(VM* vm) {
+    vm->scheduleDMA = false;
+    vm->scheduled_dmaTimer = 0;
+    vm->mCyclesSinceDMA = 0;
+    vm->dmaSource = vm->scheduled_dmaSource;
+
+    vm->doingDMA = true;
+}
+
+static void syncDMA(VM* vm) {
     /* DMA Transfers take 160 machine cycles to complete = 640 T-Cycles
      *
      * It needs to be done sequentially sprite by sprite as it is possible to do dma 
@@ -353,7 +363,10 @@ void syncDMA(VM* vm) {
         
         uint8_t currentSpriteIndex = (vm->mCyclesSinceDMA / 4) - 1;
         uint8_t addressLow = currentSpriteIndex * 4;
-        memcpy(&vm->MEM[OAM_N0_160B + addressLow], &vm->MEM[vm->dmaSource + addressLow], 4);
+
+        for (int i = 0; i < 4; i++) {
+            vm->MEM[OAM_N0_160B + addressLow + i] = readAddr(vm, vm->dmaSource + addressLow + i);
+        }
     }
 
     if (vm->mCyclesSinceDMA == 160) {
@@ -373,7 +386,7 @@ static void run(VM* vm) {
 		/* Handle Events */
         handleSDLEvents(vm);
 
-		for (int i = 0; (i < 500) && vm->run; i++) {
+		for (int i = 0; (i < 1000) && vm->run; i++) {
 			/* Run the next CPU instruction */
 			dispatch(vm);
 		}
@@ -385,7 +398,7 @@ void cyclesSync_4(VM* vm) {
      * in a second and therefore it needs to be optimised 
      *
      * So we dont update all hardware but only the ones that need to
-     * always be upto date like the display 
+     * always be upto date like the display and DMA/HDMA
 	 *
 	 */
     vm->clock += 4;
@@ -393,6 +406,12 @@ void cyclesSync_4(VM* vm) {
     syncDisplay(vm, 4);
 
     if (vm->doingDMA) syncDMA(vm);
+    if (vm->scheduleDMA) {
+        vm->scheduled_dmaTimer -= 4;
+
+        /* The DMA has been scheduled to start 1 mcycle after the register write */
+        if (vm->scheduled_dmaTimer == 0) startDMATransfer(vm);
+    }
 }
 
 /* SDL */
@@ -562,6 +581,10 @@ void startEmulator(Cartridge* cartridge) {
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge); 
 #endif
+    char title[30];
+    sprintf(title, "MegaGBC | %s", vm.cartridge->title);
+
+    SDL_SetWindowTitle(vm.sdl_window, title);
 #ifdef DEBUG_LOGGING
     printf("Emulation mode: %s\n", vm.emuMode == EMU_CGB ? "Gameboy Color" : vm.emuMode == EMU_DMG ? "Gameboy" : "");
     printf("Booting into ROM\n");
