@@ -13,30 +13,30 @@
 /* Load 16 bit data into an R16 Register */
 #define LOAD_RR_D16(gb, RR) set_reg16_8C(gb, RR, read2Bytes(gb))
 /* Load contents of R8 Register into address at R16 register (dereferencing) */
-#define LOAD_ARR_R(gb, RR, R) writeAddr_4C(gb, get_reg16(gb, RR), gb->GPR[R])
+#define LOAD_ARR_R(gb, RR, R) writeAddr_4C(gb, get_reg16(gb, RR), get_reg8(gb, R))
 /* Load 8 bit data into R8 Register */
-#define LOAD_R_D8(gb, R) gb->GPR[R] = readByte(gb); cyclesSync_4(gb)
+#define LOAD_R_D8(gb, R) set_reg8(gb, R, readByte(gb)); cyclesSync_4(gb)
 /* Dereference the address contained in the R16 register and set it's value
  * to the R8 register */
-#define LOAD_R_ARR(gb, R, RR) gb->GPR[R] = readAddr(gb, get_reg16(gb, RR)); cyclesSync_4(gb)
+#define LOAD_R_ARR(gb, R, RR) set_reg8(gb, R, readAddr(gb, get_reg16(gb, RR))); cyclesSync_4(gb)
 /* Load 8 bit data into address at R16 register (dereferencing) */
 #define LOAD_ARR_D8(gb, RR) writeAddr_4C(gb, get_reg16(gb, RR), readByte_4C(gb))
 /* Load contents of R8 register into another R8 register */
-#define LOAD_R_R(gb, R1, R2) gb->GPR[R1] = gb->GPR[R2]
+#define LOAD_R_R(gb, R1, R2) set_reg8(gb, R1, get_reg8(gb, R2))
 /* Load contents of R16 register into another R16 register */
 #define LOAD_RR_RR(gb, RR1, RR2) set_reg16(gb, RR1, get_reg16(gb, RR2)); cyclesSync_4(gb)
 /* Load instructions from reading into and writing into main memory */
-#define LOAD_MEM_R(gb, R) writeAddr_4C(gb, read2Bytes_8C(gb), gb->GPR[R])
+#define LOAD_MEM_R(gb, R) writeAddr_4C(gb, read2Bytes_8C(gb), get_reg8(gb, R))
 /* Load what's at the address specified by the 16 bit data into the R8 register */
-#define LOAD_R_MEM(gb, R) gb->GPR[R] = readAddr_4C(gb, read2Bytes_8C(gb))
+#define LOAD_R_MEM(gb, R) set_reg8(gb, R, readAddr_4C(gb, read2Bytes_8C(gb)))
 /* Load 'R' into '(PORT_ADDR + D8)' */
-#define LOAD_D8PORT_R(gb, R) writeAddr_4C(gb, PORT_ADDR + readByte_4C(gb), gb->GPR[R])
+#define LOAD_D8PORT_R(gb, R) writeAddr_4C(gb, PORT_ADDR + readByte_4C(gb), get_reg8(gb, R))
 /* Load '(PORT_ADDR + D8) into 'R' */
-#define LOAD_R_D8PORT(gb, R) gb->GPR[R] = readAddr_4C(gb, PORT_ADDR + readByte_4C(gb))
+#define LOAD_R_D8PORT(gb, R) set_reg8(gb, R, readAddr_4C(gb, PORT_ADDR + readByte_4C(gb)))
 /* Load 'R1' into '(PORT_ADDR + R2)' */
-#define LOAD_RPORT_R(gb, R1, R2) writeAddr_4C(gb, PORT_ADDR + gb->GPR[R2], gb->GPR[R1])
+#define LOAD_RPORT_R(gb, R1, R2) writeAddr_4C(gb, PORT_ADDR + get_reg8(gb, R2), get_reg8(gb, R1))
 /* Load '(PORT_ADDR + R2)' into 'R1' */
-#define LOAD_R_RPORT(gb, R1, R2) gb->GPR[R1] = readAddr_4C(gb, PORT_ADDR + gb->GPR[R2])
+#define LOAD_R_RPORT(gb, R1, R2) set_reg8(gb, R1, readAddr_4C(gb, PORT_ADDR + get_reg8(gb, R2)))
 
 #define LOAD_RR_RRI8(gb, RR1, RR2) load_rr_rri8(gb, RR1, RR2)
 /* Increment contents of R16 register */
@@ -103,40 +103,56 @@ static uint16_t read2Bytes_8C(GB* gb) {
     return (uint16_t)(readAddr_4C(gb, gb->PC++) | (readAddr_4C(gb, gb->PC++) << 8));
 }
 
+static inline uint8_t get_reg8(GB* gb, GP_REG R) {
+    return gb->GPR[R];
+}
+
+static inline void inc_reg8(GB* gb, GP_REG R) {
+    gb->GPR[R]++;
+}
+
+static inline void dec_reg8(GB* gb, GP_REG R) {
+    gb->GPR[R]--;
+}
+
+static inline void set_reg8(GB* gb, GP_REG R, uint8_t value) {
+    gb->GPR[R] = value;
+}
+
 static inline void set_flag(GB* gb, FLAG flag, uint8_t bit) {
     /* Since the flags are enums and in order, their numeric value
      * can be used to decide which bit to modify
      * We set the flag's corresponding bit to 1 */
-    if (bit) gb->GPR[R8_F] |= 1 << (flag + 4);
+    if (bit) set_reg8(gb, R8_F, get_reg8(gb, R8_F) | (1 << (flag + 4)));
     /* Otherwise 0 */
-    else gb->GPR[R8_F] &= ~(1 << (flag + 4));
+    else set_reg8(gb, R8_F, get_reg8(gb, R8_F) & ~(1 << (flag + 4)));
 }
 
 static inline uint8_t get_flag(GB* gb, FLAG flag) {
-    return (gb->GPR[R8_F] >> (flag + 4)) & 1;
+    return (get_reg8(gb, R8_F) >> (flag + 4)) & 1;
 }
 
 /* Retrives the value of the 16 bit registers by combining the values
  * of its 8 bit registers */
 static inline uint16_t get_reg16(GB* gb, GP_REG RR) {
-    return ((gb->GPR[RR] << 8) | gb->GPR[RR + 1]);
+    return ((get_reg8(gb, RR) << 8) | get_reg8(gb, RR + 1));
 }
 
 /* Sets 16 bit register by modifying the individual 8 bit registers
  * it consists of */
 static inline uint16_t set_reg16(GB* gb, GP_REG RR, uint16_t v) {
-    gb->GPR[RR] = v >> 8;
-    gb->GPR[RR + 1] = v & 0xFF;
+    set_reg8(gb, RR, v >> 8);
+    set_reg8(gb, RR + 1, v & 0xFF);
 
     return v;
 }
 
 static uint16_t set_reg16_8C(GB* gb, GP_REG RR, uint16_t v) {
     /* Takes 8 clock cycles */
-    gb->GPR[RR] = v >> 8;
+    set_reg8(gb, RR, v >> 8);
     cyclesSync_4(gb);
 
-    gb->GPR[RR + 1] = v & 0xFF;
+    set_reg8(gb, RR + 1, v & 0xFF);
     cyclesSync_4(gb);
     return v;
 }
@@ -144,14 +160,14 @@ static uint16_t set_reg16_8C(GB* gb, GP_REG RR, uint16_t v) {
 void resetGBC(GB* gb) {
     gb->PC = 0x0100;
     set_reg16(gb, R16_SP, 0xFFFE);
-    gb->GPR[R8_A] = 0x11;
-    gb->GPR[R8_F] = 0b10000000;
-    gb->GPR[R8_B] = 0x00;
-    gb->GPR[R8_C] = 0x00;
-    gb->GPR[R8_D] = 0xFF;
-    gb->GPR[R8_E] = 0x56;
-    gb->GPR[R8_H] = 0x00;
-    gb->GPR[R8_L] = 0x0D;
+    set_reg8(gb, R8_A, 0x11);
+    set_reg8(gb, R8_F, 0b10000000);
+    set_reg8(gb, R8_B, 0x00);
+    set_reg8(gb, R8_C, 0x00);
+    set_reg8(gb, R8_D, 0xFF);
+    set_reg8(gb, R8_E, 0x56);
+    set_reg8(gb, R8_H, 0x00);
+    set_reg8(gb, R8_L, 0x0D);
 
     /* Set hardware registers and initialise empty areas */
 
@@ -188,14 +204,15 @@ void resetGBC(GB* gb) {
 void resetGB(GB* gb) {
     gb->PC = 0x0100;
     set_reg16(gb, R16_SP, 0xFFFE);
-    gb->GPR[R8_A] = 0x01;
-    gb->GPR[R8_F] = 0xF0;
-    gb->GPR[R8_B] = 0x00;
-    gb->GPR[R8_C] = 0x13;
-    gb->GPR[R8_D] = 0x00;
-    gb->GPR[R8_E] = 0xD8;
-    gb->GPR[R8_H] = 0x01;
-    gb->GPR[R8_L] = 0x4D;
+    set_reg8(gb, R8_A, 0x01);
+    set_reg8(gb, R8_B, 0x00);
+    set_reg8(gb, R8_C, 0x13);
+    set_reg8(gb, R8_D, 0x00);
+    set_reg8(gb, R8_E, 0xD8);
+    set_reg8(gb, R8_H, 0x01);
+    set_reg8(gb, R8_L, 0x4D);
+    /* On a DMG, the value of F depends on the header checksum */
+    set_reg8(gb, R8_F, gb->cartridge->headerChecksum == 0 ? 0xF0 : 0xB0);
 
     uint8_t hreg_defaults[80] = {
         0xCF, 0x00, 0x7E, 0xFF, 0xAB, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
@@ -212,11 +229,6 @@ void resetGB(GB* gb) {
 
     for (int i = 0x00; i < 0x50; i++) {
         gb->MEM[0xFF00 + i] = hreg_defaults[i];
-    }
-
-    if (gb->emuMode == EMU_DMG) {
-        /* On a DMG, the value of F depends on the header checksum */
-        gb->GPR[R8_F] = gb->cartridge->headerChecksum == 0 ? 0xF0 : 0xB0;
     }
 
     /* Initialise OAM to off screen */
@@ -254,18 +266,20 @@ static void load_rr_rri8(GB* gb, GP_REG RR1, GP_REG RR2) {
 static void incrementR8(GB* gb, GP_REG R) {
     /* A utility function which does incrementing for 8 bit registers
      * it does all flag updates it needs to */
-    uint8_t old = gb->GPR[R];
-    gb->GPR[R]++;
+    uint8_t old = get_reg8(gb, R);
+    inc_reg8(gb, R);
 
-    TEST_Z_FLAG(gb, gb->GPR[R]);
+    TEST_Z_FLAG(gb, get_reg8(gb, R));
     TEST_H_FLAG_ADD(gb, old, 1);
     set_flag(gb, FLAG_N, 0);
 }
 
 static void decrementR8(GB* gb, GP_REG R) {
     /* Decrementing for 8 bit registers */
-    uint8_t old = gb->GPR[R]; uint8_t new = --gb->GPR[R];
-    TEST_Z_FLAG(gb, new);
+    uint8_t old = get_reg8(gb, R);
+    dec_reg8(gb, R);
+
+    TEST_Z_FLAG(gb, get_reg8(gb, R));
     set_flag(gb, FLAG_N, 1);
     TEST_H_FLAG_SUB(gb, old, 1);
 }
@@ -275,13 +289,13 @@ static void decrementR8(GB* gb, GP_REG R) {
 
 static void rotateLeftR8(GB* gb, GP_REG R, bool setZFlag) {
     /* Rotates value to left, moves 7th bit to bit 0 and C flag */
-    uint8_t toModify = gb->GPR[R];
+    uint8_t toModify = get_reg8(gb, R);
     uint8_t bit7 = toModify >> 7;
 
     toModify <<= 1;
     toModify |= bit7;
 
-    gb->GPR[R] = toModify;
+    set_reg8(gb, R, toModify);
     if (setZFlag) {
         TEST_Z_FLAG(gb, toModify);
     } else {
@@ -313,13 +327,13 @@ static void rotateLeftAR16(GB* gb, GP_REG R16, bool setZFlag) {
 
 static void rotateRightR8(GB* gb, GP_REG R, bool setZFlag) {
     /* Rotates value to right, moves bit 0 to bit 7 and C flag */
-    uint8_t toModify = gb->GPR[R];
+    uint8_t toModify = get_reg8(gb, R);
     uint8_t bit1 = toModify & 1;
 
     toModify >>= 1;
     toModify |= bit1 << 7;
 
-    gb->GPR[R] = toModify;
+    set_reg8(gb, R, toModify);
 
     if (setZFlag) {
         TEST_Z_FLAG(gb, toModify);
@@ -352,14 +366,14 @@ static void rotateRightAR16(GB* gb, GP_REG R16, bool setZFlag) {
 static void rotateLeftCarryR8(GB* gb, GP_REG R8, bool setZFlag) {
     /* Rotates value to left, moves bit 7 to C flag and C flag's original value
      * to bit 0 */
-    uint8_t toModify = gb->GPR[R8];
+    uint8_t toModify = get_reg8(gb, R8);
     bool carryFlag = get_flag(gb, FLAG_C);
     uint8_t bit7 = toModify >> 7;
 
     toModify <<= 1;
     toModify |= carryFlag;
 
-    gb->GPR[R8] = toModify;
+    set_reg8(gb, R8, toModify);
 
     if (setZFlag) TEST_Z_FLAG(gb, toModify);
     else set_flag(gb, FLAG_Z, 0);
@@ -391,14 +405,14 @@ static void rotateLeftCarryAR16(GB* gb, GP_REG R16, bool setZFlag) {
 static void rotateRightCarryR8(GB* gb, GP_REG R8, bool setZFlag) {
     /* Rotates value to right, moves bit 0 to C flag and C flag's original value
      * to bit 7 */
-    uint8_t toModify = gb->GPR[R8];
+    uint8_t toModify = get_reg8(gb, R8);
     bool carryFlag = get_flag(gb, FLAG_C);
     uint8_t bit0 = toModify & 1;
 
     toModify >>= 1;
     toModify |= carryFlag << 7;
 
-    gb->GPR[R8] = toModify;
+    set_reg8(gb, R8, toModify);
 
     if (setZFlag) TEST_Z_FLAG(gb, toModify);
     else set_flag(gb, FLAG_Z, 0);
@@ -428,11 +442,11 @@ static void rotateRightCarryAR16(GB* gb, GP_REG R16, bool setZFlag) {
 }
 
 static void shiftLeftArithmeticR8(GB* gb, GP_REG R) {
-    uint8_t value = gb->GPR[R];
+    uint8_t value = get_reg8(gb, R);
     uint8_t bit7 = value >> 7;
     uint8_t result = value << 1;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_H, 0);
@@ -455,11 +469,11 @@ static void shiftLeftArithmeticAR16(GB* gb, GP_REG R16) {
 }
 
 static void shiftRightLogicalR8(GB* gb, GP_REG R) {
-    uint8_t value = gb->GPR[R];
+    uint8_t value = get_reg8(gb, R);
     uint8_t bit1 = value & 0x1;
     uint8_t result = value >> 1;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_H, 0);
@@ -482,14 +496,14 @@ static void shiftRightLogicalAR16(GB* gb, GP_REG R16) {
 }
 
 static void shiftRightArithmeticR8(GB* gb, GP_REG R) {
-    uint8_t value = gb->GPR[R];
+    uint8_t value = get_reg8(gb, R);
     uint8_t bit7 = value >> 7;
     uint8_t bit0 = value & 0x1;
     uint8_t result = value >> 1;
 
     /* Copy the 7th bit to its original location after the shift */
     result |= bit7 << 7;
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_H, 0);
@@ -515,13 +529,13 @@ static void shiftRightArithmeticAR16(GB* gb, GP_REG R16) {
 }
 
 static void swapR8(GB* gb, GP_REG R8) {
-    uint8_t value = gb->GPR[R8];
+    uint8_t value = get_reg8(gb, R8);
     uint8_t highNibble = value >> 4;
     uint8_t lowNibble = value & 0xF;
 
     uint8_t newValue = (lowNibble << 4) | highNibble;
 
-    gb->GPR[R8] = newValue;
+    set_reg8(gb, R8, newValue);
 
     TEST_Z_FLAG(gb, newValue);
     set_flag(gb, FLAG_H, 0);
@@ -546,7 +560,7 @@ static void swapAR16(GB* gb, GP_REG R16) {
 }
 
 static void testBitR8(GB* gb, GP_REG R8, uint8_t bit) {
-    uint8_t value = gb->GPR[R8];
+    uint8_t value = get_reg8(gb, R8);
     uint8_t bitValue = (value >> bit) & 0x1;
 
     TEST_Z_FLAG(gb, bitValue);
@@ -564,11 +578,11 @@ static void testBitAR16(GB* gb, GP_REG R16, uint8_t bit) {
 }
 
 static void setBitR8(GB* gb, GP_REG R8, uint8_t bit) {
-    uint8_t value = gb->GPR[R8];
+    uint8_t value = get_reg8(gb, R8);
     uint8_t orValue = 1 << bit;
     uint8_t result = value | orValue;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 }
 
 static void setBitAR16(GB* gb, GP_REG R16, uint8_t bit) {
@@ -581,12 +595,12 @@ static void setBitAR16(GB* gb, GP_REG R16, uint8_t bit) {
 }
 
 static void resetBitR8(GB* gb, GP_REG R8, uint8_t bit) {
-    uint8_t value = gb->GPR[R8];
+    uint8_t value = get_reg8(gb, R8);
     /* Converts 00010000 to 11101111 for the andValue when bit 3 has to be reset for ex */
     uint8_t andValue = ~(1 << bit);
     uint8_t result = value & andValue;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 }
 
 static void resetBitAR16(GB* gb, GP_REG R16, uint8_t bit) {
@@ -633,11 +647,11 @@ static void addR16I8(GB* gb, GP_REG RR) {
 }
 
 static void addR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t toAdd = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t toAdd = get_reg8(gb, R2);
     uint8_t result = old + toAdd;
 
-    gb->GPR[R1] = result;
+    set_reg8(gb, R1, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -647,10 +661,10 @@ static void addR8(GB* gb, GP_REG R1, GP_REG R2) {
 
 static void addR8D8(GB* gb, GP_REG R) {
     uint8_t data = readByte_4C(gb);
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t result = old + data;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -659,11 +673,11 @@ static void addR8D8(GB* gb, GP_REG R) {
 }
 
 static void addR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t toAdd = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t result = old + toAdd;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -700,13 +714,13 @@ static void test_adc_hcflags(GB* gb, uint8_t old, uint8_t toAdd, uint8_t result,
 }
 
 static void adcR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t toAdd = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t toAdd = get_reg8(gb, R2);
     uint8_t carry = get_flag(gb, FLAG_C);
     uint8_t result = old + toAdd;
     uint8_t finalResult = result + carry;
 
-    gb->GPR[R1] = finalResult;
+    set_reg8(gb, R1, finalResult);
 
     TEST_Z_FLAG(gb, finalResult);
     set_flag(gb, FLAG_N, 0);
@@ -715,12 +729,12 @@ static void adcR8(GB* gb, GP_REG R1, GP_REG R2) {
 
 static void adcR8D8(GB* gb, GP_REG R) {
     uint16_t data = (uint16_t)readByte_4C(gb);
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t carry = get_flag(gb, FLAG_C);
     uint8_t result = old + data;
     uint8_t finalResult = result + carry;
 
-    gb->GPR[R] = finalResult;
+    set_reg8(gb, R, finalResult);
 
     TEST_Z_FLAG(gb, finalResult);
     set_flag(gb, FLAG_N, 0);
@@ -728,13 +742,13 @@ static void adcR8D8(GB* gb, GP_REG R) {
 }
 
 static void adcR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t toAdd = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t carry = get_flag(gb, FLAG_C);
     uint8_t result = old + toAdd;
     uint8_t finalResult = result + carry;
 
-    gb->GPR[R8] = finalResult;
+    set_reg8(gb, R8, finalResult);
 
     TEST_Z_FLAG(gb, finalResult);
     set_flag(gb, FLAG_N, 0);
@@ -742,11 +756,11 @@ static void adcR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
 }
 
 static void subR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t toSub = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t toSub = get_reg8(gb, R2);
     uint8_t result = old - toSub;
 
-    gb->GPR[R1] = result;
+    set_reg8(gb, R1, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 1);
@@ -756,10 +770,10 @@ static void subR8(GB* gb, GP_REG R1, GP_REG R2) {
 
 static void subR8D8(GB* gb, GP_REG R) {
     uint8_t data = readByte_4C(gb);
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t result = old - data;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 1);
@@ -768,11 +782,11 @@ static void subR8D8(GB* gb, GP_REG R) {
 }
 
 static void subR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t toSub = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t result = old - toSub;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 1);
@@ -799,13 +813,13 @@ static void test_sbc_hcflags(GB* gb, uint8_t old, uint8_t toSub, uint8_t result,
 }
 
 static void sbcR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t toSub = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t toSub = get_reg8(gb, R2);
     uint8_t carry = get_flag(gb, FLAG_C);
     uint8_t result = old - toSub;
     uint8_t finalResult = result - carry;
 
-    gb->GPR[R1] = finalResult;
+    set_reg8(gb, R1, finalResult);
 
     TEST_Z_FLAG(gb, finalResult);
     set_flag(gb, FLAG_N, 1);
@@ -814,12 +828,12 @@ static void sbcR8(GB* gb, GP_REG R1, GP_REG R2) {
 
 static void sbcR8D8(GB* gb, GP_REG R) {
     uint8_t data = readByte_4C(gb);
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t carry = get_flag(gb, FLAG_C);
     uint8_t result = old - data;
     uint8_t finalResult = result - carry;
 
-    gb->GPR[R] = finalResult;
+    set_reg8(gb, R, finalResult);
 
     TEST_Z_FLAG(gb, finalResult);
     set_flag(gb, FLAG_N, 1);
@@ -827,13 +841,13 @@ static void sbcR8D8(GB* gb, GP_REG R) {
 }
 
 static void sbcR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t toSub = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t carry = get_flag(gb, FLAG_C);
     uint8_t result = old - toSub;
     uint8_t finalResult = result - carry;
 
-    gb->GPR[R8] = finalResult;
+    set_reg8(gb, R8, finalResult);
 
     TEST_Z_FLAG(gb, finalResult);
     set_flag(gb, FLAG_N, 1);
@@ -841,11 +855,11 @@ static void sbcR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
 }
 
 static void andR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t operand = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t operand = get_reg8(gb, R2);
     uint8_t result = old & operand;
 
-    gb->GPR[R1] = result;
+    set_reg8(gb, R1, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -854,11 +868,11 @@ static void andR8(GB* gb, GP_REG R1, GP_REG R2) {
 }
 
 static void andR8D8(GB* gb, GP_REG R) {
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t operand = readByte_4C(gb);
     uint8_t result = old & operand;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -867,11 +881,11 @@ static void andR8D8(GB* gb, GP_REG R) {
 }
 
 static void andR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t operand = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t result = old & operand;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -880,11 +894,11 @@ static void andR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
 }
 
 static void xorR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t operand = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t operand = get_reg8(gb, R2);
     uint8_t result = old ^ operand;
 
-    gb->GPR[R1] = result;
+    set_reg8(gb, R1, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -893,11 +907,11 @@ static void xorR8(GB* gb, GP_REG R1, GP_REG R2) {
 }
 
 static void xorR8D8(GB* gb, GP_REG R) {
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t operand = readByte_4C(gb);
     uint8_t result = old ^ operand;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -906,11 +920,11 @@ static void xorR8D8(GB* gb, GP_REG R) {
 }
 
 static void xorR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t operand = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t result = old ^ operand;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -919,11 +933,11 @@ static void xorR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
 }
 
 static void orR8(GB* gb, GP_REG R1, GP_REG R2) {
-    uint8_t old = gb->GPR[R1];
-    uint8_t operand = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t operand = get_reg8(gb, R2);
     uint8_t result = old | operand;
 
-    gb->GPR[R1] = result;
+    set_reg8(gb, R1, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -932,11 +946,11 @@ static void orR8(GB* gb, GP_REG R1, GP_REG R2) {
 }
 
 static void orR8D8(GB* gb, GP_REG R) {
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t operand = readByte_4C(gb);
     uint8_t result = old | operand;
 
-    gb->GPR[R] = result;
+    set_reg8(gb, R, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -945,11 +959,11 @@ static void orR8D8(GB* gb, GP_REG R) {
 }
 
 static void orR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t operand = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t result = old | operand;
 
-    gb->GPR[R8] = result;
+    set_reg8(gb, R8, result);
 
     TEST_Z_FLAG(gb, result);
     set_flag(gb, FLAG_N, 0);
@@ -959,8 +973,8 @@ static void orR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
 
 static void compareR8(GB* gb, GP_REG R1, GP_REG R2) {
     /* Basically R1 - R2, but results are thrown away and R1 is unchanged */
-    uint8_t old = gb->GPR[R1];
-    uint8_t toSub = gb->GPR[R2];
+    uint8_t old = get_reg8(gb, R1);
+    uint8_t toSub = get_reg8(gb, R2);
     uint8_t result = old - toSub;
 
     TEST_Z_FLAG(gb, result);
@@ -970,7 +984,7 @@ static void compareR8(GB* gb, GP_REG R1, GP_REG R2) {
 }
 
 static void compareR8D8(GB* gb, GP_REG R) {
-    uint8_t old = gb->GPR[R];
+    uint8_t old = get_reg8(gb, R);
     uint8_t toSub = readByte_4C(gb);
     uint8_t result = old - toSub;
 
@@ -981,7 +995,7 @@ static void compareR8D8(GB* gb, GP_REG R) {
 }
 
 static void compareR8_AR16(GB* gb, GP_REG R8, GP_REG R16) {
-    uint8_t old = gb->GPR[R8];
+    uint8_t old = get_reg8(gb, R8);
     uint8_t toSub = readAddr_4C(gb, get_reg16(gb, R16));
     uint8_t result = old - toSub;
 
@@ -1052,7 +1066,7 @@ static void retCondition(GB* gb, bool isTrue) {
 }
 
 static void cpl(GB* gb) {
-    gb->GPR[R8_A] = ~gb->GPR[R8_A];
+    set_reg8(gb, R8_A, ~get_reg8(gb, R8_A));
     set_flag(gb, FLAG_N, 1);
     set_flag(gb, FLAG_H, 1);
 }
@@ -1087,7 +1101,7 @@ static void jumpRelativeCondition(GB* gb, bool isTrue) {
 /* Procedure for the decimal adjust instruction (DAA) */
 
 static void decimalAdjust(GB* gb) {
-    uint8_t value = gb->GPR[R8_A];
+    uint8_t value = get_reg8(gb, R8_A);
 
     if (get_flag(gb, FLAG_N)) {
         /* Previous operation was subtraction */
@@ -1116,7 +1130,7 @@ static void decimalAdjust(GB* gb) {
     TEST_Z_FLAG(gb, value);
     set_flag(gb, FLAG_H, 0);
 
-    gb->GPR[R8_A] = value;
+    set_reg8(gb, R8_A, value);
 
     /* Implementation from
      * 'https://github.com/guigzzz/GoGB/blob/master/backend/cpu_arithmetic.go#L349' */
@@ -2150,7 +2164,7 @@ void dispatch(GB* gb) {
 
                        /* Always clear the lower 4 bits, they need to always
                         * be 0, we failed a blargg test because of this lol */
-                       gb->GPR[R8_F] &= 0xF0;
+                       set_reg8(gb, R8_F, get_reg8(gb, R8_F) & 0xF0);
                        break;
                    }
         case 0xF2: LOAD_R_RPORT(gb, R8_A, R8_C); break;
