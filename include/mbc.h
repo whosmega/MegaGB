@@ -6,7 +6,7 @@
 #include <string.h>
 #include "../include/cartridge.h"
 
-/* Forward Declare VM instead of including vm.h 
+/* Forward Declare VM instead of including vm.h
  * to avoid a circular include */
 
 struct VM;

@@ -23,20 +23,20 @@ void mbc2_interceptROMWrite(VM *vm, uint16_t addr, uint8_t byte) {
     MBC_2* mbc = (MBC_2*)vm->memController;
 
     if (addr >= 0x0000 && addr <= 0x3FFF) {
-        /* If bit 8 of the address is clear, the value written is 
-         * used to enable/disable ram 
+        /* If bit 8 of the address is clear, the value written is
+         * used to enable/disable ram
          *
-         * If bit 8 is set, it is used to do a bank switch 
+         * If bit 8 is set, it is used to do a bank switch
          * The bank number is determined with the lower 4 bits
          * of the value written */
 
         if ((addr >> 8) & 0x1) {
             /* Bit 8 is set, do a bank switch */
             uint8_t bankNumber = byte & 0xF;
-            
-            /* We mask the bank number to fit any smaller rom sizes 
+
+            /* We mask the bank number to fit any smaller rom sizes
              *
-             * Max MBC2 supports is 256KB ROM which can be addressed by 
+             * Max MBC2 supports is 256KB ROM which can be addressed by
              * the entire 4 bits */
 
             switch (vm->cartridge->romSize) {
@@ -45,15 +45,15 @@ void mbc2_interceptROMWrite(VM *vm, uint16_t addr, uint8_t byte) {
                 case ROM_128KB: bankNumber &= 0b00000111; break;
                 case ROM_256KB: break;                  /* No masking needed */
                 default: log_warning(vm, "ROM is too big for MBC2, it can only be partially mapped");
-                         break; 
+                         break;
             }
-            
+
             /* BankNumber 0 gets translated to 1 */
             if (bankNumber == 0) bankNumber = 1;
 
             switchROMBank(vm, bankNumber);
         } else {
-            /* Enable/Disable RAM 
+            /* Enable/Disable RAM
              *
              * 0x0A = Enable
              * Anything Else = Disable */
@@ -74,13 +74,13 @@ void mbc2_writeBuiltInRAM(VM *vm, uint16_t addr, uint8_t byte) {
     MBC_2* mbc = (MBC_2*)vm->memController;
     if (!mbc->ramEnabled) log_warning(vm, "It is recommended to enable RAM when writing");
 
-    /* Only the bottom 9 bits are used to address the memory, the upper bits 
+    /* Only the bottom 9 bits are used to address the memory, the upper bits
      * dont matter and are thus 'echoed', for our purpose we just mask it */
 
     addr &= 0b0000000111111111;
-    
+
     /* In this RAM only the lower 4 bits are supposed to be stored/retrieved
-     * but we can just dump the whole byte too since upper bits are undefined 
+     * but we can just dump the whole byte too since upper bits are undefined
      * anyway */
     mbc->builtInRAM[addr] = byte;
 }
@@ -88,8 +88,8 @@ void mbc2_writeBuiltInRAM(VM *vm, uint16_t addr, uint8_t byte) {
 uint8_t mbc2_readBuiltInRAM(VM* vm, uint16_t addr) {
     MBC_2* mbc = (MBC_2*)vm->memController;
     if (!mbc->ramEnabled) log_warning(vm, "It is recommended to enable RAM when reading");
-    
-    /* Just like writing to ram, we make up for echoing memory by masking 
+
+    /* Just like writing to ram, we make up for echoing memory by masking
      * the bits */
 
     addr &= 0b0000000111111111;

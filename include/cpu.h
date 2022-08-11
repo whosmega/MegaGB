@@ -11,7 +11,7 @@ typedef enum {
     R8_B, R8_C,
     R8_D, R8_E,
     R8_H, R8_L,
-    
+
     R8_SP_HIGH, R8_SP_LOW,
     GP_COUNT
 } GP_REG;

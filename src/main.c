@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
 
     char* filePath = argv[1];
     FILE* file = fopen(filePath, "r");
-    
+
     if (file == NULL) {
         printf("Error : Couldn't open input file\n");
         exit(2);
@@ -25,12 +25,12 @@ int main(int argc, char* argv[]) {
     /* Allocate enough space for the bytes */
     uint8_t* allocation = (uint8_t*)malloc(size);
     fread(allocation, size, 1, file);
-	
+
     fclose(file);
-    
+
     Cartridge c;
     bool result = initCartridge(&c, allocation, size);
-    
+
     if (!result) exit(3);
 
     startEmulator(&c);

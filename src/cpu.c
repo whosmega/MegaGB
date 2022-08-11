@@ -16,7 +16,7 @@
 #define LOAD_ARR_R(vm, RR, R) writeAddr_4C(vm, get_reg16(vm, RR), vm->GPR[R])
 /* Load 8 bit data into R8 Register */
 #define LOAD_R_D8(vm, R) vm->GPR[R] = readByte(vm); cyclesSync_4(vm)
-/* Dereference the address contained in the R16 register and set it's value 
+/* Dereference the address contained in the R16 register and set it's value
  * to the R8 register */
 #define LOAD_R_ARR(vm, R, RR) vm->GPR[R] = readAddr(vm, get_reg16(vm, RR)); cyclesSync_4(vm)
 /* Load 8 bit data into address at R16 register (dereferencing) */
@@ -56,24 +56,24 @@
 #define INTERRUPT_MASTER_ENABLE(vm) vm->scheduleInterruptEnable = true
 #define INTERRUPT_MASTER_DISABLE(vm) vm->IME = false
 #define CCF(vm) set_flag(vm, FLAG_C, get_flag(vm, FLAG_C) ^ 1); \
-                set_flag(vm, FLAG_N, 0);                        \
-                set_flag(vm, FLAG_H, 0)
+    set_flag(vm, FLAG_N, 0);                        \
+    set_flag(vm, FLAG_H, 0)
 /* Flag utility macros */
 #define TEST_Z_FLAG(vm, r) set_flag(vm, FLAG_Z, r == 0 ? 1 : 0)
-/* We check if a carry over for the last 4 bits happened 
+/* We check if a carry over for the last 4 bits happened
  * ref : https://www.reddit.com/r/EmuDev/comments/4ycoix/a_guide_to_the_gameboys_halfcarry_flag*/
 #define TEST_H_FLAG_ADD(vm, x, y) set_flag(vm, FLAG_H, \
-                                    (((uint32_t)x & 0xf) + ((uint32_t)y & 0xf) > 0xf) ? 1 : 0)
+        (((uint32_t)x & 0xf) + ((uint32_t)y & 0xf) > 0xf) ? 1 : 0)
 
 
 
 /* half carry counts when theres carry from bit 11-12 for most 16 bit instructions */
 
 #define TEST_H_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_H, \
-                                    (((uint32_t)x & 0xfff) + ((uint32_t)y & 0xfff) > 0xfff) ? 1 : 0 )
+        (((uint32_t)x & 0xfff) + ((uint32_t)y & 0xfff) > 0xfff) ? 1 : 0 )
 
 #define TEST_H_FLAG_SUB(vm, x, y) set_flag(vm, FLAG_H, \
-                                    (((x & 0xf) - (y & 0xf) & 0x10) ? 1 : 0))
+        (((x & 0xf) - (y & 0xf) & 0x10) ? 1 : 0))
 /* Test for integer overloads and set carry flags */
 #define TEST_C_FLAG_ADD16(vm, x, y) set_flag(vm, FLAG_C, ((uint32_t)(x) + (uint32_t)(y)) > 0xFFFF ? 1 : 0)
 #define TEST_C_FLAG_ADD8(vm, x, y) set_flag(vm, FLAG_C, ((uint16_t)(x) + (uint16_t)(y)) > 0xFF ? 1 : 0)
@@ -125,7 +125,7 @@ static inline uint16_t get_reg16(VM* vm, GP_REG RR) {
 /* Sets 16 bit register by modifying the individual 8 bit registers
  * it consists of */
 static inline uint16_t set_reg16(VM* vm, GP_REG RR, uint16_t v) {
-    vm->GPR[RR] = v >> 8; 
+    vm->GPR[RR] = v >> 8;
     vm->GPR[RR + 1] = v & 0xFF;
 
     return v;
@@ -154,9 +154,9 @@ void resetGBC(VM* vm) {
     vm->GPR[R8_L] = 0x0D;
 
     /* Set hardware registers and initialise empty areas */
-   
-	/* These registers are set to values that are recoreded at PC = 0x0100
-	 * this essentially means we dont need to emulate the boot rom */
+
+    /* These registers are set to values that are recoreded at PC = 0x0100
+     * this essentially means we dont need to emulate the boot rom */
 
     uint8_t hreg_defaults[80] = {
         0xCF, 0x00, 0x7F, 0xFF, 0xAC, 0x00, 0x00, 0xF8,                 // 0xFF00 - 0xFF07
@@ -170,7 +170,7 @@ void resetGBC(VM* vm) {
         0x91, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
         0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
     };
- 
+
     for (int i = 0x00; i < 0x50; i++) {
         vm->MEM[0xFF00 + i] = hreg_defaults[i];
     }
@@ -228,17 +228,17 @@ void resetGB(VM* vm) {
 }
 
 static void load_rr_rri8(VM* vm, GP_REG RR1, GP_REG RR2) {
-    /* Opcode 0xF8 specific 
+    /* Opcode 0xF8 specific
      *
      * RR1 = RR2 + I8 */
-    uint16_t old = get_reg16(vm, RR2); 
+    uint16_t old = get_reg16(vm, RR2);
     int8_t toAdd = (int8_t)readByte_4C(vm);
     uint16_t result = set_reg16(vm, RR1, old + toAdd);
 
     set_flag(vm, FLAG_Z, 0);
     set_flag(vm, FLAG_N, 0);
 
-    /* For some reason this 16 bit addition does not do normal 
+    /* For some reason this 16 bit addition does not do normal
      * 16 bit half carry setting, so we do the 8 bit test */
     old &= 0xFF;
 
@@ -246,9 +246,9 @@ static void load_rr_rri8(VM* vm, GP_REG RR1, GP_REG RR2) {
      * flags because at the low level its basically the same thing */
     TEST_H_FLAG_ADD(vm, old, (uint8_t)toAdd);
     TEST_C_FLAG_ADD8(vm, old, (uint8_t)toAdd);
-	
-	/* Internal */
-	cyclesSync_4(vm);
+
+    /* Internal */
+    cyclesSync_4(vm);
 }
 
 static void incrementR8(VM* vm, GP_REG R) {
@@ -270,8 +270,8 @@ static void decrementR8(VM* vm, GP_REG R) {
     TEST_H_FLAG_SUB(vm, old, 1);
 }
 
-/* The folloing functions are used for all 8 bit rotation 
- * operations */ 
+/* The folloing functions are used for all 8 bit rotation
+ * operations */
 
 static void rotateLeftR8(VM* vm, GP_REG R, bool setZFlag) {
     /* Rotates value to left, moves 7th bit to bit 0 and C flag */
@@ -289,7 +289,7 @@ static void rotateLeftR8(VM* vm, GP_REG R, bool setZFlag) {
     }
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit7);  
+    set_flag(vm, FLAG_C, bit7);
 }
 
 static void rotateLeftAR16(VM* vm, GP_REG R16, bool setZFlag) {
@@ -308,7 +308,7 @@ static void rotateLeftAR16(VM* vm, GP_REG R16, bool setZFlag) {
     }
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit7);  
+    set_flag(vm, FLAG_C, bit7);
 }
 
 static void rotateRightR8(VM* vm, GP_REG R, bool setZFlag) {
@@ -328,7 +328,7 @@ static void rotateRightR8(VM* vm, GP_REG R, bool setZFlag) {
     }
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit1); 
+    set_flag(vm, FLAG_C, bit1);
 }
 
 static void rotateRightAR16(VM* vm, GP_REG R16, bool setZFlag) {
@@ -346,7 +346,7 @@ static void rotateRightAR16(VM* vm, GP_REG R16, bool setZFlag) {
 
     set_flag(vm, FLAG_H, 0);
     set_flag(vm, FLAG_N, 0);
-    set_flag(vm, FLAG_C, bit1); 
+    set_flag(vm, FLAG_C, bit1);
 }
 
 static void rotateLeftCarryR8(VM* vm, GP_REG R8, bool setZFlag) {
@@ -486,7 +486,7 @@ static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
     uint8_t bit7 = value >> 7;
     uint8_t bit0 = value & 0x1;
     uint8_t result = value >> 1;
-    
+
     /* Copy the 7th bit to its original location after the shift */
     result |= bit7 << 7;
     vm->GPR[R] = result;
@@ -499,11 +499,11 @@ static void shiftRightArithmeticR8(VM* vm, GP_REG R) {
 
 static void shiftRightArithmeticAR16(VM* vm, GP_REG R16) {
     uint16_t addr = get_reg16(vm, R16);
-    uint8_t value = readAddr_4C(vm, addr); 
+    uint8_t value = readAddr_4C(vm, addr);
     uint8_t bit7 = value >> 7;
     uint8_t bit0 = value & 0x1;
     uint8_t result = value >> 1;
-    
+
     /* Copy the 7th bit to its original location after the shift */
     result |= bit7 << 7;
     writeAddr_4C(vm, addr, result);
@@ -515,34 +515,34 @@ static void shiftRightArithmeticAR16(VM* vm, GP_REG R16) {
 }
 
 static void swapR8(VM* vm, GP_REG R8) {
-     uint8_t value = vm->GPR[R8];
-     uint8_t highNibble = value >> 4;
-     uint8_t lowNibble = value & 0xF;
+    uint8_t value = vm->GPR[R8];
+    uint8_t highNibble = value >> 4;
+    uint8_t lowNibble = value & 0xF;
 
-     uint8_t newValue = (lowNibble << 4) | highNibble;
+    uint8_t newValue = (lowNibble << 4) | highNibble;
 
-     vm->GPR[R8] = newValue;
+    vm->GPR[R8] = newValue;
 
-     TEST_Z_FLAG(vm, newValue);
-     set_flag(vm, FLAG_H, 0);
-     set_flag(vm, FLAG_N, 0);
-     set_flag(vm, FLAG_C, 0);
+    TEST_Z_FLAG(vm, newValue);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, 0);
 }
 
 static void swapAR16(VM* vm, GP_REG R16) {
-     uint16_t addr = get_reg16(vm, R16);
-     uint8_t value = readAddr_4C(vm, addr); 
-     uint8_t highNibble = value >> 4;
-     uint8_t lowNibble = value & 0xF;
+    uint16_t addr = get_reg16(vm, R16);
+    uint8_t value = readAddr_4C(vm, addr);
+    uint8_t highNibble = value >> 4;
+    uint8_t lowNibble = value & 0xF;
 
-     uint8_t newValue = (lowNibble << 4) | highNibble;
+    uint8_t newValue = (lowNibble << 4) | highNibble;
 
-     writeAddr_4C(vm, addr, newValue);
+    writeAddr_4C(vm, addr, newValue);
 
-     TEST_Z_FLAG(vm, newValue);
-     set_flag(vm, FLAG_H, 0);
-     set_flag(vm, FLAG_N, 0);
-     set_flag(vm, FLAG_C, 0);
+    TEST_Z_FLAG(vm, newValue);
+    set_flag(vm, FLAG_H, 0);
+    set_flag(vm, FLAG_N, 0);
+    set_flag(vm, FLAG_C, 0);
 }
 
 static void testBitR8(VM* vm, GP_REG R8, uint8_t bit) {
@@ -602,7 +602,7 @@ static void resetBitAR16(VM* vm, GP_REG R16, uint8_t bit) {
  * operations of the CPU */
 
 static void addR16(VM* vm, GP_REG RR1, GP_REG RR2) {
-    uint16_t old = get_reg16(vm, RR1); 
+    uint16_t old = get_reg16(vm, RR1);
     uint16_t toAdd = get_reg16(vm, RR2);
     uint16_t result = set_reg16(vm, RR1, old + toAdd);
 
@@ -622,7 +622,7 @@ static void addR16I8(VM* vm, GP_REG RR) {
     set_flag(vm, FLAG_Z, 0);
     set_flag(vm, FLAG_N, 0);
 
-    /* For some reason this 16 bit addition does not do normal 
+    /* For some reason this 16 bit addition does not do normal
      * 16 bit half carry setting, so we do the 8 bit test */
     old &= 0xFF;
 
@@ -638,7 +638,7 @@ static void addR8(VM* vm, GP_REG R1, GP_REG R2) {
     uint8_t result = old + toAdd;
 
     vm->GPR[R1] = result;
-    
+
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
     TEST_H_FLAG_ADD(vm, old, toAdd);
@@ -673,15 +673,15 @@ static void addR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
 
 static void test_adc_hcflags(VM* vm, uint8_t old, uint8_t toAdd, uint8_t result, uint8_t carry) {
     /* ADC has a slightly different behaviour i.e it adds the
-     * carry flag to the result, the normal H & C flag tests 
+     * carry flag to the result, the normal H & C flag tests
      * have edge cases if used with ADC, so we do a custom test here */
 
     bool halfCarryOccurred = false;
     bool carryOccured = false;
 
     /* Half carry - It can occur either when:
-     * 1. The initial value is added to the value that has to be added 
-     * 2. The result of the above is added to the carry flag 
+     * 1. The initial value is added to the value that has to be added
+     * 2. The result of the above is added to the carry flag
      *
      * We note if a half carry occured in both the cases */
 
@@ -784,7 +784,7 @@ static void test_sbc_hcflags(VM* vm, uint8_t old, uint8_t toSub, uint8_t result,
     /* SBC is also similar to ADC so we need a custom test here aswell */
     bool halfCarryOccurred = false;
     bool carryOccurred = false;
-    
+
     uint8_t oldLow = old & 0xF;
     uint8_t resultLow = result & 0xF;
 
@@ -928,7 +928,7 @@ static void orR8(VM* vm, GP_REG R1, GP_REG R2) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
     set_flag(vm, FLAG_H, 0);
-    set_flag(vm, FLAG_C, 0);   
+    set_flag(vm, FLAG_C, 0);
 }
 
 static void orR8D8(VM* vm, GP_REG R) {
@@ -941,7 +941,7 @@ static void orR8D8(VM* vm, GP_REG R) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 0);
     set_flag(vm, FLAG_H, 0);
-    set_flag(vm, FLAG_C, 0);   
+    set_flag(vm, FLAG_C, 0);
 }
 
 static void orR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
@@ -988,7 +988,7 @@ static void compareR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
     TEST_Z_FLAG(vm, result);
     set_flag(vm, FLAG_N, 1);
     TEST_H_FLAG_SUB(vm, old, toSub);
-    TEST_C_FLAG_SUB8(vm, old, toSub);       
+    TEST_C_FLAG_SUB8(vm, old, toSub);
 }
 
 /* The following functions are responsible for returning, calling & stack manipulation*/
@@ -996,7 +996,7 @@ static void compareR8_AR16(VM* vm, GP_REG R8, GP_REG R16) {
 static inline void push16(VM* vm, uint16_t u16) {
     /* Pushes a 2 byte value to the stack */
     uint16_t stackPointer = get_reg16(vm, R16_SP);
-    
+
     /* Write the high byte */
     writeAddr_4C(vm, stackPointer - 1, u16 >> 8);
     /* Write the low byte */
@@ -1057,7 +1057,7 @@ static void cpl(VM* vm) {
     set_flag(vm, FLAG_H, 1);
 }
 
-/* Conditional Jumps (both relative and direct) */ 
+/* Conditional Jumps (both relative and direct) */
 
 #define CONDITION_NZ(vm) (get_flag(vm, FLAG_Z) != 1)
 #define CONDITION_NC(vm) (get_flag(vm, FLAG_C) != 1)
@@ -1068,10 +1068,10 @@ static void jumpCondition(VM* vm, bool isTrue) {
     uint16_t address = read2Bytes_8C(vm);
 
     if (isTrue) {
-	    /* Cycles sync after branch decision */
-		cyclesSync_4(vm);
-		vm->PC = address;
-	}
+        /* Cycles sync after branch decision */
+        cyclesSync_4(vm);
+        vm->PC = address;
+    }
 }
 
 static void jumpRelativeCondition(VM* vm, bool isTrue) {
@@ -1118,7 +1118,7 @@ static void decimalAdjust(VM* vm) {
 
     vm->GPR[R8_A] = value;
 
-    /* Implementation from 
+    /* Implementation from
      * 'https://github.com/guigzzz/GoGB/blob/master/backend/cpu_arithmetic.go#L349' */
 }
 
@@ -1128,15 +1128,15 @@ void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
 #ifdef DEBUG_MEM_LOGGING
     printf("Writing 0x%02x to address 0x%04x\n", byte, addr);
 #endif
-    
+
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* External RAM write request */
         mbc_writeExternalRAM(vm, addr, byte);
         return;
     } else if (addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) {
-        /* Pass over control to an MBC, maybe this is a call for 
+        /* Pass over control to an MBC, maybe this is a call for
          * bank switch */
-        mbc_interceptROMWrite(vm, addr, byte); 
+        mbc_interceptROMWrite(vm, addr, byte);
         return;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
         vm->MEM[addr - 0x2000] = byte;
@@ -1145,247 +1145,238 @@ void writeAddr(VM* vm, uint16_t addr, uint8_t byte) {
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
-        /* We perform some actions before writing in some 
+        /* We perform some actions before writing in some
          * cases */
         switch (addr) {
             case R_TIMA : syncTimer(vm); break;
             case R_TMA  : syncTimer(vm); break;
             case R_TAC  : {
-                syncTimer(vm); 
-                
-                /* Writing to TAC sometimes glitches TIMA,
-                 * algorithm from 'https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html' */
-                uint8_t oldTAC = vm->MEM[R_TAC];
-				/* Make sure unused bits are unchanged */
-                uint8_t newTAC = byte | 0xF8;
+                              syncTimer(vm);
 
-                vm->MEM[R_TAC] = newTAC;
+                              /* Writing to TAC sometimes glitches TIMA,
+                               * algorithm from 'https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html' */
+                              uint8_t oldTAC = vm->MEM[R_TAC];
+                              /* Make sure unused bits are unchanged */
+                              uint8_t newTAC = byte | 0xF8;
 
-                int clocks_array[] = {1024, 16, 64, 256};
-                uint8_t old_clock = clocks_array[oldTAC & 3];
-                uint8_t new_clock = clocks_array[newTAC & 3];
+                              vm->MEM[R_TAC] = newTAC;
 
-                uint8_t old_enable = (oldTAC >> 2) & 1;
-                uint8_t new_enable = (newTAC >> 2) & 1;
-                uint16_t sys_clock = vm->clock & 0xFFFF;
+                              int clocks_array[] = {1024, 16, 64, 256};
+                              uint8_t old_clock = clocks_array[oldTAC & 3];
+                              uint8_t new_clock = clocks_array[newTAC & 3];
 
-                bool glitch = false;
-                if (old_enable != 0) {
-                    if (new_enable == 0) {
-                        glitch = (sys_clock & (old_clock / 2)) != 0;
-                    } else {
-                        glitch = ((sys_clock & (old_clock / 2)) != 0) && 
-                                 ((sys_clock & (new_clock / 2)) == 0);
-                    }
-                }
-                
-                if (glitch) {
-                    incrementTIMA(vm);
-                }
-                return;
-            }
+                              uint8_t old_enable = (oldTAC >> 2) & 1;
+                              uint8_t new_enable = (newTAC >> 2) & 1;
+                              uint16_t sys_clock = vm->clock & 0xFFFF;
+
+                              bool glitch = false;
+                              if (old_enable != 0) {
+                                  if (new_enable == 0) {
+                                      glitch = (sys_clock & (old_clock / 2)) != 0;
+                                  } else {
+                                      glitch = ((sys_clock & (old_clock / 2)) != 0) &&
+                                          ((sys_clock & (new_clock / 2)) == 0);
+                                  }
+                              }
+
+                              if (glitch) {
+                                  incrementTIMA(vm);
+                              }
+                              return;
+                          }
             case R_DIV  : {
-                /* Write to DIV resets it */
-                syncTimer(vm);
+                              /* Write to DIV resets it */
+                              syncTimer(vm);
 
-                if (vm->MEM[R_DIV] == 1 && ((vm->MEM[R_TAC] >> 2) & 1)) {
-                    /* If DIV = 1 and timer is enabled, theres a bug in which
-                     * the TIMA increases */
-                    vm->MEM[R_DIV] = 0;
-                    incrementTIMA(vm); 
-                    return;
-                }
-                vm->MEM[R_DIV] = 0;
-                return;
-            }
+                              if (vm->MEM[R_DIV] == 1 && ((vm->MEM[R_TAC] >> 2) & 1)) {
+                                  /* If DIV = 1 and timer is enabled, theres a bug in which
+                                   * the TIMA increases */
+                                  vm->MEM[R_DIV] = 0;
+                                  incrementTIMA(vm);
+                                  return;
+                              }
+                              vm->MEM[R_DIV] = 0;
+                              return;
+                          }
             case R_SC:
 #ifdef DEBUG_PRINT_SERIAL_OUTPUT
-                if (byte == 0x81) {
-                    printf("%c", vm->MEM[R_SB]);
-                    vm->MEM[addr] = 0x00;
-                }
+                          if (byte == 0x81) {
+                              printf("%c", vm->MEM[R_SB]);
+                              vm->MEM[addr] = 0x00;
+                          }
 #endif
-                break;
-			case R_P1_JOYP:
-                /* Set the upper 2 bits because they're unused */
-                SET_BIT(byte, 6);
-                SET_BIT(byte, 7);
+                          break;
+            case R_P1_JOYP:
+                          /* Set the upper 2 bits because they're unused */
+                          SET_BIT(byte, 6);
+                          SET_BIT(byte, 7);
 
-				/* Make sure the lower nibble if unaffected */
-				byte &= 0xF0;
-				byte |= vm->MEM[addr] & 0xF;
-				
-				/* Check bit 4-5to get selected mode */
-				uint8_t selected = ((byte >> 4) & 0b11);
-				vm->joypadSelectedMode = selected;
-			    
-				/* Write the selected mode */
-				vm->MEM[addr] = byte;
-				
-				/* Update register to show the keys for the new mode */
-				updateJoypadRegBuffer(vm, selected);
-				return;
-			case R_SVBK: {
-                if (vm->emuMode != EMU_CGB) return;
-				/* In CGB Mode, switch WRAM banks */
-				uint8_t oldBankNumber = vm->MEM[R_SVBK] & 0b00000111;
-				uint8_t bankNumber = byte & 0b00000111;
-				
-				if (bankNumber == 0) bankNumber = 1;
-				switchCGB_WRAM(vm, oldBankNumber, bankNumber);
-				/* Ignore bits 7-3 */
-				vm->MEM[R_SVBK] = byte | 0b11111000;
-				return;	
-			}
-			case R_VBK: {
-                if (vm->emuMode != EMU_CGB) return;
-				/* In CGB Mode, switch VRAM banks 
-			     *
-			     * Only bit 0 matters */
-				uint8_t oldBankNumber = vm->MEM[R_VBK] & 1;
-				uint8_t bankNumber = byte & 1;
-				    
-				switchCGB_VRAM(vm, oldBankNumber, bankNumber);
-				/* Ignore all bits other than bit 0 */
-				vm->MEM[R_VBK] = byte | ~1;
-				return;
-			}
-			case R_BCPD: {
-                if (vm->emuMode != EMU_CGB) return;
-                if (vm->lockPalettes) {
-                    if (GET_BIT(vm->MEM[R_BCPS], 7)) {
-                        /* If auto increment is enabled, writes to
-                         * BCPD increment the color ram index address 
-                         *
-                         * Note : This happens even if palettes are inaccessible */
-                        vm->currentBackgroundCRAMIndex++;
-                        
-                        /* Wrap back to 0 if it exceeds 64 bytes */
-                        if (vm->currentBackgroundCRAMIndex >= 0x40) {
-                            vm->currentBackgroundCRAMIndex = 0;
+                          /* Make sure the lower nibble if unaffected */
+                          byte &= 0xF0;
+                          byte |= vm->MEM[addr] & 0xF;
+
+                          /* Check bit 4-5to get selected mode */
+                          uint8_t selected = ((byte >> 4) & 0b11);
+                          vm->joypadSelectedMode = selected;
+
+                          /* Write the selected mode */
+                          vm->MEM[addr] = byte;
+
+                          /* Update register to show the keys for the new mode */
+                          updateJoypadRegBuffer(vm, selected);
+                          return;
+            case R_SVBK: {
+                             if (vm->emuMode != EMU_CGB) return;
+                             /* In CGB Mode, switch WRAM banks */
+                             uint8_t oldBankNumber = vm->MEM[R_SVBK] & 0b00000111;
+                             uint8_t bankNumber = byte & 0b00000111;
+
+                             if (bankNumber == 0) bankNumber = 1;
+                             switchCGB_WRAM(vm, oldBankNumber, bankNumber);
+                             /* Ignore bits 7-3 */
+                             vm->MEM[R_SVBK] = byte | 0b11111000;
+                             return;
+                         }
+            case R_VBK: {
+                            if (vm->emuMode != EMU_CGB) return;
+                            /* In CGB Mode, switch VRAM banks
+                             *
+                             * Only bit 0 matters */
+                            uint8_t oldBankNumber = vm->MEM[R_VBK] & 1;
+                            uint8_t bankNumber = byte & 1;
+
+                            switchCGB_VRAM(vm, oldBankNumber, bankNumber);
+                            /* Ignore all bits other than bit 0 */
+                            vm->MEM[R_VBK] = byte | ~1;
+                            return;
                         }
-                    }
-                    return;
-                }
-                
-                // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
-                vm->bgColorRAM[vm->currentBackgroundCRAMIndex] = byte;
-                if (GET_BIT(vm->MEM[R_BCPS], 7)) {
-                    vm->currentBackgroundCRAMIndex++;
+            case R_BCPD: {
+                             if (vm->emuMode != EMU_CGB) return;
+                             if (vm->lockPalettes) {
+                                 if (GET_BIT(vm->MEM[R_BCPS], 7)) {
+                                     /* If auto increment is enabled, writes to
+                                      * BCPD increment the color ram index address
+                                      *
+                                      * Note : This happens even if palettes are inaccessible */
+                                     vm->currentBackgroundCRAMIndex++;
 
-                    if (vm->currentBackgroundCRAMIndex >= 0x40) {
-                        vm->currentBackgroundCRAMIndex = 0;
-                    }
-                }
-                break;
-            }
-			case R_BCPS: {
-                if (vm->emuMode != EMU_CGB) return;
-                if (vm->lockPalettes) return;
-                
-                /* Used to index color ram on CGB */
-                SET_BIT(byte, 6);           // bit 6 unused
-                vm->currentBackgroundCRAMIndex = byte & 0b00111111;
-                break;
-            }
-			case R_OCPD: {
-                if (vm->emuMode != EMU_CGB) return;
-                if (vm->lockPalettes) {
-                    if (GET_BIT(vm->MEM[R_OCPS], 7)) {
-                        /* If auto increment is enabled, writes to
-                         * OCPD increment the color ram index address 
-                         *
-                         * Note : This happens even if palettes are inaccessible */
-                        vm->currentSpriteCRAMIndex++;
-                        
-                        /* Wrap back to 0 if it exceeds 64 bytes */
-                        if (vm->currentSpriteCRAMIndex >= 0x40) {
-                            vm->currentSpriteCRAMIndex = 0;
-                        }
-                    }
-                    return;
-                }
-                
-                // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
-                vm->spriteColorRAM[vm->currentSpriteCRAMIndex] = byte;
-                if (GET_BIT(vm->MEM[R_OCPS], 7)) {
-                    vm->currentSpriteCRAMIndex++;
+                                     /* Wrap back to 0 if it exceeds 64 bytes */
+                                     if (vm->currentBackgroundCRAMIndex >= 0x40) {
+                                         vm->currentBackgroundCRAMIndex = 0;
+                                     }
+                                 }
+                                 return;
+                             }
 
-                    if (vm->currentSpriteCRAMIndex >= 0x40) {
-                        vm->currentSpriteCRAMIndex = 0;
-                    }
-                }
-                break;
-            }
-			case R_OCPS: {
-                if (vm->emuMode != EMU_CGB) return;
-                if (vm->lockPalettes) return;
-                
-                /* Used to index color ram on CGB */
-                SET_BIT(byte, 6);           // bit 6 unused
-                vm->currentSpriteCRAMIndex = byte & 0b00111111;
-				break;
-            }
+                             // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
+                             vm->bgColorRAM[vm->currentBackgroundCRAMIndex] = byte;
+                             if (GET_BIT(vm->MEM[R_BCPS], 7)) {
+                                 vm->currentBackgroundCRAMIndex++;
+
+                                 if (vm->currentBackgroundCRAMIndex >= 0x40) {
+                                     vm->currentBackgroundCRAMIndex = 0;
+                                 }
+                             }
+                             break;
+                         }
+            case R_BCPS: {
+                             if (vm->emuMode != EMU_CGB) return;
+                             if (vm->lockPalettes) return;
+
+                             /* Used to index color ram on CGB */
+                             SET_BIT(byte, 6);           // bit 6 unused
+                             vm->currentBackgroundCRAMIndex = byte & 0b00111111;
+                             break;
+                         }
+            case R_OCPD: {
+                             if (vm->emuMode != EMU_CGB) return;
+                             if (vm->lockPalettes) {
+                                 if (GET_BIT(vm->MEM[R_OCPS], 7)) {
+                                     /* If auto increment is enabled, writes to
+                                      * OCPD increment the color ram index address
+                                      *
+                                      * Note : This happens even if palettes are inaccessible */
+                                     vm->currentSpriteCRAMIndex++;
+
+                                     /* Wrap back to 0 if it exceeds 64 bytes */
+                                     if (vm->currentSpriteCRAMIndex >= 0x40) {
+                                         vm->currentSpriteCRAMIndex = 0;
+                                     }
+                                 }
+                                 return;
+                             }
+
+                             // printf("Writing %02x to color ram address %02x\n", byte, vm->currentCRAMIndex);
+                             vm->spriteColorRAM[vm->currentSpriteCRAMIndex] = byte;
+                             if (GET_BIT(vm->MEM[R_OCPS], 7)) {
+                                 vm->currentSpriteCRAMIndex++;
+
+                                 if (vm->currentSpriteCRAMIndex >= 0x40) {
+                                     vm->currentSpriteCRAMIndex = 0;
+                                 }
+                             }
+                             break;
+                         }
+            case R_OCPS: {
+                             if (vm->emuMode != EMU_CGB) return;
+                             if (vm->lockPalettes) return;
+
+                             /* Used to index color ram on CGB */
+                             SET_BIT(byte, 6);           // bit 6 unused
+                             vm->currentSpriteCRAMIndex = byte & 0b00111111;
+                             break;
+                         }
             case R_BGP: {
-                if (vm->emuMode != EMU_DMG) return;
-                break;
-            }
+                            if (vm->emuMode != EMU_DMG) return;
+                            break;
+                        }
             case R_OBP0:
             case R_OBP1:
-                if (vm->emuMode != EMU_DMG) return;
-                break;
-			case R_STAT:
-				/* Bit 7 in STAT is unused so it has to always be 1.
-				 * Bit 2-0 are read only, and are left unchanged */
-				SET_BIT(byte, 7);
-			    	
-				/* Clear last 3 bits */
-				byte &= ~0x7;
-				/* Set the last 3 bits of STAT to byte */
-				byte |= vm->MEM[R_STAT] & 0x7;
-				
-				vm->MEM[R_STAT] = byte;
-				return;
-			case R_LCDC: {
-				/* Bit 7 = LCD/PPU enable */
-				uint8_t lcdcBit7 = GET_BIT(vm->MEM[R_LCDC], 7);
-				uint8_t byteBit7 = GET_BIT(byte, 7);
-                
-				if (lcdcBit7 != byteBit7) {
-					if (byteBit7) {
-						/* Enable PPU */
-						enablePPU(vm);
-					} else {
-						/* Disable PPU */
-						disablePPU(vm);
-					}
-				}
+                        if (vm->emuMode != EMU_DMG) return;
+                        break;
+            case R_STAT:
+                        /* Bit 7 in STAT is unused so it has to always be 1.
+                         * Bit 2-0 are read only, and are left unchanged */
+                        SET_BIT(byte, 7);
 
-                /*
+                        /* Clear last 3 bits */
+                        byte &= ~0x7;
+                        /* Set the last 3 bits of STAT to byte */
+                        byte |= vm->MEM[R_STAT] & 0x7;
 
-                if ((GET_BIT(vm->MEM[R_LCDC], 2) != GET_BIT(byte, 2)) && 
-                        GET_BIT(byte, 2) == 1) {
-                    printf("set obj size to 8x16 %lu\n", vm->clock);
-                }
+                        vm->MEM[R_STAT] = byte;
+                        return;
+            case R_LCDC: {
+                             /* Bit 7 = LCD/PPU enable */
+                             uint8_t lcdcBit7 = GET_BIT(vm->MEM[R_LCDC], 7);
+                             uint8_t byteBit7 = GET_BIT(byte, 7);
 
-                */
-				break;
-			}
+                             if (lcdcBit7 != byteBit7) {
+                                 if (byteBit7) {
+                                     /* Enable PPU */
+                                     enablePPU(vm);
+                                 } else {
+                                     /* Disable PPU */
+                                     disablePPU(vm);
+                                 }
+                             }
+                             break;
+                         }
             case R_DMA: scheduleDMATransfer(vm, byte); break;
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
-		/* Handle the case when VRAM has been locked by PPU */
-		if (vm->lockVRAM) {
-            // printf("vram locked %02x %04x mode %d cy %d ly %d\n", byte, addr, vm->ppuMode, vm->cyclesSinceLastMode, vm->MEM[R_LY]); 
+        /* Handle the case when VRAM has been locked by PPU */
+        if (vm->lockVRAM) {
+            // printf("vram locked %02x %04x mode %d cy %d ly %d\n", byte, addr, vm->ppuMode, vm->cyclesSinceLastMode, vm->MEM[R_LY]);
             return;
         }
 
         // printf("vram allowed %02x %04x mode %d cy %d ly %d\n", byte, addr, vm->ppuMode, vm->cyclesSinceLastMode, vm->MEM[R_LY]);
-	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
-		/* Handle the case when OAM has been locked by PPU */
-		if (vm->lockOAM || vm->doingDMA) return;
-	}
-    vm->MEM[addr] = byte; 
+    } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
+        /* Handle the case when OAM has been locked by PPU */
+        if (vm->lockOAM || vm->doingDMA) return;
+    }
+    vm->MEM[addr] = byte;
 }
 
 uint8_t readAddr(VM* vm, uint16_t addr) {
@@ -1393,36 +1384,36 @@ uint8_t readAddr(VM* vm, uint16_t addr) {
         /* Read from external RAM */
         return mbc_readExternalRAM(vm, addr);
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
-        /* If we have IO registers to read from, we perform some 
-         * actions before the read is done in some cases 
-		 *
-		 * or modify the read values accordingly*/
+        /* If we have IO registers to read from, we perform some
+         * actions before the read is done in some cases
+         *
+         * or modify the read values accordingly*/
         switch (addr) {
             case R_DIV  :
             case R_TIMA :
             case R_TMA  :
             case R_TAC  : syncTimer(vm); break;
-			case R_BCPD: {
-                if (vm->lockPalettes) return 0xFF;
-                return vm->bgColorRAM[vm->currentBackgroundCRAMIndex];
-            }
+            case R_BCPD: {
+                             if (vm->lockPalettes) return 0xFF;
+                             return vm->bgColorRAM[vm->currentBackgroundCRAMIndex];
+                         }
             case R_OCPD: {
-                if (vm->lockPalettes) return 0xFF;
-                return vm->spriteColorRAM[vm->currentSpriteCRAMIndex];
-            }
-			case R_BCPS:
-			case R_OCPS:
-				/* Handle the case when Palettes have been locked by the PPU */
-				if (vm->lockPalettes) return 0xFF;
-				break;
+                             if (vm->lockPalettes) return 0xFF;
+                             return vm->spriteColorRAM[vm->currentSpriteCRAMIndex];
+                         }
+            case R_BCPS:
+            case R_OCPS:
+                         /* Handle the case when Palettes have been locked by the PPU */
+                         if (vm->lockPalettes) return 0xFF;
+                         break;
         }
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
-		/* Handle the case when VRAM has been locked by the PPU */
-		if (vm->lockVRAM) return 0xFF;
-	} else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
-		/* Handle the case when OAM has been locked by the PPU */
-		if (vm->lockOAM || vm->doingDMA) return 0xFF;
-	} else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
+        /* Handle the case when VRAM has been locked by the PPU */
+        if (vm->lockVRAM) return 0xFF;
+    } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
+        /* Handle the case when OAM has been locked by the PPU */
+        if (vm->lockOAM || vm->doingDMA) return 0xFF;
+    } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
         return 0xFF;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
         return vm->MEM[addr - 0x2000];
@@ -1456,11 +1447,11 @@ void requestInterrupt(VM* vm, INTERRUPT interrupt) {
 static void dispatchInterrupt(VM* vm, INTERRUPT interrupt) {
     /* Disable all interrupts */
     INTERRUPT_MASTER_DISABLE(vm);
-    
+
     /* Set the bit of this interrupt in the IF register to 0 */
     vm->MEM[R_IF] &= ~(1 << interrupt);
-    
-    /* Now we pass control to the interrupt handler 
+
+    /* Now we pass control to the interrupt handler
      *
      * CPU does nothing for 8 cycles (or executes NOPs) */
     cyclesSync_4(vm);
@@ -1480,79 +1471,79 @@ static void dispatchInterrupt(VM* vm, INTERRUPT interrupt) {
 
 static void handleInterrupts(VM* vm) {
     /* Main interrupt handler for the CPU */
-    
-	/* Checks for an interrupt that can be handled and returns 
-	 * it if found, otherwise returns -1 */
+
+    /* Checks for an interrupt that can be handled and returns
+     * it if found, otherwise returns -1 */
 
     /* We read interrupt flags, which tell us which interrupts are requested
      * if any */
     uint8_t requestedInterrupts = vm->MEM[R_IF];
     uint8_t enabledInterrups = vm->MEM[R_IE];
 
-	if (vm->IME) {
-		if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
-			/* Exit halt mode */
-			vm->haltMode = false;
-			/* Atleast 1 interrupt has been requested and is enabled too
-			*
-			* Note : Upper 3 bits should always be 0, this is handled when normally
-			* writing to interrupt flag register and in normal hardware requests this is
-			* never encountered 
-			*
-			* We loop to find the interrupt requested with the highest priority thats enabled */
-	
-		    for (int i = 0; i < INTERRUPT_COUNT; i++) {
-			    /* 'i' corresponds to the individual interrupts ranging from bit 0 to 4 */
+    if (vm->IME) {
+        if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
+            /* Exit halt mode */
+            vm->haltMode = false;
+            /* Atleast 1 interrupt has been requested and is enabled too
+             *
+             * Note : Upper 3 bits should always be 0, this is handled when normally
+             * writing to interrupt flag register and in normal hardware requests this is
+             * never encountered
+             *
+             * We loop to find the interrupt requested with the highest priority thats enabled */
 
-				uint8_t requestBit = (requestedInterrupts >> i) & 0x1;
-				uint8_t enabledBit = (enabledInterrups >> i) & 0x1;
+            for (int i = 0; i < INTERRUPT_COUNT; i++) {
+                /* 'i' corresponds to the individual interrupts ranging from bit 0 to 4 */
 
-				if (requestBit && enabledBit) {
-					/* 'i' is currently the interrupt at the highest priority thats enabled */
-					dispatchInterrupt(vm, i);
-					return;
-				}
-			}
-		}
-	} else {
-		/* Even though the interrupt cannot be handled because IME is false,
-		 * we still need to exit halt mode */
-		if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
-			vm->haltMode = false;
-		}
-	}
+                uint8_t requestBit = (requestedInterrupts >> i) & 0x1;
+                uint8_t enabledBit = (enabledInterrups >> i) & 0x1;
+
+                if (requestBit && enabledBit) {
+                    /* 'i' is currently the interrupt at the highest priority thats enabled */
+                    dispatchInterrupt(vm, i);
+                    return;
+                }
+            }
+        }
+    } else {
+        /* Even though the interrupt cannot be handled because IME is false,
+         * we still need to exit halt mode */
+        if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
+            vm->haltMode = false;
+        }
+    }
 }
 
 static void halt(VM* vm) {
-	/* HALT Instruction procedure */
-	uint8_t IE = vm->MEM[R_IE];
-	uint8_t IF = vm->MEM[R_IF];
+    /* HALT Instruction procedure */
+    uint8_t IE = vm->MEM[R_IE];
+    uint8_t IF = vm->MEM[R_IF];
 
-	if (vm->IME) {
-		if ((IE & IF & 0x1F) == 0) {
-			/* IME Enabled, No enabled interrupts requested */
-			vm->haltMode = true;	
-			return;
-		}	
+    if (vm->IME) {
+        if ((IE & IF & 0x1F) == 0) {
+            /* IME Enabled, No enabled interrupts requested */
+            vm->haltMode = true;
+            return;
+        }
 
-		/* If an enabled interrupt is already requested 
-		 * we normally exit */
-		return;
-	} else {
+        /* If an enabled interrupt is already requested
+         * we normally exit */
+        return;
+    } else {
 
-		if ((IE & IF & 0x1F) == 0) {
-			/* IME Disabled, No enabled interrupts requested 
-			 *
-			 * We wait till an interrupt is requested, then we dont jump to the 
-			 * interrupt vector and just continue executing instructions */
-			vm->haltMode = true;
-		} else {
-			/* IME Disabled, 1 or more enabled interrupts requested
-			 *
-			 * Halt Bug Occurs */
-			vm->scheduleHaltBug = true;
-		}
-	}
+        if ((IE & IF & 0x1F) == 0) {
+            /* IME Disabled, No enabled interrupts requested
+             *
+             * We wait till an interrupt is requested, then we dont jump to the
+             * interrupt vector and just continue executing instructions */
+            vm->haltMode = true;
+        } else {
+            /* IME Disabled, 1 or more enabled interrupts requested
+             *
+             * Halt Bug Occurs */
+            vm->scheduleHaltBug = true;
+        }
+    }
 }
 
 /* Main CPU instruction dispatchers */
@@ -1561,7 +1552,7 @@ static void prefixCB(VM* vm) {
     /* This function contains opcode interpretations for
      * all the instruction prefixed by opcode CB */
     uint8_t byte = readByte_4C(vm);
-    
+
 #ifdef DEBUG_PRINT_REGISTERS
     printRegisters(vm);
 #endif
@@ -1833,346 +1824,346 @@ static void prefixCB(VM* vm) {
 
 void dispatch(VM* vm) {
 #ifdef DEBUG_PRINT_REGISTERS
-        printRegisters(vm);
+    printRegisters(vm);
 #endif
 #ifdef DEBUG_REALTIME_PRINTING
-        printInstruction(vm);
+    printInstruction(vm);
 #endif
-		uint8_t byte = 0; /* Will get set later */
+    uint8_t byte = 0; /* Will get set later */
 
-        /* Enable interrupts if it was scheduled */
-        if (vm->scheduleInterruptEnable) {
-            vm->scheduleInterruptEnable = false;
-            vm->IME = true;
-        }
+    /* Enable interrupts if it was scheduled */
+    if (vm->scheduleInterruptEnable) {
+        vm->scheduleInterruptEnable = false;
+        vm->IME = true;
+    }
 
-		if (vm->haltMode) {
-			/* Skip dispatch and directly check for pending interrupts */
+    if (vm->haltMode) {
+        /* Skip dispatch and directly check for pending interrupts */
 
-			/* The CPU is in sleep mode while halt mode is true,
-			 * but the device clock will not be affected and continue 
-			 * ticking 
-			 *
-			 * Other syncs will also continue taking place */
-			cyclesSync_4(vm);
-			syncTimer(vm);
-            handleInterrupts(vm);
-            return;
-		} else if (vm->scheduleHaltBug) {
-			/* Revert the PC increment */
+        /* The CPU is in sleep mode while halt mode is true,
+         * but the device clock will not be affected and continue
+         * ticking
+         *
+         * Other syncs will also continue taking place */
+        cyclesSync_4(vm);
+        syncTimer(vm);
+        handleInterrupts(vm);
+        return;
+    } else if (vm->scheduleHaltBug) {
+        /* Revert the PC increment */
 
-			byte = readByte(vm);
-			vm->PC--;
-			cyclesSync_4(vm);
-        } else {
-			/* Normal Read */
-			byte = readByte_4C(vm);	
-		}
-        
-		/* Do the dispatch */
-        switch (byte) {
-            // nop
-            case 0x00: break;
-            case 0x01: LOAD_RR_D16(vm, R16_BC); break;
-            case 0x02: LOAD_ARR_R(vm, R16_BC, R8_A); break;
-            case 0x03: INC_RR(vm, R16_BC); break;
-            case 0x04: incrementR8(vm, R8_B); break;
-            case 0x05: decrementR8(vm, R8_B); break;
-            case 0x06: LOAD_R_D8(vm, R8_B); break;
-            case 0x07: rotateLeftR8(vm, R8_A, false); break;
-            case 0x08: {
-                uint16_t a = read2Bytes_8C(vm);
-                uint16_t sp = get_reg16(vm, R16_SP);
-                /* Write high byte to high and low byte to low */
-                writeAddr_4C(vm, a+1, sp >> 8);
-                writeAddr_4C(vm, a, sp & 0xFF);
-                break;
-            }
-            case 0x09: addR16(vm, R16_HL, R16_BC); break;
-            case 0x0A: LOAD_R_ARR(vm, R8_A, R16_BC); break;
-            case 0x0B: DEC_RR(vm, R16_BC); break;
-            case 0x0C: incrementR8(vm, R8_C); break;
-            case 0x0D: decrementR8(vm, R8_C); break;
-            case 0x0E: LOAD_R_D8(vm, R8_C); break;
-            case 0x0F: rotateRightR8(vm, R8_A, false); break;
-            /* OPCODE 10 TODO - STOP, it stops the CPU from running */
-            case 0x10: break;
-            case 0x11: LOAD_RR_D16(vm, R16_DE); break;
-            case 0x12: LOAD_ARR_R(vm, R16_DE, R8_A); break;
-            case 0x13: INC_RR(vm, R16_DE); break;
-            case 0x14: incrementR8(vm, R8_D); break;
-            case 0x15: decrementR8(vm, R8_D); break;
-            case 0x16: LOAD_R_D8(vm, R8_D); break;
-            case 0x17: rotateLeftCarryR8(vm, R8_A, false); break;
-            case 0x18: JUMP_RL(vm, readByte_4C(vm)); break;
-            case 0x19: addR16(vm, R16_HL, R16_DE); break;
-            case 0x1A: LOAD_R_ARR(vm, R8_A, R16_DE); break;
-            case 0x1B: DEC_RR(vm, R16_DE); break;
-            case 0x1C: incrementR8(vm, R8_E); break;
-            case 0x1D: decrementR8(vm, R8_E); break;
-            case 0x1E: LOAD_R_D8(vm, R8_E); break;
-            case 0x1F: rotateRightCarryR8(vm, R8_A, false); break;
-            case 0x20: jumpRelativeCondition(vm, CONDITION_NZ(vm)); break;
-            case 0x21: LOAD_RR_D16(vm, R16_HL); break;
-            case 0x22: LOAD_ARR_R(vm, R16_HL, R8_A); 
-                       set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) + 1));
+        byte = readByte(vm);
+        vm->PC--;
+        cyclesSync_4(vm);
+    } else {
+        /* Normal Read */
+        byte = readByte_4C(vm);
+    }
+
+    /* Do the dispatch */
+    switch (byte) {
+        // nop
+        case 0x00: break;
+        case 0x01: LOAD_RR_D16(vm, R16_BC); break;
+        case 0x02: LOAD_ARR_R(vm, R16_BC, R8_A); break;
+        case 0x03: INC_RR(vm, R16_BC); break;
+        case 0x04: incrementR8(vm, R8_B); break;
+        case 0x05: decrementR8(vm, R8_B); break;
+        case 0x06: LOAD_R_D8(vm, R8_B); break;
+        case 0x07: rotateLeftR8(vm, R8_A, false); break;
+        case 0x08: {
+                       uint16_t a = read2Bytes_8C(vm);
+                       uint16_t sp = get_reg16(vm, R16_SP);
+                       /* Write high byte to high and low byte to low */
+                       writeAddr_4C(vm, a+1, sp >> 8);
+                       writeAddr_4C(vm, a, sp & 0xFF);
                        break;
-            case 0x23: INC_RR(vm, R16_HL); break;
-            case 0x24: incrementR8(vm, R8_H); break;
-            case 0x25: decrementR8(vm, R8_H); break;
-            case 0x26: LOAD_R_D8(vm, R8_H); break;
-            case 0x27: decimalAdjust(vm); break;
-            case 0x28: jumpRelativeCondition(vm, CONDITION_Z(vm)); break;
-            case 0x29: addR16(vm, R16_HL, R16_HL); break;
-            case 0x2A: LOAD_R_ARR(vm, R8_A, R16_HL);
-                       set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) + 1)); 
+                   }
+        case 0x09: addR16(vm, R16_HL, R16_BC); break;
+        case 0x0A: LOAD_R_ARR(vm, R8_A, R16_BC); break;
+        case 0x0B: DEC_RR(vm, R16_BC); break;
+        case 0x0C: incrementR8(vm, R8_C); break;
+        case 0x0D: decrementR8(vm, R8_C); break;
+        case 0x0E: LOAD_R_D8(vm, R8_C); break;
+        case 0x0F: rotateRightR8(vm, R8_A, false); break;
+                   /* OPCODE 10 TODO - STOP, it stops the CPU from running */
+        case 0x10: break;
+        case 0x11: LOAD_RR_D16(vm, R16_DE); break;
+        case 0x12: LOAD_ARR_R(vm, R16_DE, R8_A); break;
+        case 0x13: INC_RR(vm, R16_DE); break;
+        case 0x14: incrementR8(vm, R8_D); break;
+        case 0x15: decrementR8(vm, R8_D); break;
+        case 0x16: LOAD_R_D8(vm, R8_D); break;
+        case 0x17: rotateLeftCarryR8(vm, R8_A, false); break;
+        case 0x18: JUMP_RL(vm, readByte_4C(vm)); break;
+        case 0x19: addR16(vm, R16_HL, R16_DE); break;
+        case 0x1A: LOAD_R_ARR(vm, R8_A, R16_DE); break;
+        case 0x1B: DEC_RR(vm, R16_DE); break;
+        case 0x1C: incrementR8(vm, R8_E); break;
+        case 0x1D: decrementR8(vm, R8_E); break;
+        case 0x1E: LOAD_R_D8(vm, R8_E); break;
+        case 0x1F: rotateRightCarryR8(vm, R8_A, false); break;
+        case 0x20: jumpRelativeCondition(vm, CONDITION_NZ(vm)); break;
+        case 0x21: LOAD_RR_D16(vm, R16_HL); break;
+        case 0x22: LOAD_ARR_R(vm, R16_HL, R8_A);
+                   set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) + 1));
+                   break;
+        case 0x23: INC_RR(vm, R16_HL); break;
+        case 0x24: incrementR8(vm, R8_H); break;
+        case 0x25: decrementR8(vm, R8_H); break;
+        case 0x26: LOAD_R_D8(vm, R8_H); break;
+        case 0x27: decimalAdjust(vm); break;
+        case 0x28: jumpRelativeCondition(vm, CONDITION_Z(vm)); break;
+        case 0x29: addR16(vm, R16_HL, R16_HL); break;
+        case 0x2A: LOAD_R_ARR(vm, R8_A, R16_HL);
+                   set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) + 1));
+                   break;
+        case 0x2B: DEC_RR(vm, R16_HL); break;
+        case 0x2C: incrementR8(vm, R8_L); break;
+        case 0x2D: decrementR8(vm, R8_L); break;
+        case 0x2E: LOAD_R_D8(vm, R8_L); break;
+        case 0x2F: cpl(vm); break;
+        case 0x30: jumpRelativeCondition(vm, CONDITION_NC(vm)); break;
+        case 0x31: LOAD_RR_D16(vm, R16_SP); break;
+        case 0x32: LOAD_ARR_R(vm, R16_HL, R8_A);
+                   set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) - 1));
+                   break;
+        case 0x33: INC_RR(vm, R16_SP); break;
+        case 0x34: {
+                       /* Increment what is at the address in HL */
+                       uint16_t address = get_reg16(vm, R16_HL);
+                       uint8_t old = readAddr_4C(vm, address);
+                       uint8_t new = old + 1;
+
+                       TEST_Z_FLAG(vm, new);
+                       TEST_H_FLAG_ADD(vm, old, 1);
+                       set_flag(vm, FLAG_N, 0);
+                       writeAddr_4C(vm, address, new);
                        break;
-            case 0x2B: DEC_RR(vm, R16_HL); break;
-            case 0x2C: incrementR8(vm, R8_L); break;
-            case 0x2D: decrementR8(vm, R8_L); break;
-            case 0x2E: LOAD_R_D8(vm, R8_L); break;
-            case 0x2F: cpl(vm); break;
-            case 0x30: jumpRelativeCondition(vm, CONDITION_NC(vm)); break;
-            case 0x31: LOAD_RR_D16(vm, R16_SP); break;
-            case 0x32: LOAD_ARR_R(vm, R16_HL, R8_A); 
+                   }
+        case 0x35: {
+                       /* Decrement what is at the address in HL */
+                       uint16_t address = get_reg16(vm, R16_HL);
+                       uint8_t old = readAddr_4C(vm, address);
+                       uint8_t new = old - 1;
+
+                       TEST_Z_FLAG(vm, new);
+                       TEST_H_FLAG_SUB(vm, old, 1);
+                       set_flag(vm, FLAG_N, 1);
+                       writeAddr_4C(vm, address, new);
+                       break;
+                   }
+        case 0x36: LOAD_ARR_D8(vm, R16_HL); break;
+        case 0x37: {
+                       set_flag(vm, FLAG_C, 1);
+                       set_flag(vm, FLAG_N, 0);
+                       set_flag(vm, FLAG_H, 0);
+                       break;
+                   }
+        case 0x38: jumpRelativeCondition(vm, CONDITION_C(vm)); break;
+        case 0x39: addR16(vm, R16_HL, R16_SP); break;
+        case 0x3A: {
+                       LOAD_R_ARR(vm, R8_A, R16_HL);
                        set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) - 1));
                        break;
-            case 0x33: INC_RR(vm, R16_SP); break;
-            case 0x34: {
-                /* Increment what is at the address in HL */
-                uint16_t address = get_reg16(vm, R16_HL);
-                uint8_t old = readAddr_4C(vm, address);
-                uint8_t new = old + 1; 
-                
-                TEST_Z_FLAG(vm, new);
-                TEST_H_FLAG_ADD(vm, old, 1);
-                set_flag(vm, FLAG_N, 0);
-                writeAddr_4C(vm, address, new);
-                break;
-            }
-            case 0x35: {
-                /* Decrement what is at the address in HL */
-                uint16_t address = get_reg16(vm, R16_HL);
-                uint8_t old = readAddr_4C(vm, address);
-                uint8_t new = old - 1; 
+                   }
+        case 0x3B: DEC_RR(vm, R16_SP); break;
+        case 0x3C: incrementR8(vm, R8_A); break;
+        case 0x3D: decrementR8(vm, R8_A); break;
+        case 0x3E: LOAD_R_D8(vm, R8_A); break;
+        case 0x3F: CCF(vm); break;
+        case 0x40: LOAD_R_R(vm, R8_B, R8_B);
+#ifdef DEBUG_LDBB_BREAKPOINT
+                   exit(0);
+#endif
+                   break;
+        case 0x41: LOAD_R_R(vm, R8_B, R8_C); break;
+        case 0x42: LOAD_R_R(vm, R8_B, R8_D); break;
+        case 0x43: LOAD_R_R(vm, R8_B, R8_E); break;
+        case 0x44: LOAD_R_R(vm, R8_B, R8_H); break;
+        case 0x45: LOAD_R_R(vm, R8_B, R8_L); break;
+        case 0x46: LOAD_R_ARR(vm, R8_B, R16_HL); break;
+        case 0x47: LOAD_R_R(vm, R8_B, R8_A); break;
+        case 0x48: LOAD_R_R(vm, R8_C, R8_B); break;
+        case 0x49: LOAD_R_R(vm, R8_C, R8_C); break;
+        case 0x4A: LOAD_R_R(vm, R8_C, R8_D); break;
+        case 0x4B: LOAD_R_R(vm, R8_C, R8_E); break;
+        case 0x4C: LOAD_R_R(vm, R8_C, R8_H); break;
+        case 0x4D: LOAD_R_R(vm, R8_C, R8_L); break;
+        case 0x4E: LOAD_R_ARR(vm, R8_C, R16_HL); break;
+        case 0x4F: LOAD_R_R(vm, R8_C, R8_A); break;
+        case 0x50: LOAD_R_R(vm, R8_D, R8_B); break;
+        case 0x51: LOAD_R_R(vm, R8_D, R8_C); break;
+        case 0x52: LOAD_R_R(vm, R8_D, R8_D); break;
+        case 0x53: LOAD_R_R(vm, R8_D, R8_E); break;
+        case 0x54: LOAD_R_R(vm, R8_D, R8_H); break;
+        case 0x55: LOAD_R_R(vm, R8_D, R8_L); break;
+        case 0x56: LOAD_R_ARR(vm, R8_D, R16_HL); break;
+        case 0x57: LOAD_R_R(vm, R8_D, R8_A); break;
+        case 0x58: LOAD_R_R(vm, R8_E, R8_B); break;
+        case 0x59: LOAD_R_R(vm, R8_E, R8_C); break;
+        case 0x5A: LOAD_R_R(vm, R8_E, R8_D); break;
+        case 0x5B: LOAD_R_R(vm, R8_E, R8_E); break;
+        case 0x5C: LOAD_R_R(vm, R8_E, R8_H); break;
+        case 0x5D: LOAD_R_R(vm, R8_E, R8_L); break;
+        case 0x5E: LOAD_R_ARR(vm, R8_E, R16_HL); break;
+        case 0x5F: LOAD_R_R(vm, R8_E, R8_A); break;
+        case 0x60: LOAD_R_R(vm, R8_H, R8_B); break;
+        case 0x61: LOAD_R_R(vm, R8_H, R8_C); break;
+        case 0x62: LOAD_R_R(vm, R8_H, R8_D); break;
+        case 0x63: LOAD_R_R(vm, R8_H, R8_E); break;
+        case 0x64: LOAD_R_R(vm, R8_H, R8_H); break;
+        case 0x65: LOAD_R_R(vm, R8_H, R8_L); break;
+        case 0x66: LOAD_R_ARR(vm, R8_H, R16_HL); break;
+        case 0x67: LOAD_R_R(vm, R8_H, R8_A); break;
+        case 0x68: LOAD_R_R(vm, R8_L, R8_B); break;
+        case 0x69: LOAD_R_R(vm, R8_L, R8_C); break;
+        case 0x6A: LOAD_R_R(vm, R8_L, R8_D); break;
+        case 0x6B: LOAD_R_R(vm, R8_L, R8_E); break;
+        case 0x6C: LOAD_R_R(vm, R8_L, R8_H); break;
+        case 0x6D: LOAD_R_R(vm, R8_L, R8_L); break;
+        case 0x6E: LOAD_R_ARR(vm, R8_L, R16_HL); break;
+        case 0x6F: LOAD_R_R(vm, R8_L, R8_A); break;
+        case 0x70: LOAD_ARR_R(vm, R16_HL, R8_B); break;
+        case 0x71: LOAD_ARR_R(vm, R16_HL, R8_C); break;
+        case 0x72: LOAD_ARR_R(vm, R16_HL, R8_D); break;
+        case 0x73: LOAD_ARR_R(vm, R16_HL, R8_E); break;
+        case 0x74: LOAD_ARR_R(vm, R16_HL, R8_H); break;
+        case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break;
+        case 0x76: halt(vm); break;
+        case 0x77: LOAD_ARR_R(vm, R16_HL, R8_A); break;
+        case 0x78: LOAD_R_R(vm, R8_A, R8_B); break;
+        case 0x79: LOAD_R_R(vm, R8_A, R8_C); break;
+        case 0x7A: LOAD_R_R(vm, R8_A, R8_D); break;
+        case 0x7B: LOAD_R_R(vm, R8_A, R8_E); break;
+        case 0x7C: LOAD_R_R(vm, R8_A, R8_H); break;
+        case 0x7D: LOAD_R_R(vm, R8_A, R8_L); break;
+        case 0x7E: LOAD_R_ARR(vm, R8_A, R16_HL); break;
+        case 0x7F: LOAD_R_R(vm, R8_A, R8_A); break;
+        case 0x80: addR8(vm, R8_A, R8_B); break;
+        case 0x81: addR8(vm, R8_A, R8_C); break;
+        case 0x82: addR8(vm, R8_A, R8_D); break;
+        case 0x83: addR8(vm, R8_A, R8_E); break;
+        case 0x84: addR8(vm, R8_A, R8_H); break;
+        case 0x85: addR8(vm, R8_A, R8_L); break;
+        case 0x86: addR8_AR16(vm, R8_A, R16_HL); break;
+        case 0x87: addR8(vm, R8_A, R8_A); break;
+        case 0x88: adcR8(vm, R8_A, R8_B); break;
+        case 0x89: adcR8(vm, R8_A, R8_C); break;
+        case 0x8A: adcR8(vm, R8_A, R8_D); break;
+        case 0x8B: adcR8(vm, R8_A, R8_E); break;
+        case 0x8C: adcR8(vm, R8_A, R8_H); break;
+        case 0x8D: adcR8(vm, R8_A, R8_L); break;
+        case 0x8E: adcR8_AR16(vm, R8_A, R16_HL); break;
+        case 0x8F: adcR8(vm, R8_A, R8_A); break;
+        case 0x90: subR8(vm, R8_A, R8_B); break;
+        case 0x91: subR8(vm, R8_A, R8_C); break;
+        case 0x92: subR8(vm, R8_A, R8_D); break;
+        case 0x93: subR8(vm, R8_A, R8_E); break;
+        case 0x94: subR8(vm, R8_A, R8_H); break;
+        case 0x95: subR8(vm, R8_A, R8_L); break;
+        case 0x96: subR8_AR16(vm, R8_A, R16_HL); break;
+        case 0x97: subR8(vm, R8_A, R8_A); break;
+        case 0x98: sbcR8(vm, R8_A, R8_B); break;
+        case 0x99: sbcR8(vm, R8_A, R8_C); break;
+        case 0x9A: sbcR8(vm, R8_A, R8_D); break;
+        case 0x9B: sbcR8(vm, R8_A, R8_E); break;
+        case 0x9C: sbcR8(vm, R8_A, R8_H); break;
+        case 0x9D: sbcR8(vm, R8_A, R8_L); break;
+        case 0x9E: sbcR8_AR16(vm, R8_A, R16_HL); break;
+        case 0x9F: sbcR8(vm, R8_A, R8_A); break;
+        case 0xA0: andR8(vm, R8_A, R8_B); break;
+        case 0xA1: andR8(vm, R8_A, R8_C); break;
+        case 0xA2: andR8(vm, R8_A, R8_D); break;
+        case 0xA3: andR8(vm, R8_A, R8_E); break;
+        case 0xA4: andR8(vm, R8_A, R8_H); break;
+        case 0xA5: andR8(vm, R8_A, R8_L); break;
+        case 0xA6: andR8_AR16(vm, R8_A, R16_HL); break;
+        case 0xA7: andR8(vm, R8_A, R8_A); break;
+        case 0xA8: xorR8(vm, R8_A, R8_B); break;
+        case 0xA9: xorR8(vm, R8_A, R8_C); break;
+        case 0xAA: xorR8(vm, R8_A, R8_D); break;
+        case 0xAB: xorR8(vm, R8_A, R8_E); break;
+        case 0xAC: xorR8(vm, R8_A, R8_H); break;
+        case 0xAD: xorR8(vm, R8_A, R8_L); break;
+        case 0xAE: xorR8_AR16(vm, R8_A, R16_HL); break;
+        case 0xAF: xorR8(vm, R8_A, R8_A); break;
+        case 0xB0: orR8(vm, R8_A, R8_B); break;
+        case 0xB1: orR8(vm, R8_A, R8_C); break;
+        case 0xB2: orR8(vm, R8_A, R8_D); break;
+        case 0xB3: orR8(vm, R8_A, R8_E); break;
+        case 0xB4: orR8(vm, R8_A, R8_H); break;
+        case 0xB5: orR8(vm, R8_A, R8_L); break;
+        case 0xB6: orR8_AR16(vm, R8_A, R16_HL); break;
+        case 0xB7: orR8(vm, R8_A, R8_A); break;
+        case 0xB8: compareR8(vm, R8_A, R8_B); break;
+        case 0xB9: compareR8(vm, R8_A, R8_C); break;
+        case 0xBA: compareR8(vm, R8_A, R8_D); break;
+        case 0xBB: compareR8(vm, R8_A, R8_E); break;
+        case 0xBC: compareR8(vm, R8_A, R8_H); break;
+        case 0xBD: compareR8(vm, R8_A, R8_L); break;
+        case 0xBE: compareR8_AR16(vm, R8_A, R16_HL); break;
+        case 0xBF: compareR8(vm, R8_A, R8_A); break;
+        case 0xC0: retCondition(vm, CONDITION_NZ(vm)); break;
+        case 0xC1: POP_R16(vm, R16_BC); break;
+        case 0xC2: jumpCondition(vm, CONDITION_NZ(vm)); break;
+        case 0xC3: JUMP(vm, read2Bytes_8C(vm)); break;
+        case 0xC4: callCondition(vm, read2Bytes_8C(vm), CONDITION_NZ(vm)); break;
+        case 0xC5: PUSH_R16(vm, R16_BC); break;
+        case 0xC6: addR8D8(vm, R8_A); break;
+        case 0xC7: RST(vm, 0x00); break;
+        case 0xC8: retCondition(vm, CONDITION_Z(vm)); break;
+        case 0xC9: ret(vm); break;
+        case 0xCA: jumpCondition(vm, CONDITION_Z(vm)); break;
+        case 0xCB: prefixCB(vm); break;
+        case 0xCC: callCondition(vm, read2Bytes_8C(vm), CONDITION_Z(vm)); break;
+        case 0xCD: call(vm, read2Bytes_8C(vm)); break;
+        case 0xCE: adcR8D8(vm, R8_A); break;
+        case 0xCF: RST(vm, 0x08); break;
+        case 0xD0: retCondition(vm, CONDITION_NC(vm)); break;
+        case 0xD1: POP_R16(vm, R16_DE); break;
+        case 0xD2: jumpCondition(vm, CONDITION_NC(vm)); break;
+        case 0xD4: callCondition(vm, read2Bytes_8C(vm), CONDITION_NC(vm)); break;
+        case 0xD5: PUSH_R16(vm, R16_DE); break;
+        case 0xD6: subR8D8(vm, R8_A); break;
+        case 0xD7: RST(vm, 0x10); break;
+        case 0xD8: retCondition(vm, CONDITION_C(vm)); break;
+        case 0xD9: INTERRUPT_MASTER_ENABLE(vm); ret(vm); break;
+        case 0xDA: jumpCondition(vm, CONDITION_C(vm)); break;
+        case 0xDC: callCondition(vm, read2Bytes_8C(vm), CONDITION_C(vm)); break;
+        case 0xDE: sbcR8D8(vm, R8_A); break;
+        case 0xDF: RST(vm, 0x18); break;
+        case 0xE0: LOAD_D8PORT_R(vm, R8_A); break;
+        case 0xE1: POP_R16(vm, R16_HL); break;
+        case 0xE2: LOAD_RPORT_R(vm, R8_A, R8_C); break;
+        case 0xE5: PUSH_R16(vm, R16_HL); break;
+        case 0xE6: andR8D8(vm, R8_A); break;
+        case 0xE7: RST(vm, 0x20); break;
+        case 0xE8: addR16I8(vm, R16_SP); break;
+        case 0xE9: JUMP_RR(vm, R16_HL); break;
+        case 0xEA: LOAD_MEM_R(vm, R8_A); break;
+        case 0xEE: xorR8D8(vm, R8_A); break;
+        case 0xEF: RST(vm, 0x28); break;
+        case 0xF0: LOAD_R_D8PORT(vm, R8_A); break;
+        case 0xF1: {
+                       POP_R16(vm, R16_AF);
 
-                TEST_Z_FLAG(vm, new);
-                TEST_H_FLAG_SUB(vm, old, 1);
-                set_flag(vm, FLAG_N, 1);
-                writeAddr_4C(vm, address, new);
-                break;
-            }
-            case 0x36: LOAD_ARR_D8(vm, R16_HL); break;
-            case 0x37: {
-                set_flag(vm, FLAG_C, 1);
-                set_flag(vm, FLAG_N, 0);
-                set_flag(vm, FLAG_H, 0);
-                break;
-            }
-            case 0x38: jumpRelativeCondition(vm, CONDITION_C(vm)); break;
-            case 0x39: addR16(vm, R16_HL, R16_SP); break;
-            case 0x3A: {
-                LOAD_R_ARR(vm, R8_A, R16_HL);
-                set_reg16(vm, R16_HL, (get_reg16(vm, R16_HL) - 1));
-                break;
-            }
-            case 0x3B: DEC_RR(vm, R16_SP); break;
-            case 0x3C: incrementR8(vm, R8_A); break;
-            case 0x3D: decrementR8(vm, R8_A); break;
-            case 0x3E: LOAD_R_D8(vm, R8_A); break;
-            case 0x3F: CCF(vm); break;
-            case 0x40: LOAD_R_R(vm, R8_B, R8_B); 
-#ifdef DEBUG_LDBB_BREAKPOINT 
-                       exit(0); 
-#endif                  
+                       /* Always clear the lower 4 bits, they need to always
+                        * be 0, we failed a blargg test because of this lol */
+                       vm->GPR[R8_F] &= 0xF0;
                        break;
-            case 0x41: LOAD_R_R(vm, R8_B, R8_C); break;
-            case 0x42: LOAD_R_R(vm, R8_B, R8_D); break;
-            case 0x43: LOAD_R_R(vm, R8_B, R8_E); break;
-            case 0x44: LOAD_R_R(vm, R8_B, R8_H); break;
-            case 0x45: LOAD_R_R(vm, R8_B, R8_L); break;
-            case 0x46: LOAD_R_ARR(vm, R8_B, R16_HL); break;
-            case 0x47: LOAD_R_R(vm, R8_B, R8_A); break;
-            case 0x48: LOAD_R_R(vm, R8_C, R8_B); break;
-            case 0x49: LOAD_R_R(vm, R8_C, R8_C); break;
-            case 0x4A: LOAD_R_R(vm, R8_C, R8_D); break;
-            case 0x4B: LOAD_R_R(vm, R8_C, R8_E); break;
-            case 0x4C: LOAD_R_R(vm, R8_C, R8_H); break;
-            case 0x4D: LOAD_R_R(vm, R8_C, R8_L); break;
-            case 0x4E: LOAD_R_ARR(vm, R8_C, R16_HL); break;
-            case 0x4F: LOAD_R_R(vm, R8_C, R8_A); break;
-            case 0x50: LOAD_R_R(vm, R8_D, R8_B); break;
-            case 0x51: LOAD_R_R(vm, R8_D, R8_C); break;
-            case 0x52: LOAD_R_R(vm, R8_D, R8_D); break;
-            case 0x53: LOAD_R_R(vm, R8_D, R8_E); break;
-            case 0x54: LOAD_R_R(vm, R8_D, R8_H); break;
-            case 0x55: LOAD_R_R(vm, R8_D, R8_L); break;
-            case 0x56: LOAD_R_ARR(vm, R8_D, R16_HL); break;
-            case 0x57: LOAD_R_R(vm, R8_D, R8_A); break;
-            case 0x58: LOAD_R_R(vm, R8_E, R8_B); break;
-            case 0x59: LOAD_R_R(vm, R8_E, R8_C); break;
-            case 0x5A: LOAD_R_R(vm, R8_E, R8_D); break;
-            case 0x5B: LOAD_R_R(vm, R8_E, R8_E); break;
-            case 0x5C: LOAD_R_R(vm, R8_E, R8_H); break;
-            case 0x5D: LOAD_R_R(vm, R8_E, R8_L); break;
-            case 0x5E: LOAD_R_ARR(vm, R8_E, R16_HL); break;
-            case 0x5F: LOAD_R_R(vm, R8_E, R8_A); break;
-            case 0x60: LOAD_R_R(vm, R8_H, R8_B); break;
-            case 0x61: LOAD_R_R(vm, R8_H, R8_C); break;
-            case 0x62: LOAD_R_R(vm, R8_H, R8_D); break;
-            case 0x63: LOAD_R_R(vm, R8_H, R8_E); break;
-            case 0x64: LOAD_R_R(vm, R8_H, R8_H); break;
-            case 0x65: LOAD_R_R(vm, R8_H, R8_L); break;
-            case 0x66: LOAD_R_ARR(vm, R8_H, R16_HL); break;
-            case 0x67: LOAD_R_R(vm, R8_H, R8_A); break;
-            case 0x68: LOAD_R_R(vm, R8_L, R8_B); break;
-            case 0x69: LOAD_R_R(vm, R8_L, R8_C); break;
-            case 0x6A: LOAD_R_R(vm, R8_L, R8_D); break;
-            case 0x6B: LOAD_R_R(vm, R8_L, R8_E); break;
-            case 0x6C: LOAD_R_R(vm, R8_L, R8_H); break;
-            case 0x6D: LOAD_R_R(vm, R8_L, R8_L); break;
-            case 0x6E: LOAD_R_ARR(vm, R8_L, R16_HL); break;
-            case 0x6F: LOAD_R_R(vm, R8_L, R8_A); break;
-            case 0x70: LOAD_ARR_R(vm, R16_HL, R8_B); break;
-            case 0x71: LOAD_ARR_R(vm, R16_HL, R8_C); break;
-            case 0x72: LOAD_ARR_R(vm, R16_HL, R8_D); break;
-            case 0x73: LOAD_ARR_R(vm, R16_HL, R8_E); break;
-            case 0x74: LOAD_ARR_R(vm, R16_HL, R8_H); break;
-            case 0x75: LOAD_ARR_R(vm, R16_HL, R8_L); break; 
-            case 0x76: halt(vm); break;
-            case 0x77: LOAD_ARR_R(vm, R16_HL, R8_A); break;
-            case 0x78: LOAD_R_R(vm, R8_A, R8_B); break;
-            case 0x79: LOAD_R_R(vm, R8_A, R8_C); break;
-            case 0x7A: LOAD_R_R(vm, R8_A, R8_D); break;
-            case 0x7B: LOAD_R_R(vm, R8_A, R8_E); break;
-            case 0x7C: LOAD_R_R(vm, R8_A, R8_H); break;
-            case 0x7D: LOAD_R_R(vm, R8_A, R8_L); break;
-            case 0x7E: LOAD_R_ARR(vm, R8_A, R16_HL); break;
-            case 0x7F: LOAD_R_R(vm, R8_A, R8_A); break;
-            case 0x80: addR8(vm, R8_A, R8_B); break;
-            case 0x81: addR8(vm, R8_A, R8_C); break;
-            case 0x82: addR8(vm, R8_A, R8_D); break;
-            case 0x83: addR8(vm, R8_A, R8_E); break;
-            case 0x84: addR8(vm, R8_A, R8_H); break;
-            case 0x85: addR8(vm, R8_A, R8_L); break;
-            case 0x86: addR8_AR16(vm, R8_A, R16_HL); break;
-            case 0x87: addR8(vm, R8_A, R8_A); break;
-            case 0x88: adcR8(vm, R8_A, R8_B); break;
-            case 0x89: adcR8(vm, R8_A, R8_C); break;
-            case 0x8A: adcR8(vm, R8_A, R8_D); break;
-            case 0x8B: adcR8(vm, R8_A, R8_E); break;
-            case 0x8C: adcR8(vm, R8_A, R8_H); break;
-            case 0x8D: adcR8(vm, R8_A, R8_L); break;
-            case 0x8E: adcR8_AR16(vm, R8_A, R16_HL); break;
-            case 0x8F: adcR8(vm, R8_A, R8_A); break;
-            case 0x90: subR8(vm, R8_A, R8_B); break;
-            case 0x91: subR8(vm, R8_A, R8_C); break;
-            case 0x92: subR8(vm, R8_A, R8_D); break;
-            case 0x93: subR8(vm, R8_A, R8_E); break;
-            case 0x94: subR8(vm, R8_A, R8_H); break;
-            case 0x95: subR8(vm, R8_A, R8_L); break;
-            case 0x96: subR8_AR16(vm, R8_A, R16_HL); break;
-            case 0x97: subR8(vm, R8_A, R8_A); break;
-            case 0x98: sbcR8(vm, R8_A, R8_B); break;
-            case 0x99: sbcR8(vm, R8_A, R8_C); break;
-            case 0x9A: sbcR8(vm, R8_A, R8_D); break;
-            case 0x9B: sbcR8(vm, R8_A, R8_E); break;
-            case 0x9C: sbcR8(vm, R8_A, R8_H); break;
-            case 0x9D: sbcR8(vm, R8_A, R8_L); break;
-            case 0x9E: sbcR8_AR16(vm, R8_A, R16_HL); break;
-            case 0x9F: sbcR8(vm, R8_A, R8_A); break;
-            case 0xA0: andR8(vm, R8_A, R8_B); break;
-            case 0xA1: andR8(vm, R8_A, R8_C); break;
-            case 0xA2: andR8(vm, R8_A, R8_D); break;
-            case 0xA3: andR8(vm, R8_A, R8_E); break;
-            case 0xA4: andR8(vm, R8_A, R8_H); break;
-            case 0xA5: andR8(vm, R8_A, R8_L); break;
-            case 0xA6: andR8_AR16(vm, R8_A, R16_HL); break;
-            case 0xA7: andR8(vm, R8_A, R8_A); break;
-            case 0xA8: xorR8(vm, R8_A, R8_B); break;
-            case 0xA9: xorR8(vm, R8_A, R8_C); break;
-            case 0xAA: xorR8(vm, R8_A, R8_D); break;
-            case 0xAB: xorR8(vm, R8_A, R8_E); break;
-            case 0xAC: xorR8(vm, R8_A, R8_H); break;
-            case 0xAD: xorR8(vm, R8_A, R8_L); break;
-            case 0xAE: xorR8_AR16(vm, R8_A, R16_HL); break;
-            case 0xAF: xorR8(vm, R8_A, R8_A); break;
-            case 0xB0: orR8(vm, R8_A, R8_B); break;
-            case 0xB1: orR8(vm, R8_A, R8_C); break;
-            case 0xB2: orR8(vm, R8_A, R8_D); break;
-            case 0xB3: orR8(vm, R8_A, R8_E); break;
-            case 0xB4: orR8(vm, R8_A, R8_H); break;
-            case 0xB5: orR8(vm, R8_A, R8_L); break;
-            case 0xB6: orR8_AR16(vm, R8_A, R16_HL); break;
-            case 0xB7: orR8(vm, R8_A, R8_A); break;
-            case 0xB8: compareR8(vm, R8_A, R8_B); break;
-            case 0xB9: compareR8(vm, R8_A, R8_C); break;
-            case 0xBA: compareR8(vm, R8_A, R8_D); break;
-            case 0xBB: compareR8(vm, R8_A, R8_E); break;
-            case 0xBC: compareR8(vm, R8_A, R8_H); break;
-            case 0xBD: compareR8(vm, R8_A, R8_L); break;
-            case 0xBE: compareR8_AR16(vm, R8_A, R16_HL); break;
-            case 0xBF: compareR8(vm, R8_A, R8_A); break;
-            case 0xC0: retCondition(vm, CONDITION_NZ(vm)); break;
-            case 0xC1: POP_R16(vm, R16_BC); break;
-            case 0xC2: jumpCondition(vm, CONDITION_NZ(vm)); break;
-            case 0xC3: JUMP(vm, read2Bytes_8C(vm)); break;
-            case 0xC4: callCondition(vm, read2Bytes_8C(vm), CONDITION_NZ(vm)); break;
-            case 0xC5: PUSH_R16(vm, R16_BC); break;
-            case 0xC6: addR8D8(vm, R8_A); break;
-            case 0xC7: RST(vm, 0x00); break;
-            case 0xC8: retCondition(vm, CONDITION_Z(vm)); break;
-            case 0xC9: ret(vm); break;
-            case 0xCA: jumpCondition(vm, CONDITION_Z(vm)); break;
-            case 0xCB: prefixCB(vm); break;
-            case 0xCC: callCondition(vm, read2Bytes_8C(vm), CONDITION_Z(vm)); break;
-            case 0xCD: call(vm, read2Bytes_8C(vm)); break;
-            case 0xCE: adcR8D8(vm, R8_A); break;
-            case 0xCF: RST(vm, 0x08); break;
-            case 0xD0: retCondition(vm, CONDITION_NC(vm)); break;
-            case 0xD1: POP_R16(vm, R16_DE); break;
-            case 0xD2: jumpCondition(vm, CONDITION_NC(vm)); break;
-            case 0xD4: callCondition(vm, read2Bytes_8C(vm), CONDITION_NC(vm)); break;
-            case 0xD5: PUSH_R16(vm, R16_DE); break;
-            case 0xD6: subR8D8(vm, R8_A); break;
-            case 0xD7: RST(vm, 0x10); break;
-            case 0xD8: retCondition(vm, CONDITION_C(vm)); break;
-            case 0xD9: INTERRUPT_MASTER_ENABLE(vm); ret(vm); break;
-            case 0xDA: jumpCondition(vm, CONDITION_C(vm)); break;
-            case 0xDC: callCondition(vm, read2Bytes_8C(vm), CONDITION_C(vm)); break;
-            case 0xDE: sbcR8D8(vm, R8_A); break;
-            case 0xDF: RST(vm, 0x18); break;
-            case 0xE0: LOAD_D8PORT_R(vm, R8_A); break;
-            case 0xE1: POP_R16(vm, R16_HL); break;
-            case 0xE2: LOAD_RPORT_R(vm, R8_A, R8_C); break;
-            case 0xE5: PUSH_R16(vm, R16_HL); break;
-            case 0xE6: andR8D8(vm, R8_A); break;
-            case 0xE7: RST(vm, 0x20); break;
-            case 0xE8: addR16I8(vm, R16_SP); break;
-            case 0xE9: JUMP_RR(vm, R16_HL); break; 
-            case 0xEA: LOAD_MEM_R(vm, R8_A); break;
-            case 0xEE: xorR8D8(vm, R8_A); break;
-            case 0xEF: RST(vm, 0x28); break;
-            case 0xF0: LOAD_R_D8PORT(vm, R8_A); break;
-            case 0xF1: {
-                POP_R16(vm, R16_AF); 
-                
-                /* Always clear the lower 4 bits, they need to always
-                 * be 0, we failed a blargg test because of this lol */
-                vm->GPR[R8_F] &= 0xF0;
-                break;
-            }
-            case 0xF2: LOAD_R_RPORT(vm, R8_A, R8_C); break;
-            case 0xF3: INTERRUPT_MASTER_DISABLE(vm); break;
-            case 0xF5: PUSH_R16(vm, R16_AF); break;
-            case 0xF6: orR8D8(vm, R8_A); break;
-            case 0xF7: RST(vm, 0x30); break;
-            case 0xF8: LOAD_RR_RRI8(vm, R16_HL, R16_SP); break;
-            case 0xF9: LOAD_RR_RR(vm, R16_SP, R16_HL); break;
-            case 0xFA: LOAD_R_MEM(vm, R8_A); break;
-            case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;
-            case 0xFE: compareR8D8(vm, R8_A); break;
-            case 0xFF: RST(vm, 0x38); break;
+                   }
+        case 0xF2: LOAD_R_RPORT(vm, R8_A, R8_C); break;
+        case 0xF3: INTERRUPT_MASTER_DISABLE(vm); break;
+        case 0xF5: PUSH_R16(vm, R16_AF); break;
+        case 0xF6: orR8D8(vm, R8_A); break;
+        case 0xF7: RST(vm, 0x30); break;
+        case 0xF8: LOAD_RR_RRI8(vm, R16_HL, R16_SP); break;
+        case 0xF9: LOAD_RR_RR(vm, R16_SP, R16_HL); break;
+        case 0xFA: LOAD_R_MEM(vm, R8_A); break;
+        case 0xFB: INTERRUPT_MASTER_ENABLE(vm); break;
+        case 0xFE: compareR8D8(vm, R8_A); break;
+        case 0xFF: RST(vm, 0x38); break;
     }
 
     /* We sync the timer after every dispatch just before checking for interrupts */
@@ -2180,5 +2171,3 @@ void dispatch(VM* vm) {
     /* We handle any interrupts that are requested */
     handleInterrupts(vm);
 }
-
-

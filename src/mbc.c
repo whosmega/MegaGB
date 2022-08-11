@@ -21,12 +21,12 @@ void switchROMBank(VM* vm, int bankNumber) {
 #endif
 }
 
-/* This function switches the restricted ROM bank which is normally 
- * considered 'unbankable', but it needs to be remapped in special 
+/* This function switches the restricted ROM bank which is normally
+ * considered 'unbankable', but it needs to be remapped in special
  * cases */
 
 void switchRestrictedROMBank(VM* vm, int bankNumber) {
-    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x4000);   
+    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x4000);
 }
 
 void mbc_allocate(VM* vm) {
@@ -76,7 +76,7 @@ uint8_t mbc_readExternalRAM(VM* vm, uint16_t addr) {
 
 void mbc_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
     switch (vm->memControllerType) {
-        case MBC_NONE: 
+        case MBC_NONE:
             log_warning(vm, "No MBC exists and write to ROM address doesn't make sense"); break;
 
         case MBC_TYPE_1: mbc1_interceptROMWrite(vm, addr, byte); break;

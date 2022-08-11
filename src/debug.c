@@ -25,7 +25,7 @@ static uint16_t read2Bytes(VM* vm) {
 
 static void printFlags(VM* vm) {
     uint8_t flagState = vm->GPR[R8_F];
-    
+
     printf("[Z%d", flagState >> 7);
     printf(" N%d", (flagState >> 6) & 1);
     printf(" H%d", (flagState >> 5) & 1);
@@ -67,7 +67,7 @@ void printCBInstruction(VM* vm, uint8_t byte) {
     printf("sig:%x]", (vm->MEM[R_P1_JOYP] & 0b00001111));
 #endif
 #ifdef DEBUG_PRINT_TIMERS
-	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
+    printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
 #endif
     printf(" %5s", "");
 
@@ -339,7 +339,7 @@ void printInstruction(VM* vm) {
     printFlags(vm);
 #endif
 #ifdef DEBUG_PRINT_CYCLES
-	/* We print t-cycles */
+    /* We print t-cycles */
     printf("[%ld]", vm->clock * 4);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
@@ -347,10 +347,10 @@ void printInstruction(VM* vm) {
     printf("sig:%x]", (vm->MEM[R_P1_JOYP] & 0b00001111));
 #endif
 #ifdef DEBUG_PRINT_TIMERS
-	printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
+    printf("[%x|%x|%x|%x]", vm->MEM[R_DIV], vm->MEM[R_TIMA], vm->MEM[R_TMA], vm->MEM[R_TAC]);
 #endif
     printf(" %5s", "");
-  
+
     switch (vm->MEM[vm->PC]) {
         case 0x00: return simpleInstruction(vm, "NOP");
         case 0x01: return d16(vm, "LD BC, d16");
@@ -602,7 +602,7 @@ void printInstruction(VM* vm) {
 }
 
 void printRegisters(VM* vm) {
-    printf("[A%02x|B%02x|C%02x|D%02x|E%02x|H%02x|L%02x|SP%04x]\n", 
+    printf("[A%02x|B%02x|C%02x|D%02x|E%02x|H%02x|L%02x|SP%04x]\n",
             vm->GPR[R8_A], vm->GPR[R8_B], vm->GPR[R8_C],
             vm->GPR[R8_D], vm->GPR[R8_E], vm->GPR[R8_H],
             vm->GPR[R8_L], (uint16_t)(vm->GPR[R8_SP_HIGH] << 8) + vm->GPR[R8_SP_LOW]);

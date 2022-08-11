@@ -22,7 +22,7 @@ typedef enum {
     LC_BANDAI = 0x32,
     LC_OCEAN_ACCLAIM = 0x33,
     LC_KONAMI = 0x34
-    
+
     /* More to be added */
 } LICENCEE_CODE;
 
@@ -103,8 +103,8 @@ typedef struct {
     char mfcCode[4];                         /* 4 character long manufacturer code */
     CGB_CODE cgbCode;                        /* Is CGB supported? */
     LICENCEE_CODE lCode;                     /* Licencee code enum, or the company of the game */
-    CARTRIDGE_TYPE cType;                    /* Enum of the defined list of external hardware that 
-                                                comes with the cartridge or Memory Bank Controller 
+    CARTRIDGE_TYPE cType;                    /* Enum of the defined list of external hardware that
+                                                comes with the cartridge or Memory Bank Controller
                                                 aka. ram extension */
     ROM_SIZE romSize;                        /* Enum specifying the rom size */
     RAM_SIZE extRamSize;                     /* External ram size enum */
@@ -118,8 +118,8 @@ typedef struct {
 } Cartridge;
 
 
-/* Init Cartridge sets all the data 
- * fields in the cartridge and returns whether it was a 
+/* Init Cartridge sets all the data
+ * fields in the cartridge and returns whether it was a
  * success or not */
 
 bool initCartridge(Cartridge* c, uint8_t* data, size_t size);

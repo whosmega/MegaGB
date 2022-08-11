@@ -19,27 +19,27 @@
 
 typedef enum {
     ROM_N0_16KB = 0x0000,                       /* 16KB ROM Bank number 0 (from cartridge) */
-    ROM_N0_16KB_END = 0x3FFF,               
-    ROM_NN_16KB = 0x4000,                       /* 16KB Switchable ROM Bank area (from cartridge) */ 
+    ROM_N0_16KB_END = 0x3FFF,
+    ROM_NN_16KB = 0x4000,                       /* 16KB Switchable ROM Bank area (from cartridge) */
     ROM_NN_16KB_END = 0x7FFF,
     VRAM_N0_8KB = 0x8000,                       /* 8KB Switchable Video memory */
     VRAM_N0_8KB_END = 0x9FFF,
     RAM_NN_8KB = 0xA000,                        /* 8KB Switchable RAM Bank area (from cartridge) */
-    RAM_NN_8KB_END = 0xBFFF,                    
+    RAM_NN_8KB_END = 0xBFFF,
     WRAM_N0_4KB = 0xC000,                       /* 4KB Work RAM */
     WRAM_N0_4KB_END = 0xCFFF,
-    WRAM_NN_4KB = 0xD000,                       /* 4KB Switchable Work RAM (not in cartridge) */ 
+    WRAM_NN_4KB = 0xD000,                       /* 4KB Switchable Work RAM (not in cartridge) */
     WRAM_NN_4KB_END = 0xDFFF,
-    ECHO_N0_8KB = 0xE000,                       /* None of our business lol */ 
+    ECHO_N0_8KB = 0xE000,                       /* None of our business lol */
     ECHO_N0_8KB_END = 0xFDFF,
     OAM_N0_160B = 0xFE00,                       /* Where sprites (or screen objects) are stored */
     OAM_N0_160B_END = 0xFE9F,
-    UNUSABLE_N0 = 0xFEA0,                       /* One more useless area */ 
+    UNUSABLE_N0 = 0xFEA0,                       /* One more useless area */
     UNUSABLE_N0_END = 0xFEFF,
-    IO_REG = 0xFF00,                            /* A place for input/output registers */ 
+    IO_REG = 0xFF00,                            /* A place for input/output registers */
     IO_REG_END = 0xFF7F,
     HRAM_N0 = 0xFF80,                           /* High Ram or 'fast ram' */
-    HRAM_N0_END = 0xFFFE, 
+    HRAM_N0_END = 0xFFFE,
     INTERRUPT_ENABLE = 0xFFFF                   /* register which stores if interrupts are enabled */
 } MEM_ADDR;
 
@@ -51,10 +51,10 @@ typedef enum {
 /* Joypad key select modes */
 
 typedef enum {
-	JOYPAD_SELECT_DIRECTION_ACTION,
-	JOYPAD_SELECT_ACTION,
-	JOYPAD_SELECT_DIRECTION,
-	JOYPAD_SELECT_NONE
+    JOYPAD_SELECT_DIRECTION_ACTION,
+    JOYPAD_SELECT_ACTION,
+    JOYPAD_SELECT_DIRECTION,
+    JOYPAD_SELECT_NONE
 } JOYPAD_SELECT;
 
 /* IO Port Register Macros */
@@ -95,24 +95,24 @@ struct VM {
     /* ---------------- SDL ----------------- */
     SDL_Window* sdl_window;					/* The window */
     SDL_Renderer* sdl_renderer;             /* Renderer */
-	unsigned long ticksAtStartup;			/* Stores the ticks at emulator startup (rom boot) */
-	unsigned long ticksAtLastRender;		/* Used to calculate how much time has passed 
-											   since last sdl frame render */
-	uint8_t joypadDirectionBuffer;			/* Stores joypad direction button states */
-	uint8_t joypadActionBuffer;				/* Stores joypad action button states */
-	JOYPAD_SELECT joypadSelectedMode;		
+    unsigned long ticksAtStartup;			/* Stores the ticks at emulator startup (rom boot) */
+    unsigned long ticksAtLastRender;		/* Used to calculate how much time has passed
+                                               since last sdl frame render */
+    uint8_t joypadDirectionBuffer;			/* Stores joypad direction button states */
+    uint8_t joypadActionBuffer;				/* Stores joypad action button states */
+    JOYPAD_SELECT joypadSelectedMode;
     /* -------------- Emulator ------------- */
     Cartridge* cartridge;
     EMULATION_MODE emuMode;                 /* Which behaviour are we emulating, dmg, cgb, ect */
     bool run;                               /* A flag that when set to false, quits the emulator */
     bool paused;
-    bool IME;                               /* Interrupt Master Enable Flag */ 
+    bool IME;                               /* Interrupt Master Enable Flag */
     unsigned long lastDIVSync;              /* Holds the clock's state when DIV timer was last synced
                                              * this helps in getting the cycles elapsed */
     unsigned long lastTIMASync;             /* Same but for the TIMA timer */
-    unsigned long clock;                    /* Main clock of the whole emulator 
-											   Counts in T-Cycles */
-	bool scheduleHaltBug;				    /* If set to true,the CPU recreates the halt bug */
+    unsigned long clock;                    /* Main clock of the whole emulator
+                                               Counts in T-Cycles */
+    bool scheduleHaltBug;				    /* If set to true,the CPU recreates the halt bug */
     bool scheduleDMA;                       /* If set to true, schedules the DMA to be enabled */
     bool doingDMA;
     uint16_t mCyclesSinceDMA;               /* M-Cycles elapsed since DMA began */
@@ -125,60 +125,60 @@ struct VM {
     uint16_t PC;                        /* Program Counter */
     bool scheduleInterruptEnable;       /* If set to true, it enables interrupts at the
                                            dispatch of the next instruction */
-	bool haltMode;						/* If set to true, the CPU enters the halt 
-										   procedure */
+    bool haltMode;						/* If set to true, the CPU enters the halt
+                                           procedure */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0xFFFF + 1];
-	uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
-	uint8_t* vramBank;			        /* Switchable VRAM Bank when on CGB mode */
+    uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
+    uint8_t* vramBank;			        /* Switchable VRAM Bank when on CGB mode */
     void* memController;                /* Memory Bank Controller */
     MBC_TYPE memControllerType;
-	/* ---------------- PPU ---------------- */
-	FIFO BackgroundFIFO;
+    /* ---------------- PPU ---------------- */
+    FIFO BackgroundFIFO;
     FIFO OAMFIFO;
-	PPU_MODE ppuMode;
+    PPU_MODE ppuMode;
     unsigned int hblankDuration;            /* HBlank duration depends on mode 3 duration,
-                                               this is set by mode 3 at every scanline to 
+                                               this is set by mode 3 at every scanline to
                                                set the hblank wait cycle duration */
-	bool ppuEnabled;
-	bool skipFrame;							/* Skips a frame render */
-	uint8_t currentFetcherTask;
+    bool ppuEnabled;
+    bool skipFrame;							/* Skips a frame render */
+    uint8_t currentFetcherTask;
     uint16_t fetcherTileAddress;            /* Address of the current tile the fetcher is on */
     uint8_t fetcherTileAttributes;          /* Attributes of the current tile the fetcher is on */
     uint8_t fetcherX;                       /* X coordinate of the tile in a row */
     uint8_t fetcherY;                       /* Y coordinate of the tile in pixels */
-                                            /* Note: FetcherX and FetcherY do not reflect the 
-                                             * true coordinates of the tile row being rendered,
-                                             * scrolling is applied to these values and then
-                                             * they are used */
+    /* Note: FetcherX and FetcherY do not reflect the
+     * true coordinates of the tile row being rendered,
+     * scrolling is applied to these values and then
+     * they are used */
     uint8_t fetcherTileRowLow;              /* Lower byte of the fetcher tile row data */
     uint8_t fetcherTileRowHigh;             /* Upper .... */
     bool firstTileInScanline;               /* Is true if the current tile the fetcher is on
                                                is the first tile in the current scanline */
-    uint8_t windowYCounter;                 /* Internal window Y counter, it counts the current 
+    uint8_t windowYCounter;                 /* Internal window Y counter, it counts the current
                                                Y coordinate of the window scanline */
     bool lyWasWY;                           /* Set to true when LY = WY, reset every frame */
     bool renderingWindow;
     bool doOptionalPush;                    /* If set to true, the fetcher does a push on the second
                                                dot */
-    uint8_t pauseDotClock;                  /* If this is non zero, the ppu is paused for 
+    uint8_t pauseDotClock;                  /* If this is non zero, the ppu is paused for
                                                that many dots */
     uint8_t nextRenderPixelX;             /* X coordinate of the next pixel to be rendered */
     uint8_t nextPushPixelX;               /* X coordinate of the next pixel to be pushed */
     uint8_t pixelsToDiscard;                /* Fixed offset of pixels to discard at start of a
-                                             * scanline. This is decided by the lower 3 bits of 
+                                             * scanline. This is decided by the lower 3 bits of
                                              * SCX for BG tiles and when WX < 7 for window tiles */
     uint8_t preservedFetcherTileLow;
     uint8_t preservedFetcherTileHigh;
     uint8_t preservedFetcherTileAttributes;
     uint8_t* spriteData;                    /* Pointer to the data of the sprite being rendered rn */
     bool renderingSprites;
-    uint8_t oamDataBuffer[50];              /* OAM Data is read and written to this area on every 
-                                               scanline in mode 2, it stores only 10 sprites at 
-                                               max as its the limit, each sprite occupies 5 bytes 
+    uint8_t oamDataBuffer[50];              /* OAM Data is read and written to this area on every
+                                               scanline in mode 2, it stores only 10 sprites at
+                                               max as its the limit, each sprite occupies 5 bytes
                                                (4 bytes for the normal data + 5th byte has the
                                                index in OAM) */
-    uint8_t spritesInScanline;              /* Number of sprites to be rendered in the current 
+    uint8_t spritesInScanline;              /* Number of sprites to be rendered in the current
                                                scanline */
     uint8_t spriteSize;                     /* 0 = 8x8, 1 = 8x16, read every scanline */
     bool isLastSpriteOverlap;
@@ -186,14 +186,14 @@ struct VM {
     int lastSpriteOverlapX;                 /* X Coordinate of the last overlapping sprite that was pushed fully */
     uint8_t* bgColorRAM;                    /* 64 Byte long color ram which stores CGB palettes */
     uint8_t* spriteColorRAM;                /* ^^^ for sprites */
-    uint8_t currentBackgroundCRAMIndex;     /* Current byte value in color ram which can be 
+    uint8_t currentBackgroundCRAMIndex;     /* Current byte value in color ram which can be
                                                addressed by BCPS */
     uint8_t currentSpriteCRAMIndex;         /* ^^^^ addressed by OCPS */
     unsigned int cyclesSinceLastFrame;      /* Holds the cycles passed since last frame was drawn */
-	unsigned int cyclesSinceLastMode;
-	bool lockVRAM;							/* Locks CPU from accessing VRAM */
-	bool lockOAM;							/*						 -> OAM */
-	bool lockPalettes;						/*						 -> CGB Palettes */
+    unsigned int cyclesSinceLastMode;
+    bool lockVRAM;							/* Locks CPU from accessing VRAM */
+    bool lockOAM;							/*						 -> OAM */
+    bool lockPalettes;						/*						 -> CGB Palettes */
 };
 
 typedef struct VM VM;

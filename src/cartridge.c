@@ -11,15 +11,15 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
         return false;
     }
 
- 
+
     if (size < 0x3FFF) {
         printf("Error : Too small cartridge\n");
         return false;
     }
     c->allocated = data;
-    
+
     /* Set the logo */
-    
+
     memcpy(&c->logoChecksum, &data[0x104], 0x30);
     /* Set the title */
     memcpy(&c->title, &data[0x134], 11);
@@ -38,7 +38,7 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
          * it isnt supported yet */
         c->cgbCode = DMG_MODE;
     } else {
-        
+
         /* This is probably an older cartridge */
         c->cgbCode = DMG_MODE;
     }
@@ -46,7 +46,7 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
     /* New Licencee Code */
     c->lCode = data[0x145];
     /* SGB functions arent supported, so we exit if we find
-     * the cartridge requiring them */ 
+     * the cartridge requiring them */
     c->supportsSGB = data[0x146] == 0x03;
     if (c->supportsSGB) {
         // printf("Error : SGB isnt supported yet\n");
@@ -68,7 +68,7 @@ bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
     c->headerChecksum = data[0x14D];
     /* Set global checksum */
     c->globalChecksum = (data[0x14E] << 8) | data[0x14F];
-    
+
     c->inserted = false;
     return true;
 }
