@@ -1,6 +1,6 @@
 #ifndef megagbc_mbc1_h
 #define megagbc_mbc1_h
-#include "../include/vm.h"
+#include "../include/gb.h"
 
 typedef struct {
     /* External RAM Bank Storage
@@ -22,10 +22,10 @@ typedef struct {
     BANK_MODE bankMode;          /* Banking Mode */
 } MBC_1;
 
-void mbc1_allocate(VM* vm, bool externalRam);
-void mbc1_writeExternalRAM(VM* vm, uint16_t addr, uint8_t byte);
-uint8_t mbc1_readExternalRAM(VM* vm, uint16_t addr);
-void mbc1_free(VM* vm);
-void mbc1_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte);
+void mbc1_allocate(GB* gb, bool externalRam);
+void mbc1_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte);
+uint8_t mbc1_readExternalRAM(GB* gb, uint16_t addr);
+void mbc1_free(GB* gb);
+void mbc1_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte);
 
 #endif

@@ -1,5 +1,5 @@
 #include "../include/cartridge.h"
-#include "../include/vm.h"
+#include "../include/gb.h"
 #include "../include/cpu.h"
 #include "../include/debug.h"
 #include "../include/display.h"
@@ -16,80 +16,80 @@
 #include <SDL2/SDL.h>
 #include <sys/time.h>
 
-static void initVM(VM* vm) {
-    vm->cartridge = NULL;
-    vm->emuMode = EMU_DMG;
-    vm->memController = NULL;
-    vm->memControllerType = MBC_NONE;
-    vm->run = false;
-    vm->paused = false;
+static void initGB(GB* gb) {
+    gb->cartridge = NULL;
+    gb->emuMode = EMU_DMG;
+    gb->memController = NULL;
+    gb->memControllerType = MBC_NONE;
+    gb->run = false;
+    gb->paused = false;
 
-    vm->scheduleInterruptEnable = false;
-    vm->haltMode = false;
-    vm->scheduleHaltBug = false;
-    vm->scheduleDMA = false;
+    gb->scheduleInterruptEnable = false;
+    gb->haltMode = false;
+    gb->scheduleHaltBug = false;
+    gb->scheduleDMA = false;
 
-    vm->clock = 0;
-    vm->lastTIMASync = 0;
-    vm->lastDIVSync = 0;
+    gb->clock = 0;
+    gb->lastTIMASync = 0;
+    gb->lastDIVSync = 0;
 
-    vm->sdl_window = NULL;
-    vm->sdl_renderer = NULL;
-    vm->ticksAtLastRender = 0;
-    vm->ticksAtStartup = 0;
+    gb->sdl_window = NULL;
+    gb->sdl_renderer = NULL;
+    gb->ticksAtLastRender = 0;
+    gb->ticksAtStartup = 0;
 
-    vm->ppuMode = PPU_MODE_2;
-    vm->hblankDuration = 0;
-    vm->ppuEnabled = true;
-    vm->skipFrame = false;
-    vm->firstTileInScanline = true;
-    vm->doOptionalPush = false;
-    vm->currentFetcherTask = 0;
-    vm->fetcherTileAddress = 0;
-    vm->fetcherTileAttributes = 0;
-    vm->fetcherX = 0;
-    vm->fetcherY = 0;
-    vm->fetcherTileRowLow = 0;
-    vm->fetcherTileRowHigh = 0;
-    vm->nextRenderPixelX = 0;
-    vm->nextPushPixelX = 0;
-    vm->pauseDotClock = 0;
-    vm->pixelsToDiscard = 0;
-    vm->currentBackgroundCRAMIndex = 0;
-    vm->currentSpriteCRAMIndex = 0;
-    vm->windowYCounter = 0;
-    vm->lyWasWY = false;
-    vm->renderingWindow = false;
-    vm->renderingSprites = false;
-    vm->spriteData = NULL;
-    vm->preservedFetcherTileLow = 0;
-    vm->preservedFetcherTileHigh = 0;
-    vm->preservedFetcherTileAttributes = 0;
-    vm->spriteSize = 0;
-    vm->isLastSpriteOverlap = false;
-    vm->lastSpriteOverlapPushIndex = 0;
-    vm->lastSpriteOverlapX = 0;
-    vm->doingDMA = false;
-    vm->mCyclesSinceDMA = 0;
-    vm->scheduled_dmaSource = 0;
-    vm->dmaSource = 0;
-    vm->scheduled_dmaTimer = 0;
+    gb->ppuMode = PPU_MODE_2;
+    gb->hblankDuration = 0;
+    gb->ppuEnabled = true;
+    gb->skipFrame = false;
+    gb->firstTileInScanline = true;
+    gb->doOptionalPush = false;
+    gb->currentFetcherTask = 0;
+    gb->fetcherTileAddress = 0;
+    gb->fetcherTileAttributes = 0;
+    gb->fetcherX = 0;
+    gb->fetcherY = 0;
+    gb->fetcherTileRowLow = 0;
+    gb->fetcherTileRowHigh = 0;
+    gb->nextRenderPixelX = 0;
+    gb->nextPushPixelX = 0;
+    gb->pauseDotClock = 0;
+    gb->pixelsToDiscard = 0;
+    gb->currentBackgroundCRAMIndex = 0;
+    gb->currentSpriteCRAMIndex = 0;
+    gb->windowYCounter = 0;
+    gb->lyWasWY = false;
+    gb->renderingWindow = false;
+    gb->renderingSprites = false;
+    gb->spriteData = NULL;
+    gb->preservedFetcherTileLow = 0;
+    gb->preservedFetcherTileHigh = 0;
+    gb->preservedFetcherTileAttributes = 0;
+    gb->spriteSize = 0;
+    gb->isLastSpriteOverlap = false;
+    gb->lastSpriteOverlapPushIndex = 0;
+    gb->lastSpriteOverlapX = 0;
+    gb->doingDMA = false;
+    gb->mCyclesSinceDMA = 0;
+    gb->scheduled_dmaSource = 0;
+    gb->dmaSource = 0;
+    gb->scheduled_dmaTimer = 0;
 
     /* Initialise OAM Buffer */
-    memset(&vm->oamDataBuffer, 0xFF, 50);
-    vm->spritesInScanline = 0;
+    memset(&gb->oamDataBuffer, 0xFF, 50);
+    gb->spritesInScanline = 0;
 
     /* Initialise FIFO */
-    clearFIFO(&vm->BackgroundFIFO);
-    clearFIFO(&vm->OAMFIFO);
+    clearFIFO(&gb->BackgroundFIFO);
+    clearFIFO(&gb->OAMFIFO);
 
     /* bit 3-0 in joypad register is set to 1 on boot (0xCF) */
-    vm->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
-    vm->joypadActionBuffer = 0xF;
-    vm->joypadDirectionBuffer = 0xF;
+    gb->joypadSelectedMode = JOYPAD_SELECT_DIRECTION_ACTION;
+    gb->joypadActionBuffer = 0xF;
+    gb->joypadDirectionBuffer = 0xF;
 }
 
-static void initVMCartridge(VM* vm, Cartridge* cartridge) {
+static void initGBCartridge(GB* gb, Cartridge* cartridge) {
     /* UPDATE : The following is only true for DMG */
     /* The STAT register is supposed to start with mode VBLANK,
      * (DMG has the first 4 cycles in vblank)
@@ -102,61 +102,61 @@ static void initVMCartridge(VM* vm, Cartridge* cartridge) {
      * -> cycle counters shouldnt be set to 0 but 4 for reasons described below
      * -> No STAT checks are necessary because the inital value has already been set */
 
-    vm->cartridge = cartridge;
-    vm->cartridge->inserted = true;
+    gb->cartridge = cartridge;
+    gb->cartridge->inserted = true;
 
     if (cartridge->cgbCode == CGB_MODE || cartridge->cgbCode == CGB_DMG_MODE) {
-        vm->emuMode = EMU_CGB;
+        gb->emuMode = EMU_CGB;
     } else if (cartridge->cgbCode == DMG_MODE) {
-        vm->emuMode = EMU_DMG;
+        gb->emuMode = EMU_DMG;
     }
 
-    if (vm->emuMode == EMU_CGB) {
-        vm->lockVRAM = false;
-        vm->lockOAM = true;
-        vm->lockPalettes = false;
-        vm->cyclesSinceLastFrame = 0;
-        vm->cyclesSinceLastMode = 0;
+    if (gb->emuMode == EMU_CGB) {
+        gb->lockVRAM = false;
+        gb->lockOAM = true;
+        gb->lockPalettes = false;
+        gb->cyclesSinceLastFrame = 0;
+        gb->cyclesSinceLastMode = 0;
 
         /* CGB needs WRAM, VRAM and CRAM banks allocated */
-        vm->wramBanks = (uint8_t*)malloc(sizeof(uint8_t) * 0x1000 * 7);
-        vm->vramBank = (uint8_t*)malloc(sizeof(uint8_t) * 0x2000);
-        vm->bgColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
-        vm->spriteColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
+        gb->wramBanks = (uint8_t*)malloc(sizeof(uint8_t) * 0x1000 * 7);
+        gb->vramBank = (uint8_t*)malloc(sizeof(uint8_t) * 0x2000);
+        gb->bgColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
+        gb->spriteColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
 
-        if (vm->wramBanks == NULL || vm->vramBank == NULL || vm->bgColorRAM == NULL ||
-                vm->spriteColorRAM == NULL) {
+        if (gb->wramBanks == NULL || gb->vramBank == NULL || gb->bgColorRAM == NULL ||
+                gb->spriteColorRAM == NULL) {
 
-            log_fatal(vm, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
+            log_fatal(gb, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
         }
 
         /* Set registers & flags to GBC specifics */
-        resetGBC(vm);
+        resetGBC(gb);
 
         /* Set WRAM/VRAM banks if in CGB mode
          * Because the default value of SVBK is 0xFF, which means bank 7 is selected
          * by default
          * Same goes for VBK, bank 1 will be selected by default*/
-        switchCGB_WRAM(vm, 1, 7);
-        switchCGB_VRAM(vm, 0, 1);
-    } else if (vm->emuMode == EMU_DMG) {
+        switchCGB_WRAM(gb, 1, 7);
+        switchCGB_VRAM(gb, 0, 1);
+    } else if (gb->emuMode == EMU_DMG) {
         /* When the PPU first starts up, it takes 4 cycles less on the first frame,
          * it also doesnt lock OAM */
-        vm->lockOAM = false;
-        vm->lockPalettes = false;
-        vm->lockVRAM = false;
-        vm->cyclesSinceLastFrame = 4;		/* 4 on DMG */
-        vm->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */
-        vm->wramBanks = NULL;
-        vm->bgColorRAM = NULL;
-        vm->spriteColorRAM = NULL;
-        vm->vramBank = NULL;
+        gb->lockOAM = false;
+        gb->lockPalettes = false;
+        gb->lockVRAM = false;
+        gb->cyclesSinceLastFrame = 4;		/* 4 on DMG */
+        gb->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */
+        gb->wramBanks = NULL;
+        gb->bgColorRAM = NULL;
+        gb->spriteColorRAM = NULL;
+        gb->vramBank = NULL;
 
-        resetGB(vm);
+        resetGB(gb);
     }
 }
 
-static void bootROM(VM* vm) {
+static void bootROM(GB* gb) {
     /* This is only a temporary boot rom function,
      * the original boot rom will be in binary and will
      * be mapped over correctly when the cpu is complete
@@ -173,25 +173,25 @@ static void bootROM(VM* vm) {
         0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC,
         0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E};
 #ifndef DEBUG_NO_CARTRIDGE_VERIFICATION
-    bool logoVerified = memcmp(&vm->cartridge->logoChecksum, &logo, 0x18) == 0;
+    bool logoVerified = memcmp(&gb->cartridge->logoChecksum, &logo, 0x18) == 0;
 
     if (!logoVerified) {
-        log_fatal(vm, "Logo Verification Failed");
+        log_fatal(gb, "Logo Verification Failed");
     }
 
     int checksum = 0;
     for (int i = 0x134; i <= 0x14C; i++) {
-        checksum = checksum - vm->cartridge->allocated[i] - 1;
+        checksum = checksum - gb->cartridge->allocated[i] - 1;
     }
 
-    if ((checksum & 0xFF) != vm->cartridge->headerChecksum) {
-        log_fatal(vm, "Header Checksum Doesn't Match, it is possibly corrupted");
+    if ((checksum & 0xFF) != gb->cartridge->headerChecksum) {
+        log_fatal(gb, "Header Checksum Doesn't Match, it is possibly corrupted");
     }
 #endif
 
     /* Map the cartridge rom to the GBC rom space
      * occupying bank 0 and 1, a total of 32 KB*/
-    memcpy(&vm->MEM[ROM_N0_16KB], vm->cartridge->allocated, 0x8000);
+    memcpy(&gb->MEM[ROM_N0_16KB], gb->cartridge->allocated, 0x8000);
 }
 
 /* Utility */
@@ -205,52 +205,52 @@ unsigned long clock_u() {
 
 /* Timer */
 
-void incrementTIMA(VM* vm) {
-    uint8_t old = vm->MEM[R_TIMA];
+void incrementTIMA(GB* gb) {
+    uint8_t old = gb->MEM[R_TIMA];
 
     if (old == 0xFF) {
         /* Overflow */
-        vm->MEM[R_TIMA] = vm->MEM[R_TMA];
-        requestInterrupt(vm, INTERRUPT_TIMER);
+        gb->MEM[R_TIMA] = gb->MEM[R_TMA];
+        requestInterrupt(gb, INTERRUPT_TIMER);
     } else {
-        vm->MEM[R_TIMA]++;
+        gb->MEM[R_TIMA]++;
     }
 }
 
 /* CGB Specific WRAM & VRAM banking */
 
-void switchCGB_WRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber) {
+void switchCGB_WRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber) {
     /* Switch WRAM bank (0xD000-0xDFFF) from oldBankNumber to bankNumber */
 
     /* Copy contents of the old bank number to its respective bank buffer */
     /* We do oldBankNumber - 1 because bank 0 is not stored in this buffer,
      * the first ram number that gets stored here is 1 */
-    memcpy(&vm->wramBanks[0x1000 * (oldBankNumber - 1)], &vm->MEM[WRAM_NN_4KB], 0x1000);
+    memcpy(&gb->wramBanks[0x1000 * (oldBankNumber - 1)], &gb->MEM[WRAM_NN_4KB], 0x1000);
 
     /* If old bank buffer is the same as the one to be switched to, copying
      * the buffer to the address will cause a previous version of the ram to be loaded
      * so we put this check in place */
 
     if (oldBankNumber != bankNumber) {
-        memcpy(&vm->MEM[WRAM_NN_4KB], &vm->wramBanks[0x1000 * (bankNumber - 1)], 0x1000);
+        memcpy(&gb->MEM[WRAM_NN_4KB], &gb->wramBanks[0x1000 * (bankNumber - 1)], 0x1000);
     }
 }
 
-void switchCGB_VRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber) {
+void switchCGB_VRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber) {
     /* There are only 2 VRAM banks in total so we can basically just swap them */
     if (oldBankNumber != bankNumber) {
         /* Swap */
         for (int i = 0; i < 0x2000; i++) {
-            uint8_t b1 = vm->MEM[VRAM_N0_8KB + i];
-            uint8_t b2 = vm->vramBank[i];
+            uint8_t b1 = gb->MEM[VRAM_N0_8KB + i];
+            uint8_t b2 = gb->vramBank[i];
 
-            vm->MEM[VRAM_N0_8KB + i] = b2;
-            vm->vramBank[i] = b1;
+            gb->MEM[VRAM_N0_8KB + i] = b2;
+            gb->vramBank[i] = b1;
         }
     }
 }
 
-void syncTimer(VM* vm) {
+void syncTimer(GB* gb) {
     /* This function should be called after every instruction dispatch at minimum
      * it fully syncs the timer despite the length of the interval
      *
@@ -270,21 +270,21 @@ void syncTimer(VM* vm) {
      * the last successful sync happened
      * */
 
-    unsigned int cycles = vm->clock;
-    unsigned int cyclesElapsedDIV = cycles - vm->lastDIVSync;
+    unsigned int cycles = gb->clock;
+    unsigned int cyclesElapsedDIV = cycles - gb->lastDIVSync;
 
 
     /* Sync DIV */
     if (cyclesElapsedDIV >= T_CYCLES_PER_DIV) {
         /* 'Rewind' the last timer sync in case the timer should have been
          * incremented on an earlier cycle */
-        vm->lastDIVSync = cycles - (cyclesElapsedDIV - T_CYCLES_PER_DIV);
-        vm->MEM[R_DIV]++;
+        gb->lastDIVSync = cycles - (cyclesElapsedDIV - T_CYCLES_PER_DIV);
+        gb->MEM[R_DIV]++;
     }
 
     /* Sync TIMA */
-    unsigned int cyclesElapsedTIMA = cycles - vm->lastTIMASync;
-    uint8_t timerControl    =  vm->MEM[R_TAC];
+    unsigned int cyclesElapsedTIMA = cycles - gb->lastTIMASync;
+    uint8_t timerControl    =  gb->MEM[R_TAC];
     uint8_t timerEnabled    =  (timerControl >> 2) & 1;
     uint8_t timerFrequency  =  timerControl & 0b00000011;
 
@@ -312,17 +312,17 @@ void syncTimer(VM* vm) {
             int rem = cyclesElapsedTIMA % cyc;
             int increments = (int)(cyclesElapsedTIMA / cyc);
 
-            vm->lastTIMASync = cycles - rem;
+            gb->lastTIMASync = cycles - rem;
 
             for (int i = 0; i < increments; i++) {
-                incrementTIMA(vm);
+                incrementTIMA(gb);
             }
         }
     }
 }
 
 /* DMA Transfers */
-void scheduleDMATransfer(VM* vm, uint8_t byte) {
+void scheduleDMATransfer(GB* gb, uint8_t byte) {
     if (byte > 0xDF) {
 #ifdef DEBUG_LOGGING
         printf("[WARNING] Starting DMA Transfer with address > DFXX, wrapping to DFXX\n");
@@ -332,22 +332,22 @@ void scheduleDMATransfer(VM* vm, uint8_t byte) {
 
     uint16_t address = byte * 0x100;
 
-    vm->scheduled_dmaSource = address;
+    gb->scheduled_dmaSource = address;
     /* Schedule DMA to begin on the next mcycle (4 tcycles for the current, 4 for next */
-    vm->scheduled_dmaTimer = 8;
-    vm->scheduleDMA = true;
+    gb->scheduled_dmaTimer = 8;
+    gb->scheduleDMA = true;
 }
 
-static void startDMATransfer(VM* vm) {
-    vm->scheduleDMA = false;
-    vm->scheduled_dmaTimer = 0;
-    vm->mCyclesSinceDMA = 0;
-    vm->dmaSource = vm->scheduled_dmaSource;
+static void startDMATransfer(GB* gb) {
+    gb->scheduleDMA = false;
+    gb->scheduled_dmaTimer = 0;
+    gb->mCyclesSinceDMA = 0;
+    gb->dmaSource = gb->scheduled_dmaSource;
 
-    vm->doingDMA = true;
+    gb->doingDMA = true;
 }
 
-static void syncDMA(VM* vm) {
+static void syncDMA(GB* gb) {
     /* DMA Transfers take 160 machine cycles to complete = 640 T-Cycles
      *
      * It needs to be done sequentially sprite by sprite as it is possible to do dma
@@ -355,45 +355,45 @@ static void syncDMA(VM* vm) {
      *
      * Calling this function once does 4 tcycles or 1 mcycle of syncing */
 
-    vm->mCyclesSinceDMA++;
+    gb->mCyclesSinceDMA++;
 
-    if (vm->mCyclesSinceDMA % 4 == 0) {
+    if (gb->mCyclesSinceDMA % 4 == 0) {
         /* it takes 4 M-Cycles to load 1 sprite, as there are 40 OAM entries and 160 M-Cycles
          * in total */
 
-        uint8_t currentSpriteIndex = (vm->mCyclesSinceDMA / 4) - 1;
+        uint8_t currentSpriteIndex = (gb->mCyclesSinceDMA / 4) - 1;
         uint8_t addressLow = currentSpriteIndex * 4;
 
         for (int i = 0; i < 4; i++) {
-            vm->MEM[OAM_N0_160B + addressLow + i] = readAddr(vm, vm->dmaSource + addressLow + i);
+            gb->MEM[OAM_N0_160B + addressLow + i] = readAddr(gb, gb->dmaSource + addressLow + i);
         }
     }
 
-    if (vm->mCyclesSinceDMA == 160) {
-        vm->dmaSource = 0;
-        vm->mCyclesSinceDMA = 0;
-        vm->doingDMA = false;
+    if (gb->mCyclesSinceDMA == 160) {
+        gb->dmaSource = 0;
+        gb->mCyclesSinceDMA = 0;
+        gb->doingDMA = false;
     }
 }
 
 /* ------------------ */
 
-static void run(VM* vm) {
+static void run(GB* gb) {
     /* We do input polling every 1000 cpu ticks */
-    vm->ticksAtStartup = clock_u();
+    gb->ticksAtStartup = clock_u();
 
-    while (vm->run) {
+    while (gb->run) {
         /* Handle Events */
-        handleSDLEvents(vm);
+        handleSDLEvents(gb);
 
-        for (int i = 0; (i < 1000) && vm->run; i++) {
+        for (int i = 0; (i < 1000) && gb->run; i++) {
             /* Run the next CPU instruction */
-            dispatch(vm);
+            dispatch(gb);
         }
     }
 }
 
-void cyclesSync_4(VM* vm) {
+void cyclesSync_4(GB* gb) {
     /* This function is called millions of times by the CPU
      * in a second and therefore it needs to be optimised
      *
@@ -401,34 +401,34 @@ void cyclesSync_4(VM* vm) {
      * always be upto date like the display and DMA/HDMA
      *
      */
-    vm->clock += 4;
+    gb->clock += 4;
 
-    syncDisplay(vm, 4);
+    syncDisplay(gb, 4);
 
-    if (vm->doingDMA) syncDMA(vm);
-    if (vm->scheduleDMA) {
-        vm->scheduled_dmaTimer -= 4;
+    if (gb->doingDMA) syncDMA(gb);
+    if (gb->scheduleDMA) {
+        gb->scheduled_dmaTimer -= 4;
 
         /* The DMA has been scheduled to start 1 mcycle after the register write */
-        if (vm->scheduled_dmaTimer == 0) startDMATransfer(vm);
+        if (gb->scheduled_dmaTimer == 0) startDMATransfer(gb);
     }
 }
 
 /* SDL */
 
-int initSDL(VM* vm) {
+int initSDL(GB* gb) {
     SDL_Init(SDL_INIT_EVERYTHING);
     SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING, SDL_WINDOW_SHOWN,
-            &vm->sdl_window, &vm->sdl_renderer);
+            &gb->sdl_window, &gb->sdl_renderer);
 
-    if (!vm->sdl_window) return 1;          /* Failed to create screen */
+    if (!gb->sdl_window) return 1;          /* Failed to create screen */
 
-    SDL_SetWindowTitle(vm->sdl_window, "MegaGBC");
-    SDL_RenderSetScale(vm->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
+    SDL_SetWindowTitle(gb->sdl_window, "MegaGBC");
+    SDL_RenderSetScale(gb->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
     return 0;
 }
 
-void handleSDLEvents(VM *vm) {
+void handleSDLEvents(GB* gb) {
     /* We listen for events like keystrokes and window closing */
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -438,125 +438,125 @@ void handleSDLEvents(VM *vm) {
             switch (event.key.keysym.scancode) {
                 case SDL_SCANCODE_UP:
                     /* Joypad Up */
-                    vm->joypadDirectionBuffer &= ~(1 << 2);
+                    gb->joypadDirectionBuffer &= ~(1 << 2);
                     break;
                 case SDL_SCANCODE_LEFT:
                     /* Joypad Left */
-                    vm->joypadDirectionBuffer &= ~(1 << 1);
+                    gb->joypadDirectionBuffer &= ~(1 << 1);
                     break;
                 case SDL_SCANCODE_DOWN:
                     /* Joypad Down */
-                    vm->joypadDirectionBuffer &= ~(1 << 3);
+                    gb->joypadDirectionBuffer &= ~(1 << 3);
                     break;
                 case SDL_SCANCODE_RIGHT:
                     /* Joypad Right */
-                    vm->joypadDirectionBuffer &= ~(1 << 0);
+                    gb->joypadDirectionBuffer &= ~(1 << 0);
                     break;
                 case SDL_SCANCODE_Z:
                     /* B */
-                    vm->joypadActionBuffer &= ~(1 << 1);
+                    gb->joypadActionBuffer &= ~(1 << 1);
                     break;
                 case SDL_SCANCODE_X:
                     /* A */
-                    vm->joypadActionBuffer &= ~(1 << 0);
+                    gb->joypadActionBuffer &= ~(1 << 0);
                     break;
                 case SDL_SCANCODE_RETURN:
                     /* Start */
-                    vm->joypadActionBuffer &= ~(1 << 3);
+                    gb->joypadActionBuffer &= ~(1 << 3);
                     break;
                 case SDL_SCANCODE_TAB:
                     /* Select */
-                    vm->joypadActionBuffer &= ~(1 << 2);
+                    gb->joypadActionBuffer &= ~(1 << 2);
                     break;
                 case SDL_SCANCODE_SPACE:
-                    if (!vm->paused) pauseEmulator(vm);
-                    else unpauseEmulator(vm);
+                    if (!gb->paused) pauseEmulator(gb);
+                    else unpauseEmulator(gb);
                     break;
                 default: return;
             }
 
-            updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
+            updateJoypadRegBuffer(gb, gb->joypadSelectedMode);
 
-            if (vm->joypadSelectedMode != JOYPAD_SELECT_NONE) {
+            if (gb->joypadSelectedMode != JOYPAD_SELECT_NONE) {
                 /* Request joypad interrupt if atleast 1 of the modes are selected */
-                requestInterrupt(vm, INTERRUPT_JOYPAD);
+                requestInterrupt(gb, INTERRUPT_JOYPAD);
             }
         } else if (event.type == SDL_KEYUP && event.key.repeat == 0) {
             switch (event.key.keysym.scancode) {
                 case SDL_SCANCODE_UP:
                     /* Joypad Up */
-                    vm->joypadDirectionBuffer |= 1 << 2;
+                    gb->joypadDirectionBuffer |= 1 << 2;
                     break;
                 case SDL_SCANCODE_LEFT:
                     /* Joypad Left */
-                    vm->joypadDirectionBuffer |= 1 << 1;
+                    gb->joypadDirectionBuffer |= 1 << 1;
                     break;
                 case SDL_SCANCODE_DOWN:
                     /* Joypad Down */
-                    vm->joypadDirectionBuffer |= 1 << 3;
+                    gb->joypadDirectionBuffer |= 1 << 3;
                     break;
                 case SDL_SCANCODE_RIGHT:
                     /* Joypad Right */
-                    vm->joypadDirectionBuffer |= 1 << 0;
+                    gb->joypadDirectionBuffer |= 1 << 0;
                     break;
                 case SDL_SCANCODE_Z:
                     /* B */
-                    vm->joypadActionBuffer |= 1 << 1;
+                    gb->joypadActionBuffer |= 1 << 1;
                     break;
                 case SDL_SCANCODE_X:
                     /* A */
-                    vm->joypadActionBuffer |= 1 << 0;
+                    gb->joypadActionBuffer |= 1 << 0;
                     break;
                 case SDL_SCANCODE_RETURN:
                     /* Start */
-                    vm->joypadActionBuffer |= 1 << 3;
+                    gb->joypadActionBuffer |= 1 << 3;
                     break;
                 case SDL_SCANCODE_TAB:
                     /* Select */
-                    vm->joypadActionBuffer |= 1 << 2;
+                    gb->joypadActionBuffer |= 1 << 2;
                     break;
                 default: return;
             }
-            updateJoypadRegBuffer(vm, vm->joypadSelectedMode);
+            updateJoypadRegBuffer(gb, gb->joypadSelectedMode);
 
         } else if (event.type == SDL_QUIT) {
-            vm->run = false;
+            gb->run = false;
         }
     }
 }
 
-void freeSDL(VM* vm) {
-    SDL_DestroyRenderer(vm->sdl_renderer);
-    SDL_DestroyWindow(vm->sdl_window);
+void freeSDL(GB* gb) {
+    SDL_DestroyRenderer(gb->sdl_renderer);
+    SDL_DestroyWindow(gb->sdl_window);
     SDL_Quit();
 }
 /* ---------------------------------------- */
 
 /* Joypad */
 
-void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode) {
+void updateJoypadRegBuffer(GB* gb, JOYPAD_SELECT mode) {
     switch (mode) {
         case JOYPAD_SELECT_DIRECTION_ACTION:
             /* The program has selected action and direction both,
              * so my best guess is to just bitwise OR them and set the value */
-            vm->MEM[R_P1_JOYP] &= 0xF0;
-            vm->MEM[R_P1_JOYP] |= ~(~vm->joypadDirectionBuffer | ~vm->joypadActionBuffer) & 0xF;
+            gb->MEM[R_P1_JOYP] &= 0xF0;
+            gb->MEM[R_P1_JOYP] |= ~(~gb->joypadDirectionBuffer | ~gb->joypadActionBuffer) & 0xF;
             break;
         case JOYPAD_SELECT_ACTION:
             /* Select Action */
-            vm->MEM[R_P1_JOYP] &= 0xF0;
-            vm->MEM[R_P1_JOYP] |= vm->joypadActionBuffer & 0xF;
+            gb->MEM[R_P1_JOYP] &= 0xF0;
+            gb->MEM[R_P1_JOYP] |= gb->joypadActionBuffer & 0xF;
 
             break;
         case JOYPAD_SELECT_DIRECTION:
             /* Select Direction */
-            vm->MEM[R_P1_JOYP] &= 0xF0;
-            vm->MEM[R_P1_JOYP] |= vm->joypadDirectionBuffer & 0xF;
+            gb->MEM[R_P1_JOYP] &= 0xF0;
+            gb->MEM[R_P1_JOYP] |= gb->joypadDirectionBuffer & 0xF;
 
             break;
         case JOYPAD_SELECT_NONE:
             /* Select None */
-            vm->MEM[R_P1_JOYP] &= 0xF0;
+            gb->MEM[R_P1_JOYP] &= 0xF0;
             break;
     }
 }
@@ -564,17 +564,17 @@ void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode) {
 /* ---------------------------------------- */
 
 void startEmulator(Cartridge* cartridge) {
-    VM vm;
-    initVM(&vm);
-    initVMCartridge(&vm, cartridge);
+    GB gb;
+    initGB(&gb);
+    initGBCartridge(&gb, cartridge);
     /* Start up SDL */
-    int status = initSDL(&vm);
+    int status = initSDL(&gb);
     if (status != 0) {
         /* An error occurred and SDL wasnt started
          *
          * This is fatal as our emulator cannot run without it
          * and we immediately quit */
-        log_fatal(&vm, "Error Starting SDL2");
+        log_fatal(&gb, "Error Starting SDL2");
         return;
     }
 
@@ -582,64 +582,64 @@ void startEmulator(Cartridge* cartridge) {
     printCartridge(cartridge);
 #endif
     char title[30];
-    sprintf(title, "MegaGBC | %s", vm.cartridge->title);
+    sprintf(title, "MegaGBC | %s", gb.cartridge->title);
 
-    SDL_SetWindowTitle(vm.sdl_window, title);
+    SDL_SetWindowTitle(gb.sdl_window, title);
 #ifdef DEBUG_LOGGING
-    printf("Emulation mode: %s\n", vm.emuMode == EMU_CGB ? "Gameboy Color" : vm.emuMode == EMU_DMG ? "Gameboy" : "");
+    printf("Emulation mode: %s\n", gb.emuMode == EMU_CGB ? "Gameboy Color" : gb.emuMode == EMU_DMG ? "Gameboy" : "");
     printf("Booting into ROM\n");
 #endif
-    bootROM(&vm);
+    bootROM(&gb);
 #ifdef DEBUG_LOGGING
     printf("Setting up Memory Bank Controller\n");
 #endif
-    mbc_allocate(&vm);
+    mbc_allocate(&gb);
 
     /* We are now ready to run */
-    vm.run = true;
+    gb.run = true;
 
-    run(&vm);
-    stopEmulator(&vm);
+    run(&gb);
+    stopEmulator(&gb);
 }
 
-void pauseEmulator(VM* vm) {
-    if (vm->paused) return;
-    vm->paused = true;
+void pauseEmulator(GB* gb) {
+    if (gb->paused) return;
+    gb->paused = true;
 
     while (true) {
-        handleSDLEvents(vm);
+        handleSDLEvents(gb);
 
-        if (!vm->paused) break;
+        if (!gb->paused) break;
     }
 }
 
-void unpauseEmulator(VM* vm) {
-    if (!vm->paused) return;
+void unpauseEmulator(GB* gb) {
+    if (!gb->paused) return;
 
-    vm->paused = false;
+    gb->paused = false;
 }
 
-void stopEmulator(VM* vm) {
+void stopEmulator(GB* gb) {
 #ifdef DEBUG_LOGGING
-    double totalElapsed = (clock_u() - vm->ticksAtStartup) / 1e6;
+    double totalElapsed = (clock_u() - gb->ticksAtStartup) / 1e6;
     printf("Time Elapsed : %g\n", totalElapsed);
     printf("Stopping Emulator Now\n");
     printf("Cleaning allocations\n");
 #endif
 
     /* Free up all SDL allocations and stop it */
-    freeSDL(vm);
+    freeSDL(gb);
     /* Free up MBC allocations */
-    mbc_free(vm);
+    mbc_free(gb);
 
-    if (vm->emuMode == EMU_CGB) {
+    if (gb->emuMode == EMU_CGB) {
         /* Free memory allocated specifically for CGB */
-        free(vm->vramBank);
-        free(vm->wramBanks);
-        free(vm->bgColorRAM);
-        free(vm->spriteColorRAM);
+        free(gb->vramBank);
+        free(gb->wramBanks);
+        free(gb->bgColorRAM);
+        free(gb->spriteColorRAM);
     }
 
-    /* Reset VM */
-    initVM(vm);
+    /* Reset GB */
+    initGB(gb);
 }

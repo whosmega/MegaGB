@@ -1,4 +1,4 @@
-#include "../include/vm.h"
+#include "../include/gb.h"
 #include "../include/cartridge.h"
 
 #include <stdio.h>

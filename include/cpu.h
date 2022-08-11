@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct VM;
+struct GB;
 
 typedef enum {
     /* General purpose Registers */
@@ -41,16 +41,16 @@ typedef enum {
 #define R16_SP R8_SP_HIGH
 
 /* Resets the registers in the GBC */
-void resetGBC(struct VM* vm);
+void resetGBC(struct GB* gb);
 /* Resets the registers in the GB */
-void resetGB(struct VM* vm);
+void resetGB(struct GB* gb);
 /* This function is invoked to run the CPU thread */
-void dispatch(struct VM* vm);
+void dispatch(struct GB* gb);
 
 /* Reading and Writing bus routines (instant) */
-void writeAddr(struct VM* vm, uint16_t addr, uint8_t byte);
-uint8_t readAddr(struct VM* vm, uint16_t addr);
+void writeAddr(struct GB* gb, uint16_t addr, uint8_t byte);
+uint8_t readAddr(struct GB* gb, uint16_t addr);
 
 /* Function to request an interrupt when necessary */
-void requestInterrupt(struct VM* vm, INTERRUPT interrupt);
+void requestInterrupt(struct GB* gb, INTERRUPT interrupt);
 #endif

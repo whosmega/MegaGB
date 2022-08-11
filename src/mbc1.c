@@ -2,56 +2,56 @@
 #include "../include/mbc.h"
 #include "../include/mbc1.h"
 
-static inline void mbc1_switchRAMBank(VM* vm, MBC_1* mbc, int bankNumber) {
+static inline void mbc1_switchRAMBank(GB* gb, MBC_1* mbc, int bankNumber) {
     /* Each bank is 8KB = 0x2000
      * Checks arent done by this function */
-    memcpy(&vm->MEM[RAM_NN_8KB], &mbc->ramBanks[bankNumber], 0x2000);
+    memcpy(&gb->MEM[RAM_NN_8KB], &mbc->ramBanks[bankNumber], 0x2000);
 }
 
-static void mbc1_switchROMBankingMode(VM* vm, MBC_1* mbc) {
+static void mbc1_switchROMBankingMode(GB* gb, MBC_1* mbc) {
     mbc->bankMode = BANK_MODE_ROM;
 
     /* RAM banking is disabled and bank 0 of RAM is locked to
      * the external RAM address */
     if (mbc->ramBanks != NULL) {
-        if (vm->cartridge->extRamSize >= EXT_RAM_8KB) {
+        if (gb->cartridge->extRamSize >= EXT_RAM_8KB) {
             /* Atleast 1 bank of external ram exists,
             * switch to the first one */
-            mbc1_switchRAMBank(vm, mbc, 0);
+            mbc1_switchRAMBank(gb, mbc, 0);
         }
     }
 
     /* Reset the first rom bank to 0 */
-    switchRestrictedROMBank(vm, 0);
+    switchRestrictedROMBank(gb, 0);
 }
 
-static void mbc1_switchRAMBankingMode(VM* vm, MBC_1* mbc) {
+static void mbc1_switchRAMBankingMode(GB* gb, MBC_1* mbc) {
     mbc->bankMode = BANK_MODE_RAM;
 
-    if (vm->cartridge->extRamSize == EXT_RAM_32KB) {
+    if (gb->cartridge->extRamSize == EXT_RAM_32KB) {
         /* If this cartridge has external ram which is big enough to be switchable,
          * we can switch the bank to the one in the secondary bank cartridge only if the
          * ram is enabled for use */
 
         if (mbc->ramEnabled) {
-            mbc1_switchRAMBank(vm, mbc, mbc->secondaryBankNumber);
+            mbc1_switchRAMBank(gb, mbc, mbc->secondaryBankNumber);
         }
     }
 
     /* MBC1 Remaps the 0x0000-0x3fff area too in this mode for 1MB+ ROMs
      * depending on the value of the the secondary banking register */
 
-    if (vm->cartridge->romSize >= ROM_1MB) {
-        switchRestrictedROMBank(vm, mbc->secondaryBankNumber * 0x20);
+    if (gb->cartridge->romSize >= ROM_1MB) {
+        switchRestrictedROMBank(gb, mbc->secondaryBankNumber * 0x20);
     }
 }
 
-void mbc1_allocate(VM* vm, bool externalRam) {
+void mbc1_allocate(GB* gb, bool externalRam) {
     /* Allocates MBC1 */
     MBC_1* mbc = (MBC_1*)malloc(sizeof(MBC_1));
 
     if (mbc == NULL) {
-        log_fatal(vm, "Error while allocating memory for MBC\n");
+        log_fatal(gb, "Error while allocating memory for MBC\n");
         return;
     }
 
@@ -62,35 +62,35 @@ void mbc1_allocate(VM* vm, bool externalRam) {
     mbc->ramEnabled = false;                        /* External RAM is disabled by default */
 
     if (externalRam) {
-        switch (vm->cartridge->extRamSize) {
+        switch (gb->cartridge->extRamSize) {
             case EXT_RAM_0: break;          /* Dont allocate */
             case EXT_RAM_8KB: mbc->ramBanks = (uint8_t*)malloc(0x2000); break;  /* Allocate 1 bank */
             case EXT_RAM_32KB: mbc->ramBanks = (uint8_t*)malloc(0x2000 * 4); break;  /* 4 banks */
-            default: log_fatal(vm, "External banks not supported with MBC1"); break;
+            default: log_fatal(gb, "External banks not supported with MBC1"); break;
         }
 
         if (mbc->ramBanks == NULL) {
-            log_fatal(vm, "Error while allocating memory for MBC Ram Banks\n");
+            log_fatal(gb, "Error while allocating memory for MBC Ram Banks\n");
             return;
         }
     }
 
-    vm->memController = (void*)mbc;
-    vm->memControllerType = MBC_TYPE_1;
+    gb->memController = (void*)mbc;
+    gb->memControllerType = MBC_TYPE_1;
 
-    mbc1_switchROMBankingMode(vm, mbc);
+    mbc1_switchROMBankingMode(gb, mbc);
 }
 
-void mbc1_writeExternalRAM(VM* vm, uint16_t addr, uint8_t byte) {
-    MBC_1* mbc = (MBC_1*)vm->memController;
+void mbc1_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte) {
+    MBC_1* mbc = (MBC_1*)gb->memController;
 
     if (mbc->ramBanks == NULL) {
-        // log_fatal(vm, "Attempt to write to external RAM when none is present");
+        // log_fatal(gb, "Attempt to write to external RAM when none is present");
         return;
     }
 
     if (!mbc->ramEnabled) {
-        log_warning(vm, "It is recommended to enable RAM when writing");
+        log_warning(gb, "It is recommended to enable RAM when writing");
         return;
     }
 
@@ -110,16 +110,16 @@ void mbc1_writeExternalRAM(VM* vm, uint16_t addr, uint8_t byte) {
     }
 }
 
-uint8_t mbc1_readExternalRAM(VM* vm, uint16_t addr) {
-    MBC_1* mbc = (MBC_1*)vm->memController;
+uint8_t mbc1_readExternalRAM(GB* gb, uint16_t addr) {
+    MBC_1* mbc = (MBC_1*)gb->memController;
 
     if (mbc->ramBanks == NULL) {
-        // log_fatal(vm, "Attempt to read to external RAM when none is present");
+        // log_fatal(gb, "Attempt to read to external RAM when none is present");
         return 0;
     }
 
     if (!mbc->ramEnabled) {
-        log_warning(vm, "It is recommended to enable RAM when read");
+        log_warning(gb, "It is recommended to enable RAM when read");
         return 0;
     }
 
@@ -131,8 +131,8 @@ uint8_t mbc1_readExternalRAM(VM* vm, uint16_t addr) {
     }
 }
 
-void mbc1_free(VM* vm) {
-    MBC_1* mbc = (MBC_1*)vm->memController;
+void mbc1_free(GB* gb) {
+    MBC_1* mbc = (MBC_1*)gb->memController;
 
     if (mbc->ramBanks != NULL) {
         free(mbc->ramBanks);
@@ -140,11 +140,11 @@ void mbc1_free(VM* vm) {
     }
 
     free(mbc);
-    vm->memController = NULL;
+    gb->memController = NULL;
 }
 
-void mbc1_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
-    MBC_1* mbc = (MBC_1*)vm->memController;
+void mbc1_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte) {
+    MBC_1* mbc = (MBC_1*)gb->memController;
     /* Check if we have to write to a register or switch banks */
     if (addr >= 0x0000 && addr <= 0x1fff) {
         /* Enable/Disable external ram
@@ -171,8 +171,8 @@ void mbc1_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
          * what the rom contains
          *
          * 32 KiB cartridges are the smallest and wont need any extra banks */
-        switch (vm->cartridge->romSize) {
-            case ROM_32KB:  log_fatal(vm, "Bruh why an MBC with a 32KB cart"); break;
+        switch (gb->cartridge->romSize) {
+            case ROM_32KB:  log_fatal(gb, "Bruh why an MBC with a 32KB cart"); break;
             case ROM_64KB:  bankNumber &= 0b00000011; break;
             case ROM_128KB: bankNumber &= 0b00000111; break;
             case ROM_256KB: bankNumber &= 0b00001111; break;
@@ -191,7 +191,7 @@ void mbc1_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
         }
 
         mbc->romBankNumber = bankNumber;
-        switchROMBank(vm, bankNumber);
+        switchROMBank(gb, bankNumber);
     } else if (addr >= 0x4000 && addr <= 0x5fff) {
         /* Secondary bank number
          *
@@ -207,7 +207,7 @@ void mbc1_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
             * Check if the rom is even big enough to require
             * the upper 2 bits. 5 bits should be able to address upto 512KB of
             * ROM */
-            if (vm->cartridge->romSize <= ROM_512KB) {
+            if (gb->cartridge->romSize <= ROM_512KB) {
                 /* ROM isnt big enough */
                 return;
             }
@@ -218,33 +218,33 @@ void mbc1_interceptROMWrite(VM* vm, uint16_t addr, uint8_t byte) {
              * the rom can contain
              *
              * 1MB roms can fit in 6 bits, 2MB needs 7 bits and is max for MBC1*/
-            switch (vm->cartridge->romSize) {
+            switch (gb->cartridge->romSize) {
                 case ROM_1MB: fullBankNumber &= 0b00111111; break;
                 case ROM_2MB: fullBankNumber &= 0b01111111; break;
                 default: break;
             }
 
-            switchROMBank(vm, fullBankNumber);
+            switchROMBank(gb, fullBankNumber);
         } else if (mbc->bankMode == BANK_MODE_RAM) {
             /* We have some RAM Banks to switch */
-            if (vm->cartridge->extRamSize == EXT_RAM_32KB) {
-                mbc1_switchRAMBank(vm, mbc, upperBankNumber);
+            if (gb->cartridge->extRamSize == EXT_RAM_32KB) {
+                mbc1_switchRAMBank(gb, mbc, upperBankNumber);
             }
         }
 
     } else if (addr >= 0x6000 && addr <= 0x7fff) {
         /* Switch banking mode to Simple ROM or Advanced ROM + RAM */
         if (byte == 0) {
-            mbc1_switchROMBankingMode(vm, mbc);
+            mbc1_switchROMBankingMode(gb, mbc);
         } else {
-            mbc1_switchRAMBankingMode(vm, mbc);
+            mbc1_switchRAMBankingMode(gb, mbc);
         }
 
 #ifdef DEBUG_LOGGING
         printf("MBC : Switched to mode %d\n", byte ? 1 : 0);
 #endif
     } else {
-        log_fatal(vm, "MBC : Attempt to write to an undefined MBC register");
+        log_fatal(gb, "MBC : Attempt to write to an undefined MBC register");
         return;
     }
 }

@@ -18,7 +18,7 @@
 #define T_CYCLES_PER_MODE2 80
 #define T_CYCLES_PER_VBLANK 4560		// or MODE1
 
-struct VM;
+struct GB;
 
 typedef enum {
     PPU_MODE_0,		// Hblank
@@ -73,8 +73,8 @@ FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index);
 void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index);
 void clearFIFO(FIFO* fifo);
 
-void syncDisplay(struct VM* vm, unsigned int cycles);
-void enablePPU(struct VM* vm);
-void disablePPU(struct VM* vm);
+void syncDisplay(struct GB* gb, unsigned int cycles);
+void enablePPU(struct GB* gb);
+void disablePPU(struct GB* gb);
 
 #endif

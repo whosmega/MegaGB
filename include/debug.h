@@ -1,6 +1,6 @@
 #ifndef MEGAGBC_DEBUG_H
 #define MEGAGBC_DEBUG_H
-#include "../include/vm.h"
+#include "../include/gb.h"
 
 // #define DEBUG_NO_CARTRIDGE_VERIFICATION
 // #define DEBUG_REALTIME_PRINTING
@@ -25,9 +25,9 @@
 #define DEBUG_SUPPORT_SLOW_EMULATION
 #endif
 
-void printInstruction(VM* vm);
-void printRegisters(VM* vm);
-void printCBInstruction(VM* vm, uint8_t byte);
-void log_fatal(VM* vm, const char* string);
-void log_warning(VM* vm, const char* string);
+void printInstruction(GB* gb);
+void printRegisters(GB* gb);
+void printCBInstruction(GB* gb, uint8_t byte);
+void log_fatal(GB* gb, const char* string);
+void log_warning(GB* gb, const char* string);
 #endif

@@ -1,4 +1,4 @@
-#include "../include/vm.h"
+#include "../include/gb.h"
 #include "../include/display.h"
 #include "../include/debug.h"
 #include <SDL2/SDL_events.h>
@@ -14,13 +14,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
-static void lockToFramerate(VM* vm) {
+static void lockToFramerate(GB* gb) {
     /* The emulator keeps its speed accurate by locking to the framerate
      * Whatever has to be done (cpu execution, audio, rendering a frame) in
      * the interval equivalent to 1 frame render on the gameboy is done in 1 frame
      * render on the emulator, the remaining time is waited for on the emulator to
      * sync with the time on the gameboy */
-    unsigned long ticksElapsed = (clock_u() - vm->ticksAtStartup) - vm->ticksAtLastRender;
+    unsigned long ticksElapsed = (clock_u() - gb->ticksAtStartup) - gb->ticksAtLastRender;
 
     /* Ticks elapsed is the amount of time elapsed since last frame render (in microsec),
      * which is lesser than the amount of time it would have taken on the real gameboy
@@ -36,52 +36,52 @@ static void lockToFramerate(VM* vm) {
 #ifdef DEBUG_SUPPORT_SLOW_EMULATION
     }
 #endif
-    vm->ticksAtLastRender = clock_u() - vm->ticksAtStartup;
+    gb->ticksAtLastRender = clock_u() - gb->ticksAtStartup;
 }
 
-static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
+static void updateSTAT(GB* gb, STAT_UPDATE_TYPE type) {
     /* This function updates the STAT register depending on the type of update
      * that is requested */
 
-#define SWITCH_MODE(mode) vm->MEM[R_STAT] &= ~0x3; \
-    vm->MEM[R_STAT] |= mode
+#define SWITCH_MODE(mode) gb->MEM[R_STAT] &= ~0x3; \
+    gb->MEM[R_STAT] |= mode
 
     switch (type) {
         case STAT_UPDATE_LY_LYC:
-            if (vm->MEM[R_LY] == vm->MEM[R_LYC]) {
+            if (gb->MEM[R_LY] == gb->MEM[R_LYC]) {
                 /* Set bit 2 */
-                SET_BIT(vm->MEM[R_STAT], 2);
+                SET_BIT(gb->MEM[R_STAT], 2);
 
-                if (GET_BIT(vm->MEM[R_STAT], 6)) {
+                if (GET_BIT(gb->MEM[R_STAT], 6)) {
                     /* If bit 6 is set, we can trigger the STAT interrupt */
-                    requestInterrupt(vm, INTERRUPT_LCD_STAT);
+                    requestInterrupt(gb, INTERRUPT_LCD_STAT);
                 }
             } else {
                 /* Clear bit 2 */
-                CLEAR_BIT(vm->MEM[R_STAT], 2);
+                CLEAR_BIT(gb->MEM[R_STAT], 2);
             }
             break;
         case STAT_UPDATE_SWITCH_MODE0:
             /* Switch to mode 0 */
             SWITCH_MODE(PPU_MODE_0);
-            if (GET_BIT(vm->MEM[R_STAT], 3)) {
+            if (GET_BIT(gb->MEM[R_STAT], 3)) {
                 /* If mode 0 interrupt source is enabled */
-                requestInterrupt(vm, INTERRUPT_LCD_STAT);
+                requestInterrupt(gb, INTERRUPT_LCD_STAT);
             }
             break;
         case STAT_UPDATE_SWITCH_MODE1:
             /* Switch to mode 1 */
             SWITCH_MODE(PPU_MODE_1);
 
-            if (GET_BIT(vm->MEM[R_STAT], 4)) {
-                requestInterrupt(vm, INTERRUPT_LCD_STAT);
+            if (GET_BIT(gb->MEM[R_STAT], 4)) {
+                requestInterrupt(gb, INTERRUPT_LCD_STAT);
             }
             break;
         case STAT_UPDATE_SWITCH_MODE2:
             SWITCH_MODE(PPU_MODE_2);
 
-            if (GET_BIT(vm->MEM[R_STAT], 5)) {
-                requestInterrupt(vm, INTERRUPT_LCD_STAT);
+            if (GET_BIT(gb->MEM[R_STAT], 5)) {
+                requestInterrupt(gb, INTERRUPT_LCD_STAT);
             }
             break;
         case STAT_UPDATE_SWITCH_MODE3:
@@ -92,45 +92,45 @@ static void updateSTAT(VM* vm, STAT_UPDATE_TYPE type) {
 #undef SWITCH_MODE
 }
 
-static inline void switchModePPU(VM* vm, PPU_MODE mode) {
-    vm->ppuMode = mode;
-    vm->cyclesSinceLastMode = 0;
+static inline void switchModePPU(GB* gb, PPU_MODE mode) {
+    gb->ppuMode = mode;
+    gb->cyclesSinceLastMode = 0;
 
     switch (mode) {
         case PPU_MODE_2:
-            vm->lockOAM = true;
-            vm->lockPalettes = false;
-            vm->lockVRAM = false;
-            updateSTAT(vm, STAT_UPDATE_SWITCH_MODE2);
+            gb->lockOAM = true;
+            gb->lockPalettes = false;
+            gb->lockVRAM = false;
+            updateSTAT(gb, STAT_UPDATE_SWITCH_MODE2);
             break;
         case PPU_MODE_3:
-            vm->lockOAM = true;
-            vm->lockPalettes = true;
-            vm->lockVRAM = true;
-            updateSTAT(vm, STAT_UPDATE_SWITCH_MODE3);
+            gb->lockOAM = true;
+            gb->lockPalettes = true;
+            gb->lockVRAM = true;
+            updateSTAT(gb, STAT_UPDATE_SWITCH_MODE3);
             break;
         case PPU_MODE_0:
-            vm->lockOAM = false;
-            vm->lockPalettes = false;
-            vm->lockVRAM = false;
-            updateSTAT(vm, STAT_UPDATE_SWITCH_MODE0);
+            gb->lockOAM = false;
+            gb->lockPalettes = false;
+            gb->lockVRAM = false;
+            updateSTAT(gb, STAT_UPDATE_SWITCH_MODE0);
             break;
         case PPU_MODE_1:
-            vm->lockOAM = false;
-            vm->lockPalettes = false;
-            vm->lockVRAM = false;
-            updateSTAT(vm, STAT_UPDATE_SWITCH_MODE1);
+            gb->lockOAM = false;
+            gb->lockPalettes = false;
+            gb->lockVRAM = false;
+            updateSTAT(gb, STAT_UPDATE_SWITCH_MODE1);
             break;
     }
 }
 
-static uint8_t* getCurrentFetcherTileData(VM* vm) {
+static uint8_t* getCurrentFetcherTileData(GB* gb) {
     /* Returns the tile data pointer (first of the 16 bytes) of the tile the fetcher is currently
      * on by reading state from the emulator
      *
      * can be BG/Window/Sprite */
 
-    uint16_t tileMapBaseAddress = GET_BIT(vm->MEM[R_LCDC], 3) ? 0x1C00 : 0x1800;
+    uint16_t tileMapBaseAddress = GET_BIT(gb->MEM[R_LCDC], 3) ? 0x1C00 : 0x1800;
 
     /* Each row takes 2 bytes from the tile data of every tile per scanline
      * which 2 bytes are taken is determined by the Y position of the fetcher,
@@ -144,40 +144,40 @@ static uint8_t* getCurrentFetcherTileData(VM* vm) {
     uint8_t* vramBankPointer = NULL;
     uint8_t* vramBank0Pointer = NULL;
 
-    if (vm->emuMode == EMU_CGB) {
-        uint8_t useVramBank1 = GET_BIT(vm->fetcherTileAttributes, 3);
-        vramBank0Pointer = (vm->MEM[R_VBK] == 0xFF) ? vm->vramBank : &vm->MEM[VRAM_N0_8KB];
+    if (gb->emuMode == EMU_CGB) {
+        uint8_t useVramBank1 = GET_BIT(gb->fetcherTileAttributes, 3);
+        vramBank0Pointer = (gb->MEM[R_VBK] == 0xFF) ? gb->vramBank : &gb->MEM[VRAM_N0_8KB];
 
         /* Select which pointer to use to fetch tile data */
         if (useVramBank1) {
             /* Tile data from vram bank 1 */
-            vramBankPointer = (vm->MEM[R_VBK] == 0xFF) ? &vm->MEM[VRAM_N0_8KB] : vm->vramBank;
+            vramBankPointer = (gb->MEM[R_VBK] == 0xFF) ? &gb->MEM[VRAM_N0_8KB] : gb->vramBank;
         } else {
             vramBankPointer = vramBank0Pointer;
         }
-    } else if (vm->emuMode == EMU_DMG) {
-        vramBank0Pointer = &vm->MEM[VRAM_N0_8KB];
+    } else if (gb->emuMode == EMU_DMG) {
+        vramBank0Pointer = &gb->MEM[VRAM_N0_8KB];
         vramBankPointer = vramBank0Pointer;
     }
 
     /* Use the tile index to get a pointer to the first byte of the 16 byte tile data */
     uint8_t* tileData = NULL;
 
-    if (vm->renderingSprites) {
+    if (gb->renderingSprites) {
         /* Get tile data for sprites
          *
          * Sprites always use $8000 method to index sprites */
-        uint8_t tileIndex = vm->spriteData[2];
+        uint8_t tileIndex = gb->spriteData[2];
         /* Ignore the least significant bit when dealing with 8x16 sprites,
          * the index can only be even numbered as it points to the top sprite */
-        if (vm->spriteSize == 1) tileIndex &= 0xFE;
+        if (gb->spriteSize == 1) tileIndex &= 0xFE;
 
         tileData = vramBankPointer + (tileIndex * 16);
     } else {
         /* Get tile data for window/bg */
-        uint8_t tileIndex = vramBank0Pointer[vm->fetcherTileAddress];
+        uint8_t tileIndex = vramBank0Pointer[gb->fetcherTileAddress];
         /* Find out the addressing method to use */
-        bool method8k = GET_BIT(vm->MEM[R_LCDC], 4);
+        bool method8k = GET_BIT(gb->MEM[R_LCDC], 4);
 
         if (method8k) {
             /* $8000 method */
@@ -202,10 +202,10 @@ static inline uint8_t toRGB888(uint8_t rgb555) {
     return (rgb555 << 3) | (rgb555 >> 2);
 }
 
-static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b,
+static void getPixelColor_CGB(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b,
         bool isSprite) {
 
-    uint8_t* colorRAM = isSprite ? vm->spriteColorRAM : vm->bgColorRAM;
+    uint8_t* colorRAM = isSprite ? gb->spriteColorRAM : gb->bgColorRAM;
     uint8_t* palettePointer = &colorRAM[pixel.colorPalette * 8];
     /* Color is stored as little endian rgb555 */
     uint8_t colorLow = palettePointer[pixel.colorID * 2];
@@ -223,7 +223,7 @@ static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
 
     /*
        for (int i = 0; i < 64; i++) {
-       printf("%02x ", vm->colorRAM[i]);
+       printf("%02x ", gb->colorRAM[i]);
        }
 
 
@@ -231,13 +231,13 @@ static void getPixelColor_CGB(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
        */
 }
 
-static void getPixelColor_DMG(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b,
+static void getPixelColor_DMG(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b,
         bool isSprite) {
 
     int paletteReg = R_BGP;
     if (isSprite) paletteReg = pixel.colorPalette == 0 ? R_OBP0 : R_OBP1;
 
-    uint8_t shadeId = (vm->MEM[paletteReg] >> (pixel.colorID * 2)) & 0b00000011;
+    uint8_t shadeId = (gb->MEM[paletteReg] >> (pixel.colorID * 2)) & 0b00000011;
     uint8_t shade = 0x00;
 
     switch (shadeId) {
@@ -268,19 +268,19 @@ static void getPixelColor_DMG(VM* vm, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
     *b = shade;
 }
 
-static void renderPixel(VM* vm) {
-    if (!vm->ppuEnabled) return;
-    if (vm->BackgroundFIFO.count == 0) return;
+static void renderPixel(GB* gb) {
+    if (!gb->ppuEnabled) return;
+    if (gb->BackgroundFIFO.count == 0) return;
 
-    FIFO_Pixel pixel = popFIFO(&vm->BackgroundFIFO);
+    FIFO_Pixel pixel = popFIFO(&gb->BackgroundFIFO);
     uint8_t r, g, b = 0;
     bool isSprite = false;
 
-    if (vm->OAMFIFO.count != 0) {
-        FIFO_Pixel spritePixel = popFIFO(&vm->OAMFIFO);
+    if (gb->OAMFIFO.count != 0) {
+        FIFO_Pixel spritePixel = popFIFO(&gb->OAMFIFO);
 
         if (spritePixel.colorID != 0) {
-            if (vm->emuMode == EMU_DMG) {
+            if (gb->emuMode == EMU_DMG) {
                 if (spritePixel.bgPriority == 0 || pixel.colorID == 0) {
                     /* case 1. Pixel isnt transparent and it has a priority over BG/Window
                      * or case 2. BG color 0 will be overwritten, otherwise BG/Window have a
@@ -288,9 +288,9 @@ static void renderPixel(VM* vm) {
                     pixel = spritePixel;
                     isSprite = true;
                 }
-            } else if (vm->emuMode == EMU_CGB) {
+            } else if (gb->emuMode == EMU_CGB) {
                 /* For CGB, we've got additional 2 priority flags to check */
-                if (!GET_BIT(vm->MEM[R_LCDC], 0)) {
+                if (!GET_BIT(gb->MEM[R_LCDC], 0)) {
                     /* Sprites will be displayed on top because master priority */
                     pixel = spritePixel;
                     isSprite = true;
@@ -319,30 +319,30 @@ static void renderPixel(VM* vm) {
        }
        */
 
-    if (vm->emuMode == EMU_CGB) {
-        getPixelColor_CGB(vm, pixel, &r, &g, &b, isSprite);
-    } else if (vm->emuMode == EMU_DMG) {
-        getPixelColor_DMG(vm, pixel, &r, &g, &b, isSprite);
+    if (gb->emuMode == EMU_CGB) {
+        getPixelColor_CGB(gb, pixel, &r, &g, &b, isSprite);
+    } else if (gb->emuMode == EMU_DMG) {
+        getPixelColor_DMG(gb, pixel, &r, &g, &b, isSprite);
     }
 
-    SDL_SetRenderDrawColor(vm->sdl_renderer, r, g, b, 255);
-    SDL_RenderDrawPoint(vm->sdl_renderer, pixel.screenX, pixel.screenY);
+    SDL_SetRenderDrawColor(gb->sdl_renderer, r, g, b, 255);
+    SDL_RenderDrawPoint(gb->sdl_renderer, pixel.screenX, pixel.screenY);
 
-    vm->nextRenderPixelX = pixel.screenX + 1;
+    gb->nextRenderPixelX = pixel.screenX + 1;
     // printf("rendered pixel at x%d\n", pixel.screenX);
 }
 
-static uint8_t* getSprite(VM* vm) {
-    if (vm->spritesInScanline == 0) return NULL;
+static uint8_t* getSprite(GB* gb) {
+    if (gb->spritesInScanline == 0) return NULL;
     /* If OBJ isnt enabled, its instantly aborted */
-    if (!(GET_BIT(vm->MEM[R_LCDC], 1))) return NULL;
+    if (!(GET_BIT(gb->MEM[R_LCDC], 1))) return NULL;
     /* Read OAM Memory to find a sprite that can be rendered at the current X and Y of the
      * fetcher if it is not found we return NULL */
 
 
-    for (int i = 0; i < vm->spritesInScanline; i++) {
+    for (int i = 0; i < gb->spritesInScanline; i++) {
         uint8_t spriteIndex = i * 5;
-        uint8_t spriteX = vm->oamDataBuffer[spriteIndex + 1];
+        uint8_t spriteX = gb->oamDataBuffer[spriteIndex + 1];
 
         /* Dont render invisible sprites */
         if (spriteX == 0 || spriteX >= 168) continue;
@@ -352,13 +352,13 @@ static uint8_t* getSprite(VM* vm) {
 
         int startX = spriteX - 8;
 
-        // if (vm->MEM[R_LY] == 72 && startX == vm->nextPushPixelX && startX == 72) printf("\nEPIC\n");
-        if (vm->nextPushPixelX == startX || (vm->nextPushPixelX == 0 && startX < 0)) {
-            if (vm->isLastSpriteOverlap && startX == vm->lastSpriteOverlapX) {
-                if (vm->oamDataBuffer[spriteIndex + 4] > vm->lastSpriteOverlapPushIndex)
-                    return &vm->oamDataBuffer[spriteIndex];
+        // if (gb->MEM[R_LY] == 72 && startX == gb->nextPushPixelX && startX == 72) printf("\nEPIC\n");
+        if (gb->nextPushPixelX == startX || (gb->nextPushPixelX == 0 && startX < 0)) {
+            if (gb->isLastSpriteOverlap && startX == gb->lastSpriteOverlapX) {
+                if (gb->oamDataBuffer[spriteIndex + 4] > gb->lastSpriteOverlapPushIndex)
+                    return &gb->oamDataBuffer[spriteIndex];
             } else {
-                return &vm->oamDataBuffer[spriteIndex];
+                return &gb->oamDataBuffer[spriteIndex];
             }
         }
     }
@@ -366,9 +366,9 @@ static uint8_t* getSprite(VM* vm) {
     return NULL;
 }
 
-static void pushPixels(VM* vm) {
-    uint8_t tileDataLow = vm->fetcherTileRowLow;
-    uint8_t tileDataHigh = vm->fetcherTileRowHigh;
+static void pushPixels(GB* gb) {
+    uint8_t tileDataLow = gb->fetcherTileRowLow;
+    uint8_t tileDataHigh = gb->fetcherTileRowHigh;
     bool switchedToWindowRender = false;
     bool switchedToSpriteRender = false;
     /* Push pixels to FIFO
@@ -381,7 +381,7 @@ static void pushPixels(VM* vm) {
      * fully render the rightmost tile, we exit the pushing when the last pixel that can
      * be rendered is pushed, i.e screen X = 159*/
     for (int i = 1; i <= 8; i++) {
-        uint8_t* sprite = getSprite(vm);
+        uint8_t* sprite = getSprite(gb);
         if (sprite != NULL) {
             /* Since a part of the BG/Window tiles might be already pushed, we can calculate
              * how many pixels to discard when continuing pushing for BG
@@ -402,11 +402,11 @@ static void pushPixels(VM* vm) {
              * pixels to be discarded, but because the overlapping sprite causes 1 more pixel to
              * be rendered, pixels to discard has to be adjusted to discard 1 more pixel
              */
-            if (!vm->isLastSpriteOverlap) {
+            if (!gb->isLastSpriteOverlap) {
                 /* If sprite is slightly off screen, leave the scx offset unchanged as the sprite
                  * technically starts at 0X, the part of the tile that should be discarded is
                  * already calculated */
-                if (vm->nextPushPixelX == 0 && sprite[1] < 8 && vm->pixelsToDiscard != 0); // do nothing
+                if (gb->nextPushPixelX == 0 && sprite[1] < 8 && gb->pixelsToDiscard != 0); // do nothing
                 else {
                     /* If the sprite starts rendering at the start of a BG/Window tile,
                      * i - 1 == 0, so there are no pixels to discard for the sprite
@@ -416,49 +416,49 @@ static void pushPixels(VM* vm) {
                      * to be discarded that were calculated for BG offset as atleast 1 bg pixel
                      * has been rendered, and the pixels have been discarded, therefore the pixels
                      * to discard value has no use now */
-                    if (i - 1 != 0) vm->pixelsToDiscard = i - 1;
+                    if (i - 1 != 0) gb->pixelsToDiscard = i - 1;
                 }
             }
             else {
-                vm->pixelsToDiscard += vm->nextPushPixelX - (vm->lastSpriteOverlapX < 0 ? 0 : vm->lastSpriteOverlapX);
+                gb->pixelsToDiscard += gb->nextPushPixelX - (gb->lastSpriteOverlapX < 0 ? 0 : gb->lastSpriteOverlapX);
             }
 
-            vm->renderingSprites = true;
+            gb->renderingSprites = true;
             switchedToSpriteRender = true;
-            vm->spriteData = sprite;
+            gb->spriteData = sprite;
             /* Fetch data and attributes for the remaining bg/window tiles get preserved
              * for later use */
-            vm->preservedFetcherTileLow = vm->fetcherTileRowLow;
-            vm->preservedFetcherTileHigh = vm->fetcherTileRowHigh;
-            vm->preservedFetcherTileAttributes = vm->fetcherTileAttributes;
+            gb->preservedFetcherTileLow = gb->fetcherTileRowLow;
+            gb->preservedFetcherTileHigh = gb->fetcherTileRowHigh;
+            gb->preservedFetcherTileAttributes = gb->fetcherTileAttributes;
             break;
         }
 
-        if (GET_BIT(vm->MEM[R_LCDC], 5) &&
-                vm->lyWasWY && !vm->renderingWindow && (vm->nextPushPixelX == vm->MEM[R_WX] - 7 || vm->MEM[R_WX] < 7)) {
+        if (GET_BIT(gb->MEM[R_LCDC], 5) &&
+                gb->lyWasWY && !gb->renderingWindow && (gb->nextPushPixelX == gb->MEM[R_WX] - 7 || gb->MEM[R_WX] < 7)) {
             /* Window layer is enabled, and the current pixel to render is a window
              * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow
              * as the BG fetch is aborted
              */
 
-            vm->renderingWindow = true;
-            vm->fetcherX = 0;
+            gb->renderingWindow = true;
+            gb->fetcherX = 0;
             switchedToWindowRender = true;
             /* We set the fetcher task to 1 because the fetcher is supposed to switch to
              * window rendering immediately after the last bg pixel in the row is pushed,
              * we're detecting that the next pixel is a window pixel one cycle after the last
              * bg push (or this is the first cycle anyway if the window tile is the first tile)
              * This means the current cycle does the job of sleeping automatically */
-            vm->currentFetcherTask = 1;
+            gb->currentFetcherTask = 1;
 
-            if (vm->MEM[R_WX] <= 7) {
-                if (vm->MEM[R_WX] == 0 && vm->pixelsToDiscard != 0) {
+            if (gb->MEM[R_WX] <= 7) {
+                if (gb->MEM[R_WX] == 0 && gb->pixelsToDiscard != 0) {
                     /* Shorten mode 3 by 1 dot (bug) */
-                    vm->cyclesSinceLastMode--;
+                    gb->cyclesSinceLastMode--;
                 }
-                vm->pixelsToDiscard = 7 - vm->MEM[R_WX];
+                gb->pixelsToDiscard = 7 - gb->MEM[R_WX];
             } else {
-                vm->pixelsToDiscard = 0;
+                gb->pixelsToDiscard = 0;
             }
 
             break;
@@ -471,27 +471,27 @@ static void pushPixels(VM* vm) {
          * For OBJs, pixels to discard is also used to discard pixels which are already pushed
          * for window/background when dealing with sprites which are not fully aligned with
          * BG tiles */
-        if (i <= vm->pixelsToDiscard) {
+        if (i <= gb->pixelsToDiscard) {
             continue;
         }
-        // if (pixelsToDiscard > 0 && vm->fetcherX != 0 && !vm->renderingSprites && !vm->renderingWindow) printf("fuck x%d y%d %d\n", vm->nextPushPixelX - 1, vm->fetcherY, vm->pixelsToDiscard);
+        // if (pixelsToDiscard > 0 && gb->fetcherX != 0 && !gb->renderingSprites && !gb->renderingWindow) printf("fuck x%d y%d %d\n", gb->nextPushPixelX - 1, gb->fetcherY, gb->pixelsToDiscard);
         FIFO_Pixel pixel;
         /* Check for horizontal bit flip */
-        uint8_t index = GET_BIT(vm->fetcherTileAttributes, 5) ? i - 1 : 8 - i;
+        uint8_t index = GET_BIT(gb->fetcherTileAttributes, 5) ? i - 1 : 8 - i;
         uint8_t higherBit = GET_BIT(tileDataHigh, index);
         uint8_t lowerBit = GET_BIT(tileDataLow, index);
         uint8_t bgPriority = 0;
 
         /* Set color palette, color ID and other data  */
-        if (vm->emuMode == EMU_CGB) {
-            pixel.colorPalette = vm->fetcherTileAttributes & 0b00000111;
+        if (gb->emuMode == EMU_CGB) {
+            pixel.colorPalette = gb->fetcherTileAttributes & 0b00000111;
             pixel.colorID = (higherBit << 1) | lowerBit;
-            bgPriority = GET_BIT(vm->fetcherTileAttributes, 7);
+            bgPriority = GET_BIT(gb->fetcherTileAttributes, 7);
 
-        } else if (vm->emuMode == EMU_DMG) {
+        } else if (gb->emuMode == EMU_DMG) {
             pixel.colorPalette = 0;
             /* On DMG, if background/window is disabled through lcdc, bgp color 0 is rendered */
-            if (GET_BIT(vm->MEM[R_LCDC], 0)) {
+            if (GET_BIT(gb->MEM[R_LCDC], 0)) {
                 pixel.colorID = (higherBit << 1) | lowerBit;
             } else {
                 pixel.colorID = 0;
@@ -501,62 +501,62 @@ static void pushPixels(VM* vm) {
         /* Store the tile map BG priority bit */
         pixel.bgPriority = bgPriority;
 
-        pixel.screenX = vm->nextPushPixelX;
-        pixel.screenY = vm->fetcherY;
+        pixel.screenX = gb->nextPushPixelX;
+        pixel.screenY = gb->fetcherY;
 
-        pushFIFO(&vm->BackgroundFIFO, pixel);
+        pushFIFO(&gb->BackgroundFIFO, pixel);
         /* When it reaches 159, the scanline is over */
-        vm->nextPushPixelX++;
+        gb->nextPushPixelX++;
         /* Even if we didnt complete the tile, we need to exit after pushing the last pixel */
-        if (vm->nextPushPixelX == 160) break;
+        if (gb->nextPushPixelX == 160) break;
 
     }
-    // printf("pushed 8 pixels %03d-%03d\n", vm->fetcherX * 8, vm->fetcherX * 8 + 7);
+    // printf("pushed 8 pixels %03d-%03d\n", gb->fetcherX * 8, gb->fetcherX * 8 + 7);
     if (switchedToWindowRender) {
-        vm->isLastSpriteOverlap = false;
-        vm->currentFetcherTask = 0;
+        gb->isLastSpriteOverlap = false;
+        gb->currentFetcherTask = 0;
     } else if (switchedToSpriteRender) {
-        if (vm->currentFetcherTask == 7) vm->currentFetcherTask = 0;
-        else vm->currentFetcherTask++;
+        if (gb->currentFetcherTask == 7) gb->currentFetcherTask = 0;
+        else gb->currentFetcherTask++;
     } else {
-        vm->isLastSpriteOverlap = false;
-        vm->fetcherX++;
-        vm->currentFetcherTask++;
+        gb->isLastSpriteOverlap = false;
+        gb->fetcherX++;
+        gb->currentFetcherTask++;
 
-        vm->pixelsToDiscard = 0;
+        gb->pixelsToDiscard = 0;
     }
 }
 
-static void pushSpritePixels(VM* vm) {
+static void pushSpritePixels(GB* gb) {
     /* When the sprite fetch is complete, this function is called to push the
      * sprite pixels to the sprite fifo as well as push the BG/Window pixels
      * which were remaining at the start of sprite rendering. */
-    uint8_t tileDataLow = vm->fetcherTileRowLow;
-    uint8_t tileDataHigh = vm->fetcherTileRowHigh;
-    uint8_t tileAttributes = vm->fetcherTileAttributes;
-    int startX = vm->spriteData[1] - 8;
-    uint8_t spriteOAMIndex = vm->spriteData[4];
+    uint8_t tileDataLow = gb->fetcherTileRowLow;
+    uint8_t tileDataHigh = gb->fetcherTileRowHigh;
+    uint8_t tileAttributes = gb->fetcherTileAttributes;
+    int startX = gb->spriteData[1] - 8;
+    uint8_t spriteOAMIndex = gb->spriteData[4];
     bool partiallyOverlaps = false;
 
     /* Fill the OAM fifo with transparent pixels of lowest priority if its not full */
-    if (vm->OAMFIFO.count > 0 && vm->OAMFIFO.count < 8) partiallyOverlaps = true;
+    if (gb->OAMFIFO.count > 0 && gb->OAMFIFO.count < 8) partiallyOverlaps = true;
 
-    for (int i = 0; i < 8 && vm->OAMFIFO.count != 8; i++) {
-        if (vm->nextPushPixelX + i == 160) break;
+    for (int i = 0; i < 8 && gb->OAMFIFO.count != 8; i++) {
+        if (gb->nextPushPixelX + i == 160) break;
         /* If the sprite is off screen towards the left, because only a portion of
          * the sprite is rendered, we dont fill the fifo completely but only make
          * sure it has the minimum size it needs. Overlapping sprites are also taken
          * into account as the fifo count as a whole is checked */
-        if (startX < 0 && vm->OAMFIFO.count >= 8 + startX) break;
+        if (startX < 0 && gb->OAMFIFO.count >= 8 + startX) break;
 
         FIFO_Pixel p;
         p.bgPriority = 1;
         p.colorID = 0;
         p.colorPalette = 0;
-        p.screenX = vm->nextPushPixelX + i;
-        p.screenY = vm->fetcherY;
+        p.screenX = gb->nextPushPixelX + i;
+        p.screenY = gb->fetcherY;
 
-        pushFIFO(&vm->OAMFIFO, p);
+        pushFIFO(&gb->OAMFIFO, p);
     }
 
     /* Compare and replace OAM FIFO with the sprite tile data
@@ -577,8 +577,8 @@ static void pushSpritePixels(VM* vm) {
         uint8_t bgPriority = GET_BIT(tileAttributes, 7);
         uint8_t colorPalette = 0;
 
-        if (vm->emuMode == EMU_DMG) colorPalette = GET_BIT(tileAttributes, 4);
-        else if (vm->emuMode == EMU_CGB) colorPalette = tileAttributes & 0b00000111;
+        if (gb->emuMode == EMU_DMG) colorPalette = GET_BIT(tileAttributes, 4);
+        else if (gb->emuMode == EMU_CGB) colorPalette = tileAttributes & 0b00000111;
 
         /* When we've got overlapping sprites, the pixels which already exist
          * in the fifo are compared with the pixels of the current sprite,
@@ -590,37 +590,37 @@ static void pushSpritePixels(VM* vm) {
          * After they are pushed, the shifter calculates which pixels overlap BG and which dont
          * using the BG priority */
 
-        FIFO_Pixel fifoPixel = peekFIFO(&vm->OAMFIFO, fifoIndex);
+        FIFO_Pixel fifoPixel = peekFIFO(&gb->OAMFIFO, fifoIndex);
         FIFO_Pixel pixel;
 
         pixel.colorID = colorID;
         pixel.colorPalette = colorPalette;
         pixel.bgPriority = bgPriority;
-        pixel.screenX = vm->nextPushPixelX + fifoIndex;
-        pixel.screenY = vm->fetcherY;
+        pixel.screenX = gb->nextPushPixelX + fifoIndex;
+        pixel.screenY = gb->fetcherY;
         /* Compare */
 
         if (fifoPixel.colorID == 0 && pixel.colorID != 0) {
             /* Overwrite FIFO pixel if the current pixel in fifo is transparent and
              * the new pixel isnt */
-            insertFIFO(&vm->OAMFIFO, pixel, fifoIndex);
+            insertFIFO(&gb->OAMFIFO, pixel, fifoIndex);
         } else if (fifoPixel.colorID != 0 && pixel.colorID != 0) {
             /* If both are opaque */
-            if (vm->emuMode == EMU_DMG) {
+            if (gb->emuMode == EMU_DMG) {
                 /* If current sprite partially overlaps a previous one, it means
                  * the X coordinate of the previous sprite is greater. So it is given a higher
                  * priority and we dont overwrite the fifo in that case
                  *
                  * Otherwise if the X coordinate is the same, and this sprite's index is
                  * lesser than the last sprite's index, the pixel is overwritten */
-                if (!partiallyOverlaps && spriteOAMIndex < vm->lastSpriteOverlapPushIndex) {
-                    insertFIFO(&vm->OAMFIFO, pixel, fifoIndex);
+                if (!partiallyOverlaps && spriteOAMIndex < gb->lastSpriteOverlapPushIndex) {
+                    insertFIFO(&gb->OAMFIFO, pixel, fifoIndex);
                 }
-            } else if (vm->emuMode == EMU_CGB) {
+            } else if (gb->emuMode == EMU_CGB) {
                 /* On CGB, the pixel is overwritten if the current sprite's index is greater
                  * than the previous sprite in any condition */
-                if (spriteOAMIndex < vm->lastSpriteOverlapPushIndex) {
-                    insertFIFO(&vm->OAMFIFO, pixel, fifoIndex);
+                if (spriteOAMIndex < gb->lastSpriteOverlapPushIndex) {
+                    insertFIFO(&gb->OAMFIFO, pixel, fifoIndex);
                 }
             }
         }
@@ -629,26 +629,26 @@ static void pushSpritePixels(VM* vm) {
          * higher priority we dont overwrite */
     }
 
-    // printf("pixels to discard %d, X%d, Y%d\n", vm->pixelsToDiscard, vm->nextPushPixelX, vm->fetcherY);
+    // printf("pixels to discard %d, X%d, Y%d\n", gb->pixelsToDiscard, gb->nextPushPixelX, gb->fetcherY);
 
-    vm->isLastSpriteOverlap = true;
-    vm->lastSpriteOverlapPushIndex = spriteOAMIndex;
-    vm->lastSpriteOverlapX = startX;
+    gb->isLastSpriteOverlap = true;
+    gb->lastSpriteOverlapPushIndex = spriteOAMIndex;
+    gb->lastSpriteOverlapX = startX;
     /* Restore State */
-    vm->fetcherTileAttributes = vm->preservedFetcherTileAttributes;
-    vm->fetcherTileRowHigh = vm->preservedFetcherTileHigh;
-    vm->fetcherTileRowLow = vm->preservedFetcherTileLow;
+    gb->fetcherTileAttributes = gb->preservedFetcherTileAttributes;
+    gb->fetcherTileRowHigh = gb->preservedFetcherTileHigh;
+    gb->fetcherTileRowLow = gb->preservedFetcherTileLow;
 
-    vm->preservedFetcherTileAttributes = 0;
-    vm->preservedFetcherTileHigh = 0;
-    vm->preservedFetcherTileLow = 0;
+    gb->preservedFetcherTileAttributes = 0;
+    gb->preservedFetcherTileHigh = 0;
+    gb->preservedFetcherTileLow = 0;
 
-    vm->renderingSprites = false;
+    gb->renderingSprites = false;
     /* Continue BG/Window pushing */
-    pushPixels(vm);
+    pushPixels(gb);
 }
 
-static void advanceFetcher(VM* vm) {
+static void advanceFetcher(GB* gb) {
     /* Defines the order of the tasks in the fetcher,
      * we reuse the sleep state as a way to consume 1 dot when required
      * because the states usually take 2 dots and the fetcher is stepped every dot */
@@ -669,23 +669,23 @@ static void advanceFetcher(VM* vm) {
     };
 
     /* Fetcher state machine to handle pixel FIFO */
-    switch (fetcherTasks[vm->currentFetcherTask]) {
+    switch (fetcherTasks[gb->currentFetcherTask]) {
         case FETCHER_GET_TILE: {
             uint16_t tileMapBaseAddress;
 
-            if (vm->renderingSprites) {
+            if (gb->renderingSprites) {
                 /* Fetch Sprite */
-                vm->fetcherTileAttributes = vm->spriteData[3];
+                gb->fetcherTileAttributes = gb->spriteData[3];
 
                 /* We already have access to the index of the tile */
-            } else if (vm->renderingWindow) {
+            } else if (gb->renderingWindow) {
                 /* Fetch Window Tile
                  *
                  * If a scanline enters window rendering mode, it cant exit it till the next
                  * scanline begins, mid scanline writes to window enable bit in lcdc are supposed
                  * to make it switch back to bg tiles for the scanline but we dont emulate that
                  * yet */
-                if (GET_BIT(vm->MEM[R_LCDC], 6)) {
+                if (GET_BIT(gb->MEM[R_LCDC], 6)) {
                     tileMapBaseAddress = 0x1C00;
                 } else {
                     tileMapBaseAddress = 0x1800;
@@ -694,22 +694,22 @@ static void advanceFetcher(VM* vm) {
                 /* Fetcher X contains the window coords since its reset when we start rendering
                  * the window. Fetcher Y is left unchanged as it preserves the line number of the
                  * entire frame. Instead we use the internal window counter */
-                uint8_t x = vm->fetcherX;
-                uint8_t y = vm->windowYCounter;
+                uint8_t x = gb->fetcherX;
+                uint8_t y = gb->windowYCounter;
 
-                vm->fetcherTileAddress = tileMapBaseAddress + x + (y/8) * 32;
-                if (vm->emuMode == EMU_CGB) {
+                gb->fetcherTileAddress = tileMapBaseAddress + x + (y/8) * 32;
+                if (gb->emuMode == EMU_CGB) {
                     /* Handle tile attributes if on a CGB
                      *
                      * This works for both BG and Window */
-                    vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] : vm->vramBank[vm->fetcherTileAddress];
-                } else if (vm->emuMode == EMU_DMG) {
-                    vm->fetcherTileAttributes = 0;
+                    gb->fetcherTileAttributes = gb->MEM[R_VBK] == 0xFF ? gb->MEM[VRAM_N0_8KB + gb->fetcherTileAddress] : gb->vramBank[gb->fetcherTileAddress];
+                } else if (gb->emuMode == EMU_DMG) {
+                    gb->fetcherTileAttributes = 0;
                 }
             } else {
                 /* Fetch BG Tiles */
                 /* There are two tile maps, check which one to use */
-                if (GET_BIT(vm->MEM[R_LCDC], 3)) {
+                if (GET_BIT(gb->MEM[R_LCDC], 3)) {
                     tileMapBaseAddress = 0x1C00;
                 } else {
                     tileMapBaseAddress = 0x1800;
@@ -717,80 +717,80 @@ static void advanceFetcher(VM* vm) {
 
                 /* Fetcher X and Y are not the final x and y coordinates we get the tile from
                  * First scrolling has to be calculated */
-                uint8_t scx = vm->MEM[R_SCX] & ~0b00000111;         // clear the last 3 bits
-                uint8_t x = (scx/8 + vm->fetcherX);
+                uint8_t scx = gb->MEM[R_SCX] & ~0b00000111;         // clear the last 3 bits
+                uint8_t x = (scx/8 + gb->fetcherX);
                 x &= 0x1F;                                          // wrap it around if it exceeds
-                uint8_t y = (uint16_t)(vm->fetcherY + vm->MEM[R_SCY]) & 0xFF;
+                uint8_t y = (uint16_t)(gb->fetcherY + gb->MEM[R_SCY]) & 0xFF;
 
-                vm->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
-                // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", vm->fetcherTileAddress, vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress], vm->fetcherTileAttributes, x, y);
+                gb->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
+                // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", gb->fetcherTileAddress, gb->MEM[VRAM_N0_8KB + gb->fetcherTileAddress], gb->fetcherTileAttributes, x, y);
 
-                if (vm->emuMode == EMU_CGB) {
+                if (gb->emuMode == EMU_CGB) {
                     /* Handle tile attributes if on a CGB
                      *
                      * This works for both BG and Window */
-                    vm->fetcherTileAttributes = vm->MEM[R_VBK] == 0xFF ? vm->MEM[VRAM_N0_8KB + vm->fetcherTileAddress] : vm->vramBank[vm->fetcherTileAddress];
-                } else if (vm->emuMode == EMU_DMG) {
-                    vm->fetcherTileAttributes = 0;
+                    gb->fetcherTileAttributes = gb->MEM[R_VBK] == 0xFF ? gb->MEM[VRAM_N0_8KB + gb->fetcherTileAddress] : gb->vramBank[gb->fetcherTileAddress];
+                } else if (gb->emuMode == EMU_DMG) {
+                    gb->fetcherTileAttributes = 0;
                 }
             }
 
-            vm->currentFetcherTask++;
+            gb->currentFetcherTask++;
             break;
         }
         case FETCHER_GET_DATA_LOW: {
-            uint8_t* tileData = getCurrentFetcherTileData(vm);
+            uint8_t* tileData = getCurrentFetcherTileData(gb);
             uint8_t currentRowInTile;
 
-            if (vm->renderingSprites) {
+            if (gb->renderingSprites) {
                 /* For OBJ/Sprite tiles */
-                currentRowInTile = vm->spriteData[0];
-            } else if (vm->renderingWindow) {
+                currentRowInTile = gb->spriteData[0];
+            } else if (gb->renderingWindow) {
                 /* For window tiles */
-                currentRowInTile = vm->windowYCounter % 8;
+                currentRowInTile = gb->windowYCounter % 8;
             } else {
                 /* For BG tiles
                  * Now retrieve the lower byte of this row */
-                currentRowInTile = (vm->fetcherY + vm->MEM[R_SCY]) % 8;
+                currentRowInTile = (gb->fetcherY + gb->MEM[R_SCY]) % 8;
             }
 
             /* Vertical flip works for sprites on DMG and CGB, and it works for BG/Window
              * only on CGB */
-            if (vm->renderingSprites || vm->emuMode == EMU_CGB) {
-                bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
+            if (gb->renderingSprites || gb->emuMode == EMU_CGB) {
+                bool verticallyFlipped = GET_BIT(gb->fetcherTileAttributes, 6);
                 /* If the tile is flipped, we can get the vertically opposite row in the tile */
-                if (verticallyFlipped) currentRowInTile = (vm->spriteSize == 0 ? 7 : 15) - currentRowInTile;
+                if (verticallyFlipped) currentRowInTile = (gb->spriteSize == 0 ? 7 : 15) - currentRowInTile;
             }
 
-            vm->fetcherTileRowLow = tileData[2 * currentRowInTile];
-            vm->currentFetcherTask++;
+            gb->fetcherTileRowLow = tileData[2 * currentRowInTile];
+            gb->currentFetcherTask++;
             break;
         }
         case FETCHER_GET_DATA_HIGH: {
             /* Do the same as above but instead get the higher byte */
-            uint8_t* tileData = getCurrentFetcherTileData(vm);
+            uint8_t* tileData = getCurrentFetcherTileData(gb);
             uint8_t currentRowInTile;
 
-            if (vm->renderingSprites) {
+            if (gb->renderingSprites) {
                 /* Sprites */
-                currentRowInTile = vm->spriteData[0];
-            } else if (vm->renderingWindow) {
+                currentRowInTile = gb->spriteData[0];
+            } else if (gb->renderingWindow) {
                 /* WIndow tiles */
-                currentRowInTile = vm->windowYCounter % 8;
+                currentRowInTile = gb->windowYCounter % 8;
             } else {
                 /* BG Tiles */
-                currentRowInTile = (vm->fetcherY + vm->MEM[R_SCY]) % 8;
+                currentRowInTile = (gb->fetcherY + gb->MEM[R_SCY]) % 8;
             }
 
-            if (vm->renderingSprites || vm->emuMode == EMU_CGB) {
-                bool verticallyFlipped = GET_BIT(vm->fetcherTileAttributes, 6);
-                if (verticallyFlipped) currentRowInTile = (vm->spriteSize == 0 ? 7 : 15) - currentRowInTile;
+            if (gb->renderingSprites || gb->emuMode == EMU_CGB) {
+                bool verticallyFlipped = GET_BIT(gb->fetcherTileAttributes, 6);
+                if (verticallyFlipped) currentRowInTile = (gb->spriteSize == 0 ? 7 : 15) - currentRowInTile;
             }
 
-            vm->fetcherTileRowHigh = tileData[(2 * currentRowInTile) + 1];
-            if (vm->firstTileInScanline) {
-                vm->currentFetcherTask = 0;
-                vm->firstTileInScanline = false;
+            gb->fetcherTileRowHigh = tileData[(2 * currentRowInTile) + 1];
+            if (gb->firstTileInScanline) {
+                gb->currentFetcherTask = 0;
+                gb->firstTileInScanline = false;
                 break;
             }
 
@@ -799,56 +799,56 @@ static void advanceFetcher(VM* vm) {
              * and instead goes back to GET_TILE, normally with BG, the pixel shifter
              * should be 6 cycles behind the fetcher, but after adding window delays
              * and sprite delays, this can change. So we dont wait for a fixed time */
-            if (vm->nextPushPixelX == 160) {
-                vm->currentFetcherTask = 0;
+            if (gb->nextPushPixelX == 160) {
+                gb->currentFetcherTask = 0;
                 break;
             }
 
-            vm->currentFetcherTask++;
+            gb->currentFetcherTask++;
             break;
         }
         case FETCHER_SLEEP:
-            vm->currentFetcherTask++;
+            gb->currentFetcherTask++;
             break;			/* Do nothing */
         case FETCHER_PUSH: {
-            if (vm->BackgroundFIFO.count != 0) {
+            if (gb->BackgroundFIFO.count != 0) {
                 /* We cant push yet since all pixels havent been pushed to the LCD yet */
-                vm->doOptionalPush = true;
-                vm->currentFetcherTask++;
+                gb->doOptionalPush = true;
+                gb->currentFetcherTask++;
                 break;
             }
 
             /* Fetcher task is set internally */
-            if (vm->renderingSprites) pushSpritePixels(vm);
-            else pushPixels(vm);
+            if (gb->renderingSprites) pushSpritePixels(gb);
+            else pushPixels(gb);
 
-            vm->doOptionalPush = false;
+            gb->doOptionalPush = false;
             break;
         }
         case FETCHER_OPTIONAL_PUSH: {
-            if (vm->doOptionalPush) {
-                if (vm->BackgroundFIFO.count != 0) break;
+            if (gb->doOptionalPush) {
+                if (gb->BackgroundFIFO.count != 0) break;
 
-                pushPixels(vm);
-                vm->doOptionalPush = false;
+                pushPixels(gb);
+                gb->doOptionalPush = false;
             }
 
-            vm->currentFetcherTask = 0;
+            gb->currentFetcherTask = 0;
             break;
         }
     }
 }
 
-static void advanceMode2(VM* vm) {
-    if (vm->spritesInScanline >= 10) return;
+static void advanceMode2(GB* gb) {
+    if (gb->spritesInScanline >= 10) return;
 
-    uint8_t isLargeSprite = GET_BIT(vm->MEM[R_LCDC], 2);
-    uint8_t index = (vm->cyclesSinceLastMode / 2) - 1;
+    uint8_t isLargeSprite = GET_BIT(gb->MEM[R_LCDC], 2);
+    uint8_t index = (gb->cyclesSinceLastMode / 2) - 1;
 
-    vm->spriteSize = isLargeSprite;
+    gb->spriteSize = isLargeSprite;
 
     uint16_t spriteIndex = OAM_N0_160B + (index * 4);
-    uint8_t spriteY = vm->MEM[spriteIndex];
+    uint8_t spriteY = gb->MEM[spriteIndex];
     uint8_t firstRowY, lastRowY;
     bool partial = false;
 
@@ -879,33 +879,33 @@ static void advanceMode2(VM* vm) {
         }
     }
 
-    if (vm->MEM[R_LY] >= firstRowY && vm->MEM[R_LY] <= lastRowY) {
+    if (gb->MEM[R_LY] >= firstRowY && gb->MEM[R_LY] <= lastRowY) {
         /* Sprite has to be rendered on this scanline */
-        uint8_t bufferIndex = vm->spritesInScanline * 5;
+        uint8_t bufferIndex = gb->spritesInScanline * 5;
 
         /* Instead of storing the actual sprite Y value, we can
          * store the current row of the sprite this scanline will render
          * so it doesnt have to be recalculated */
         if (partial) {
             uint8_t row;
-            if (isLargeSprite) row = (15 - lastRowY) + vm->MEM[R_LY];
-            else row = (7 - lastRowY) + vm->MEM[R_LY];
+            if (isLargeSprite) row = (15 - lastRowY) + gb->MEM[R_LY];
+            else row = (7 - lastRowY) + gb->MEM[R_LY];
 
-            vm->oamDataBuffer[bufferIndex] = row;
-        } else vm->oamDataBuffer[bufferIndex] = vm->MEM[R_LY] - firstRowY;
+            gb->oamDataBuffer[bufferIndex] = row;
+        } else gb->oamDataBuffer[bufferIndex] = gb->MEM[R_LY] - firstRowY;
 
-        memcpy(&vm->oamDataBuffer[bufferIndex+1], &vm->MEM[spriteIndex+1], 3);
-        vm->oamDataBuffer[bufferIndex+4] = index;
+        memcpy(&gb->oamDataBuffer[bufferIndex+1], &gb->MEM[spriteIndex+1], 3);
+        gb->oamDataBuffer[bufferIndex+4] = index;
 
-        vm->spritesInScanline++;
+        gb->spritesInScanline++;
     }
 }
 
-static void advancePPU(VM* vm) {
+static void advancePPU(GB* gb) {
     /* We use a state machine to handle different PPU modes */
-    vm->cyclesSinceLastMode++;
+    gb->cyclesSinceLastMode++;
 
-    switch (vm->ppuMode) {
+    switch (gb->ppuMode) {
         case PPU_MODE_2:
             /* Reading oam data
              * and some basic checks which are
@@ -913,55 +913,55 @@ static void advancePPU(VM* vm) {
              *
              * Beginning of new scanline */
 
-            if (vm->cyclesSinceLastMode % 2 == 0) {
+            if (gb->cyclesSinceLastMode % 2 == 0) {
                 /* OAM Read Step
                  *
                  * Note : This also means that the very first scanline of first frame can only
                  * scan 38 oam entries because its 4 dots shorter */
-                advanceMode2(vm);
+                advanceMode2(gb);
             }
 
-            if (vm->cyclesSinceLastMode == 1) {
-                if (!GET_BIT(vm->MEM[R_LCDC], 5)) break;
+            if (gb->cyclesSinceLastMode == 1) {
+                if (!GET_BIT(gb->MEM[R_LCDC], 5)) break;
 
-                uint8_t wx = vm->MEM[R_WX];
-                uint8_t wy = vm->MEM[R_WY];
+                uint8_t wx = gb->MEM[R_WX];
+                uint8_t wy = gb->MEM[R_WY];
                 /* On the first cycle, read WY */
-                if (wy == vm->MEM[R_LY]) {
+                if (wy == gb->MEM[R_LY]) {
                     /* TODO - Still need to confirm if the check is done with the internal LY
                      * counter or what the LY register reads, since LY is incremented 6 cycles
                      * earlier, its safe to assume the latter for now */
-                    vm->lyWasWY = true;
+                    gb->lyWasWY = true;
                 }
-            } else if (vm->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
-                switchModePPU(vm, PPU_MODE_3);
+            } else if (gb->cyclesSinceLastMode == T_CYCLES_PER_MODE2) {
+                switchModePPU(gb, PPU_MODE_3);
             }
 
             break;
         case PPU_MODE_3:
-            if (vm->pauseDotClock > 0) {
-                vm->pauseDotClock--;
+            if (gb->pauseDotClock > 0) {
+                gb->pauseDotClock--;
                 break;
             }
 
-            if (vm->cyclesSinceLastMode == 1) {
+            if (gb->cyclesSinceLastMode == 1) {
                 /* clear fifo at the start of mode 3 */
-                clearFIFO(&vm->BackgroundFIFO);
-                clearFIFO(&vm->OAMFIFO);
+                clearFIFO(&gb->BackgroundFIFO);
+                clearFIFO(&gb->OAMFIFO);
                 /* When the fetcher is on the first tile in a scanline,
                  * it rolls back to task 0 after getting the higher
                  * tile data, this consumes a total of 6 dots */
-                vm->firstTileInScanline = true;
+                gb->firstTileInScanline = true;
 
                 /* If SCX % 8 is not zero at the start of a scanline, the ppu pauses for as many
                  * dots as the remainder pixels,
                  * we pause the first dot aswell */
-                uint8_t remainderPixels = vm->MEM[R_SCX] % 8;
-                vm->pixelsToDiscard = vm->MEM[R_SCX] & 0b00000111;
-                vm->pauseDotClock = 0;
+                uint8_t remainderPixels = gb->MEM[R_SCX] % 8;
+                gb->pixelsToDiscard = gb->MEM[R_SCX] & 0b00000111;
+                gb->pauseDotClock = 0;
 
                 if (remainderPixels != 0) {
-                    vm->pauseDotClock = remainderPixels - 1;
+                    gb->pauseDotClock = remainderPixels - 1;
                     break;
                 }
 
@@ -970,64 +970,64 @@ static void advancePPU(VM* vm) {
             /* Because the renderer idles for 6 dots, we run mode 3 for 6 dots more
              * this also means that the fetcher has to idle (not push) for 6 dots while the renderer fully
              * renders the last tile in the scanline */
-            advanceFetcher(vm);
-            renderPixel(vm);
+            advanceFetcher(gb);
+            renderPixel(gb);
 
             /* The last push should increment fetcher X to 20, after the last pixel in the scanline
              * has been pushed, we wait for 6 more dots (because we need to wait for the renderer
              * to finish which is 6 dots behind). At the end of the 6th dot itself, it resets back
              * to its initial state for the next scanline */
-            if (vm->nextRenderPixelX == 160) {
-                if (vm->renderingWindow) {
+            if (gb->nextRenderPixelX == 160) {
+                if (gb->renderingWindow) {
                     /* If we were rendering the window in this line,
                      * increment the window line counter
                      *
                      * This means if window gets disabled between scanlines,
                      * the window line counter is still preserved */
-                    vm->renderingWindow = false;
-                    vm->windowYCounter++;
+                    gb->renderingWindow = false;
+                    gb->windowYCounter++;
                 }
 
-                vm->currentFetcherTask = 0;
-                vm->fetcherX = 0;
-                vm->nextPushPixelX = 0;
-                vm->renderingSprites = false;
-                vm->spritesInScanline = 0;
-                vm->spriteData = NULL;
-                vm->preservedFetcherTileLow = 0;
-                vm->preservedFetcherTileHigh = 0;
-                vm->preservedFetcherTileAttributes = 0;
+                gb->currentFetcherTask = 0;
+                gb->fetcherX = 0;
+                gb->nextPushPixelX = 0;
+                gb->renderingSprites = false;
+                gb->spritesInScanline = 0;
+                gb->spriteData = NULL;
+                gb->preservedFetcherTileLow = 0;
+                gb->preservedFetcherTileHigh = 0;
+                gb->preservedFetcherTileAttributes = 0;
                 /* tile pixel row over */
-                vm->nextRenderPixelX = 0;
-                vm->hblankDuration = T_CYCLES_PER_SCANLINE - T_CYCLES_PER_MODE2 - vm->cyclesSinceLastMode;
+                gb->nextRenderPixelX = 0;
+                gb->hblankDuration = T_CYCLES_PER_SCANLINE - T_CYCLES_PER_MODE2 - gb->cyclesSinceLastMode;
 
-                switchModePPU(vm, PPU_MODE_0);
+                switchModePPU(gb, PPU_MODE_0);
             }
 
             break;
         case PPU_MODE_0: {
             /* HBLANK */
-            if (vm->cyclesSinceLastMode == vm->hblankDuration) {
+            if (gb->cyclesSinceLastMode == gb->hblankDuration) {
                 /* End of scanline */
-                uint8_t currentScanlineNumber = vm->cyclesSinceLastFrame / T_CYCLES_PER_SCANLINE;
+                uint8_t currentScanlineNumber = gb->cyclesSinceLastFrame / T_CYCLES_PER_SCANLINE;
                 /* Set fetcher Y */
-                vm->fetcherY++;
+                gb->fetcherY++;
                 if (currentScanlineNumber == 144) {
                     /* End of frame rendering
                      * switch to vblank now */
-                    vm->fetcherY = 0;
-                    vm->renderingWindow = false;
-                    vm->lyWasWY = false;
-                    vm->windowYCounter = 0;
+                    gb->fetcherY = 0;
+                    gb->renderingWindow = false;
+                    gb->lyWasWY = false;
+                    gb->windowYCounter = 0;
 
-                    switchModePPU(vm, PPU_MODE_1);
-                    requestInterrupt(vm, INTERRUPT_VBLANK);
-                } else switchModePPU(vm, PPU_MODE_2);
+                    switchModePPU(gb, PPU_MODE_1);
+                    requestInterrupt(gb, INTERRUPT_VBLANK);
+                } else switchModePPU(gb, PPU_MODE_2);
 
-            } else if (vm->cyclesSinceLastMode == vm->hblankDuration - 6) {
+            } else if (gb->cyclesSinceLastMode == gb->hblankDuration - 6) {
                 /* LY register gets incremented 6 dots before the *true* increment */
-                vm->MEM[R_LY]++;
-                updateSTAT(vm, STAT_UPDATE_LY_LYC);
+                gb->MEM[R_LY]++;
+                updateSTAT(gb, STAT_UPDATE_LY_LYC);
             }
 
             break;
@@ -1038,24 +1038,24 @@ static void advancePPU(VM* vm) {
              * LY=LYC Interrupt is triggered 12 cycles after line 153 begins */
             unsigned cycleAtLYReset = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 4;
             unsigned cycleAtLYCInterrupt = T_CYCLES_PER_VBLANK - T_CYCLES_PER_SCANLINE + 12;
-            if (cycleAtLYReset != vm->cyclesSinceLastMode && vm->cyclesSinceLastMode %
+            if (cycleAtLYReset != gb->cyclesSinceLastMode && gb->cyclesSinceLastMode %
                 T_CYCLES_PER_SCANLINE == T_CYCLES_PER_SCANLINE - 6) {
 
                 /* LY register Increments 6 cycles before *true* LY, only when
                  * the line is other than 153, because on line 153 it resets early
                  * LY also stays 0 at the end of line 153 so dont increment when its 0 */
-                if (vm->MEM[R_LY] != 0) {
-                    vm->MEM[R_LY]++;
+                if (gb->MEM[R_LY] != 0) {
+                    gb->MEM[R_LY]++;
                 }
-                updateSTAT(vm, STAT_UPDATE_LY_LYC);
-            } else if (vm->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) {
+                updateSTAT(gb, STAT_UPDATE_LY_LYC);
+            } else if (gb->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) {
                 /* vblank has ended */
-                switchModePPU(vm, PPU_MODE_2);
-            } else if (vm->cyclesSinceLastMode == cycleAtLYReset) {
-                vm->MEM[R_LY] = 0;
-            } else if (vm->cyclesSinceLastMode == cycleAtLYCInterrupt) {
+                switchModePPU(gb, PPU_MODE_2);
+            } else if (gb->cyclesSinceLastMode == cycleAtLYReset) {
+                gb->MEM[R_LY] = 0;
+            } else if (gb->cyclesSinceLastMode == cycleAtLYCInterrupt) {
                 /* The STAT update can be issued now */
-                updateSTAT(vm, STAT_UPDATE_LY_LYC);
+                updateSTAT(gb, STAT_UPDATE_LY_LYC);
             }
             break;
         }
@@ -1064,31 +1064,31 @@ static void advancePPU(VM* vm) {
 
 /* PPU Enable & Disable */
 
-void enablePPU(VM* vm) {
-    if (vm->ppuEnabled) return;
-    vm->ppuEnabled = true;
-    switchModePPU(vm, PPU_MODE_2);
+void enablePPU(GB* gb) {
+    if (gb->ppuEnabled) return;
+    gb->ppuEnabled = true;
+    switchModePPU(gb, PPU_MODE_2);
 
     /* Skip first frame after LCD is turned on */
-    vm->skipFrame = true;
+    gb->skipFrame = true;
 
     /* Reset frame counter so the whole emulator is again aligned with the PPU frames */
-    vm->cyclesSinceLastFrame = 0;
+    gb->cyclesSinceLastFrame = 0;
 }
 
-void disablePPU(VM* vm) {
-    if (!vm->ppuEnabled) return;
-    if (vm->ppuMode != PPU_MODE_1) {
+void disablePPU(GB* gb) {
+    if (!gb->ppuEnabled) return;
+    if (gb->ppuMode != PPU_MODE_1) {
         /* This is dangerous for any game/rom to do on real hardware
          * as it can damage hardware */
         printf("[WARNING] Turning off LCD when not in VBlank can damage a real gameboy\n");
     }
 
-    vm->ppuEnabled = false;
-    vm->MEM[R_LY] = 0;
+    gb->ppuEnabled = false;
+    gb->MEM[R_LY] = 0;
 
     /* Set STAT mode to 0 */
-    switchModePPU(vm, PPU_MODE_0);
+    switchModePPU(gb, PPU_MODE_0);
 }
 
 /* -------------------- */
@@ -1162,23 +1162,23 @@ void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index) {
     else fifo->contents[fifo->nextPopIndex + index] = pixel;
 }
 
-void syncDisplay(VM* vm, unsigned int cycles) {
+void syncDisplay(GB* gb, unsigned int cycles) {
     /* We sync the display by running the PPU for the correct number of
      * dots (1 dot = 1 tcycle in normal speed) */
-    if (!vm->ppuEnabled) {
+    if (!gb->ppuEnabled) {
         /* Keep locking to framerate even if PPU is off */
         for (unsigned int i = 0; i < cycles; i++) {
-            vm->cyclesSinceLastFrame++;
+            gb->cyclesSinceLastFrame++;
 
-            if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
-                vm->cyclesSinceLastFrame = 0;
+            if (gb->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
+                gb->cyclesSinceLastFrame = 0;
 
                 /* On CGB and DMG, the screen goes blank or white when the PPU is disabled */
-                SDL_SetRenderDrawColor(vm->sdl_renderer, 255, 255, 255, 255);
-                SDL_RenderClear(vm->sdl_renderer);
-                SDL_RenderPresent(vm->sdl_renderer);
+                SDL_SetRenderDrawColor(gb->sdl_renderer, 255, 255, 255, 255);
+                SDL_RenderClear(gb->sdl_renderer);
+                SDL_RenderPresent(gb->sdl_renderer);
 
-                lockToFramerate(vm);
+                lockToFramerate(gb);
             }
         }
 
@@ -1186,23 +1186,23 @@ void syncDisplay(VM* vm, unsigned int cycles) {
     }
 
     for (unsigned int i = 0; i < cycles; i++) {
-        vm->cyclesSinceLastFrame++;
+        gb->cyclesSinceLastFrame++;
 #ifdef DEBUG_PRINT_PPU
-        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", vm->ppuMode, vm->MEM[R_LY], vm->cyclesSinceLastFrame, vm->cyclesSinceLastMode, vm->BackgroundFIFO.count, vm->nextRenderPixelX, vm->renderingWindow ? "win" : "bg");
+        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->MEM[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
 #endif
-        advancePPU(vm);
+        advancePPU(gb);
 
-        if (vm->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
+        if (gb->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
             /* End of frame */
-            vm->cyclesSinceLastFrame = 0;
+            gb->cyclesSinceLastFrame = 0;
             /* Draw frame */
 
-            if (vm->skipFrame) {
-                vm->skipFrame = false;
+            if (gb->skipFrame) {
+                gb->skipFrame = false;
             } else {
-                SDL_RenderPresent(vm->sdl_renderer);
+                SDL_RenderPresent(gb->sdl_renderer);
             }
-            lockToFramerate(vm);
+            lockToFramerate(gb);
         }
     }
 }

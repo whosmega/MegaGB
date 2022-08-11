@@ -6,10 +6,10 @@
 #include <string.h>
 #include "../include/cartridge.h"
 
-/* Forward Declare VM instead of including vm.h
+/* Forward Declare GB instead of including gb.h
  * to avoid a circular include */
 
-struct VM;
+struct GB;
 
 typedef enum {
     BANK_MODE_ROM,
@@ -26,13 +26,13 @@ typedef enum {
     MBC_TYPE_7
 } MBC_TYPE;
 
-void mbc_allocate(struct VM* vm);
-void mbc_free(struct VM* vm);
-void mbc_writeExternalRAM(struct VM* vm, uint16_t addr, uint8_t byte);
-uint8_t mbc_readExternalRAM(struct VM* vm, uint16_t addr);
-void mbc_interceptROMWrite(struct VM* vm, uint16_t addr, uint8_t byte);
-void switchROMBank(struct VM* vm, int bankNumber);
-void switchRestrictedROMBank(struct VM* vm, int bankNumber);
+void mbc_allocate(struct GB* gb);
+void mbc_free(struct GB* gb);
+void mbc_writeExternalRAM(struct GB* gb, uint16_t addr, uint8_t byte);
+uint8_t mbc_readExternalRAM(struct GB* gb, uint16_t addr);
+void mbc_interceptROMWrite(struct GB* gb, uint16_t addr, uint8_t byte);
+void switchROMBank(struct GB* gb, int bankNumber);
+void switchRestrictedROMBank(struct GB* gb, int bankNumber);
 
 
 #endif

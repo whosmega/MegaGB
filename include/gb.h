@@ -91,7 +91,7 @@ typedef enum {
 #define R_SVBK		0xFF70
 #define R_IE        INTERRUPT_ENABLE
 
-struct VM {
+struct GB {
     /* ---------------- SDL ----------------- */
     SDL_Window* sdl_window;					/* The window */
     SDL_Renderer* sdl_renderer;             /* Renderer */
@@ -128,7 +128,7 @@ struct VM {
     bool haltMode;						/* If set to true, the CPU enters the halt
                                            procedure */
     /* ------------- Memory ---------------- */
-    uint8_t MEM[0xFFFF + 1];
+    uint8_t MEM[0x10000];
     uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
     uint8_t* vramBank;			        /* Switchable VRAM Bank when on CGB mode */
     void* memController;                /* Memory Bank Controller */
@@ -196,39 +196,39 @@ struct VM {
     bool lockPalettes;						/*						 -> CGB Palettes */
 };
 
-typedef struct VM VM;
+typedef struct GB GB;
 
 /* Loads in the cartridge into the VM and starts the overall emulator */
 void startEmulator(Cartridge* cartridge);
 
-void pauseEmulator(VM* vm);
-void unpauseEmulator(VM* vm);
+void pauseEmulator(GB* gb);
+void unpauseEmulator(GB* gb);
 /* will perform a memory cleanup by freeing the VM state and then safely exiting */
-void stopEmulator(VM* vm);
+void stopEmulator(GB* gb);
 
 /* Increments the cycle count by 4 tcycles and syncs all hardware to act accordingly if necessary */
-void cyclesSync_4(VM* vm);
+void cyclesSync_4(GB* gb);
 
 /* Joypad */
 
 /* Updates the register by writing correct values to the lower nibble */
-void updateJoypadRegBuffer(VM* vm, JOYPAD_SELECT mode);
+void updateJoypadRegBuffer(GB* gb, JOYPAD_SELECT mode);
 
 /* SDL */
-int initSDL(VM* vm);
-void freeSDL(VM* vm);
-void handleSDLEvents(VM* vm);
+int initSDL(GB* gb);
+void freeSDL(GB* gb);
+void handleSDLEvents(GB* gb);
 
 /* Sync timer */
-void syncTimer(VM* vm);
-void incrementTIMA(VM* vm);
+void syncTimer(GB* gb);
+void incrementTIMA(GB* gb);
 
 /* DMA */
-void scheduleDMATransfer(VM* vm, uint8_t byte);
+void scheduleDMATransfer(GB* gb, uint8_t byte);
 
 /* CGB Only, WRAM/VRAM bank switching */
-void switchCGB_WRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber);
-void switchCGB_VRAM(VM* vm, uint8_t oldBankNumber, uint8_t bankNumber);
+void switchCGB_WRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber);
+void switchCGB_VRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber);
 
 /* Utility */
 unsigned long clock_u();

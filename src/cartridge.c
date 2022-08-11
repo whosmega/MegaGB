@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../include/cartridge.h"
-#include "../include/vm.h"
+#include "../include/gb.h"
 
 bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
     if (data == NULL) {

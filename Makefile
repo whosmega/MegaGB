@@ -5,7 +5,7 @@ CFLAGS = -O2 `sdl2-config --cflags`
 LFLAGS = -O2 `sdl2-config --libs`
 EXE = megagbc
 
-BIN = cartridge.o vm.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
+BIN = cartridge.o gb.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
 
 # test suite
 
@@ -20,11 +20,11 @@ cartridge.o : include/cartridge.h \
 			  src/cartridge.c
 	$(CC) -c src/cartridge.c $(CFLAGS)
 
-vm.o : include/vm.h \
-	   src/vm.c
-	$(CC) -c src/vm.c $(CFLAGS)
+gb.o : include/gb.h \
+	   src/gb.c
+	$(CC) -c src/gb.c $(CFLAGS)
 
-main.o : include/vm.h include/cartridge.h \
+main.o : include/gb.h include/cartridge.h \
 		 src/main.c
 	$(CC) -c src/main.c $(CFLAGS)
 
@@ -48,7 +48,7 @@ display.o : include/display.h \
 			src/display.c
 	$(CC) -c src/display.c $(CFLAGS)
 
-debug.o : include/vm.h include/debug.h \
+debug.o : include/gb.h include/debug.h \
 		 src/debug.c
 	$(CC) -c src/debug.c $(CFLAGS)
 # --------------------------------------------------------------------
