@@ -438,35 +438,35 @@ void handleSDLEvents(GB* gb) {
             switch (event.key.keysym.scancode) {
                 case SDL_SCANCODE_UP:
                     /* Joypad Up */
-                    gb->joypadDirectionBuffer &= ~(1 << 2);
+                    CLEAR_BIT(gb->joypadDirectionBuffer, 2);
                     break;
                 case SDL_SCANCODE_LEFT:
                     /* Joypad Left */
-                    gb->joypadDirectionBuffer &= ~(1 << 1);
+                    CLEAR_BIT(gb->joypadDirectionBuffer, 1);
                     break;
                 case SDL_SCANCODE_DOWN:
                     /* Joypad Down */
-                    gb->joypadDirectionBuffer &= ~(1 << 3);
+                    CLEAR_BIT(gb->joypadDirectionBuffer, 3);
                     break;
                 case SDL_SCANCODE_RIGHT:
                     /* Joypad Right */
-                    gb->joypadDirectionBuffer &= ~(1 << 0);
+                    CLEAR_BIT(gb->joypadDirectionBuffer, 0);
                     break;
                 case SDL_SCANCODE_Z:
                     /* B */
-                    gb->joypadActionBuffer &= ~(1 << 1);
+                    CLEAR_BIT(gb->joypadActionBuffer, 1);
                     break;
                 case SDL_SCANCODE_X:
                     /* A */
-                    gb->joypadActionBuffer &= ~(1 << 0);
+                    CLEAR_BIT(gb->joypadActionBuffer, 0);
                     break;
                 case SDL_SCANCODE_RETURN:
                     /* Start */
-                    gb->joypadActionBuffer &= ~(1 << 3);
+                    CLEAR_BIT(gb->joypadActionBuffer, 3);
                     break;
                 case SDL_SCANCODE_TAB:
                     /* Select */
-                    gb->joypadActionBuffer &= ~(1 << 2);
+                    CLEAR_BIT(gb->joypadActionBuffer, 2);
                     break;
                 case SDL_SCANCODE_SPACE:
                     if (!gb->paused) pauseEmulator(gb);
@@ -485,35 +485,35 @@ void handleSDLEvents(GB* gb) {
             switch (event.key.keysym.scancode) {
                 case SDL_SCANCODE_UP:
                     /* Joypad Up */
-                    gb->joypadDirectionBuffer |= 1 << 2;
+                    SET_BIT(gb->joypadDirectionBuffer, 2);
                     break;
                 case SDL_SCANCODE_LEFT:
                     /* Joypad Left */
-                    gb->joypadDirectionBuffer |= 1 << 1;
+                    SET_BIT(gb->joypadDirectionBuffer, 1);
                     break;
                 case SDL_SCANCODE_DOWN:
                     /* Joypad Down */
-                    gb->joypadDirectionBuffer |= 1 << 3;
+                    SET_BIT(gb->joypadDirectionBuffer, 3);
                     break;
                 case SDL_SCANCODE_RIGHT:
                     /* Joypad Right */
-                    gb->joypadDirectionBuffer |= 1 << 0;
+                    SET_BIT(gb->joypadDirectionBuffer, 0);
                     break;
                 case SDL_SCANCODE_Z:
                     /* B */
-                    gb->joypadActionBuffer |= 1 << 1;
+                    SET_BIT(gb->joypadActionBuffer, 1);
                     break;
                 case SDL_SCANCODE_X:
                     /* A */
-                    gb->joypadActionBuffer |= 1 << 0;
+                    SET_BIT(gb->joypadActionBuffer, 0);
                     break;
                 case SDL_SCANCODE_RETURN:
                     /* Start */
-                    gb->joypadActionBuffer |= 1 << 3;
+                    SET_BIT(gb->joypadActionBuffer, 3);
                     break;
                 case SDL_SCANCODE_TAB:
                     /* Select */
-                    gb->joypadActionBuffer |= 1 << 2;
+                    SET_BIT(gb->joypadActionBuffer, 2);
                     break;
                 default: return;
             }

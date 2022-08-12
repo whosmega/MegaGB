@@ -57,39 +57,41 @@ typedef enum {
     JOYPAD_SELECT_NONE
 } JOYPAD_SELECT;
 
-/* IO Port Register Macros */
-#define R_P1_JOYP	0xFF00
-#define R_SB        0xFF01
-#define R_SC        0xFF02
-#define R_DIV       0xFF04
-#define R_TIMA      0xFF05
-#define R_TMA       0xFF06
-#define R_TAC       0xFF07
-#define R_IF        0xFF0F
-#define R_LCDC		0xFF40
-#define R_STAT		0xFF41
-#define R_SCY       0xFF42
-#define R_SCX       0xFF43
-#define R_LY		0xFF44
-#define R_LYC		0xFF45
-#define R_DMA       0xFF46
-#define R_BGP       0xFF47
-#define R_OBP0      0xFF48
-#define R_OBP1      0xFF49
-#define R_WY        0xFF4A
-#define R_WX        0xFF4B
-#define R_VBK		0xFF4F
-#define R_HDMA1     0xFF51
-#define R_HDMA2     0xFF52
-#define R_HDMA3     0xFF53
-#define R_HDMA4     0xFF54
-#define R_HDMA5     0xFF55
-#define R_BCPS		0xFF68
-#define R_BCPD		0xFF69
-#define R_OCPS		0xFF6A
-#define R_OCPD		0xFF6B
-#define R_SVBK		0xFF70
-#define R_IE        INTERRUPT_ENABLE
+/* IO Port Registers */
+typedef enum {
+    R_P1_JOYP = 0xFF00,
+    R_SB      = 0xFF01,
+    R_SC      = 0xFF02,
+    R_DIV     = 0xFF04,
+    R_TIMA    = 0xFF05,
+    R_TMA     = 0xFF06,
+    R_TAC     = 0xFF07,
+    R_IF      = 0xFF0F,
+    R_LCDC    = 0xFF40,
+    R_STAT    = 0xFF41,
+    R_SCY     = 0xFF42,
+    R_SCX     = 0xFF43,
+    R_LY	  = 0xFF44,
+    R_LYC     = 0xFF45,
+    R_DMA     = 0xFF46,
+    R_BGP     = 0xFF47,
+    R_OBP0    = 0xFF48,
+    R_OBP1    = 0xFF49,
+    R_WY      = 0xFF4A,
+    R_WX      = 0xFF4B,
+    R_VBK     = 0xFF4F,
+    R_HDMA1   = 0xFF51,
+    R_HDMA2   = 0xFF52,
+    R_HDMA3   = 0xFF53,
+    R_HDMA4   = 0xFF54,
+    R_HDMA5   = 0xFF55,
+    R_BCPS    = 0xFF68,
+    R_BCPD    = 0xFF69,
+    R_OCPS    = 0xFF6A,
+    R_OCPD    = 0xFF6B,
+    R_SVBK    = 0xFF70,
+    R_IE      = INTERRUPT_ENABLE
+} HREG;
 
 struct GB {
     /* ---------------- SDL ----------------- */
@@ -129,6 +131,9 @@ struct GB {
                                            procedure */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0x10000];
+    uint8_t* vram;
+    uint8_t* wram;
+
     uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
     uint8_t* vramBank;			        /* Switchable VRAM Bank when on CGB mode */
     void* memController;                /* Memory Bank Controller */
