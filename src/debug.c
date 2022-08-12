@@ -340,7 +340,7 @@ void printInstruction(VM* vm) {
 #endif
 #ifdef DEBUG_PRINT_CYCLES
 	/* We print t-cycles */
-    printf("[%ld]", vm->clock * 4);
+    printf("[%ld]", vm->clock);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
     printf("[sel:%x|", (vm->MEM[R_P1_JOYP] >> 4) & 0x3);

@@ -1081,7 +1081,9 @@ void disablePPU(VM* vm) {
 	if (vm->ppuMode != PPU_MODE_1) {
 		/* This is dangerous for any game/rom to do on real hardware
 		 * as it can damage hardware */
+#ifdef DEBUG_LOGGING
 		printf("[WARNING] Turning off LCD when not in VBlank can damage a real gameboy\n");
+#endif
 	}
 
 	vm->ppuEnabled = false;
