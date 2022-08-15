@@ -142,21 +142,19 @@ static uint8_t* getCurrentFetcherTileData(GB* gb) {
      *
      * On DMG, there is only 1 vram bank and therefore both variables will point to the same */
     uint8_t* vramBankPointer = NULL;
-    uint8_t* vramBank0Pointer = NULL;
+    uint8_t* vramBank0Pointer = gb->vram;
 
     if (gb->emuMode == EMU_CGB) {
         uint8_t useVramBank1 = GET_BIT(gb->fetcherTileAttributes, 3);
-        vramBank0Pointer = (gb->MEM[R_VBK] == 0xFF) ? gb->vramBank : &gb->MEM[VRAM_N0_8KB];
 
         /* Select which pointer to use to fetch tile data */
         if (useVramBank1) {
             /* Tile data from vram bank 1 */
-            vramBankPointer = (gb->MEM[R_VBK] == 0xFF) ? &gb->MEM[VRAM_N0_8KB] : gb->vramBank;
+            vramBankPointer = &gb->vram[0x2000];
         } else {
             vramBankPointer = vramBank0Pointer;
         }
     } else if (gb->emuMode == EMU_DMG) {
-        vramBank0Pointer = &gb->MEM[VRAM_N0_8KB];
         vramBankPointer = vramBank0Pointer;
     }
 
@@ -702,7 +700,8 @@ static void advanceFetcher(GB* gb) {
                     /* Handle tile attributes if on a CGB
                      *
                      * This works for both BG and Window */
-                    gb->fetcherTileAttributes = gb->MEM[R_VBK] == 0xFF ? gb->MEM[VRAM_N0_8KB + gb->fetcherTileAddress] : gb->vramBank[gb->fetcherTileAddress];
+                    uint8_t* vramBank1Pointer = &gb->vram[0x2000];
+                    gb->fetcherTileAttributes = vramBank1Pointer[gb->fetcherTileAddress];
                 } else if (gb->emuMode == EMU_DMG) {
                     gb->fetcherTileAttributes = 0;
                 }
@@ -729,7 +728,8 @@ static void advanceFetcher(GB* gb) {
                     /* Handle tile attributes if on a CGB
                      *
                      * This works for both BG and Window */
-                    gb->fetcherTileAttributes = gb->MEM[R_VBK] == 0xFF ? gb->MEM[VRAM_N0_8KB + gb->fetcherTileAddress] : gb->vramBank[gb->fetcherTileAddress];
+                    uint8_t* vramBank1Pointer = &gb->vram[0x2000];
+                    gb->fetcherTileAttributes = vramBank1Pointer[gb->fetcherTileAddress];
                 } else if (gb->emuMode == EMU_DMG) {
                     gb->fetcherTileAttributes = 0;
                 }

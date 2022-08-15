@@ -1155,6 +1155,16 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
         gb->MEM[addr - 0x2000] = byte;
         return;
+    } else if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
+        if (addr >= WRAM_NN_4KB) {
+            /* Respect banking */
+            gb->wram[(gb->selectedWRAMBank * 0x1000) + (addr - WRAM_NN_4KB)] = byte;
+            return;
+        }
+
+        /* Otherwise use bank 0 */
+        gb->wram[addr - WRAM_N0_4KB] = byte;
+        return;
     } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
         printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
         return;
@@ -1242,11 +1252,10 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
             case R_SVBK: {
                              if (gb->emuMode != EMU_CGB) return;
                              /* In CGB Mode, switch WRAM banks */
-                             uint8_t oldBankNumber = gb->MEM[R_SVBK] & 0b00000111;
                              uint8_t bankNumber = byte & 0b00000111;
 
                              if (bankNumber == 0) bankNumber = 1;
-                             switchCGB_WRAM(gb, oldBankNumber, bankNumber);
+                             gb->selectedWRAMBank = bankNumber;
                              /* Ignore bits 7-3 */
                              gb->MEM[R_SVBK] = byte | 0b11111000;
                              return;
@@ -1256,10 +1265,9 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                             /* In CGB Mode, switch VRAM banks
                              *
                              * Only bit 0 matters */
-                            uint8_t oldBankNumber = gb->MEM[R_VBK] & 1;
                             uint8_t bankNumber = byte & 1;
 
-                            switchCGB_VRAM(gb, oldBankNumber, bankNumber);
+                            gb->selectedVRAMBank = bankNumber;
                             /* Ignore all bits other than bit 0 */
                             gb->MEM[R_VBK] = byte | ~1;
                             return;
@@ -1381,11 +1389,11 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
         /* Handle the case when VRAM has been locked by PPU */
         if (gb->lockVRAM) {
-            // printf("vram locked %02x %04x mode %d cy %d ly %d\n", byte, addr, gb->ppuMode, gb->cyclesSinceLastMode, gb->MEM[R_LY]);
             return;
         }
 
-        // printf("vram allowed %02x %04x mode %d cy %d ly %d\n", byte, addr, gb->ppuMode, gb->cyclesSinceLastMode, gb->MEM[R_LY]);
+        gb->vram[(gb->selectedVRAMBank * 0x2000) + (addr - VRAM_N0_8KB)] = byte;
+        return;
     } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
         /* Handle the case when OAM has been locked by PPU */
         if (gb->lockOAM || gb->doingDMA) return;
@@ -1397,6 +1405,14 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
     if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* Read from external RAM */
         return mbc_readExternalRAM(gb, addr);
+    } else if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
+        if (addr >= WRAM_NN_4KB) {
+            /* Respect banking */
+            return gb->wram[(gb->selectedWRAMBank * 0x1000) + (addr - WRAM_NN_4KB)];
+        }
+
+        /* Otherwise use bank 0 */
+        return gb->wram[addr - WRAM_N0_4KB];
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* If we have IO registers to read from, we perform some
          * actions before the read is done in some cases
@@ -1424,6 +1440,8 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
         /* Handle the case when VRAM has been locked by the PPU */
         if (gb->lockVRAM) return 0xFF;
+
+        return gb->vram[(gb->selectedVRAMBank * 0x2000) + (addr - VRAM_N0_8KB)];
     } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
         /* Handle the case when OAM has been locked by the PPU */
         if (gb->lockOAM || gb->doingDMA) return 0xFF;

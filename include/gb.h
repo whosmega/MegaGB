@@ -131,11 +131,18 @@ struct GB {
                                            procedure */
     /* ------------- Memory ---------------- */
     uint8_t MEM[0x10000];
-    uint8_t* vram;
-    uint8_t* wram;
+    uint8_t* vram;                      /* Stores VRAM along with all banks in blocks of 0x2000 */
+    uint8_t* wram;                      /* Stores WRAM along with all banks in blocks of 0x1000 */
+    uint8_t OAM[0xA0];                  /* OAM memory */
+    uint8_t IO[0x80];                   /* IO Memory */
+    uint8_t hram[0x7F];                 /* High RAM */
+    uint8_t IE;                         /* Interrupt Enable Register */
 
-    uint8_t* wramBanks;         	    /* 7 Banks for WRAM when on CGB mode */
-    uint8_t* vramBank;			        /* Switchable VRAM Bank when on CGB mode */
+    /* Selected bank fields only account for the selected bank numbers on the switchable
+     * banking spaces. On DMG, selected WRAM Bank will be always 1 and selected VRAM bank will
+     * always be 0 */
+    uint8_t selectedWRAMBank;
+    uint8_t selectedVRAMBank;
     void* memController;                /* Memory Bank Controller */
     MBC_TYPE memControllerType;
     /* ---------------- PPU ---------------- */
@@ -230,10 +237,6 @@ void incrementTIMA(GB* gb);
 
 /* DMA */
 void scheduleDMATransfer(GB* gb, uint8_t byte);
-
-/* CGB Only, WRAM/VRAM bank switching */
-void switchCGB_WRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber);
-void switchCGB_VRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber);
 
 /* Utility */
 unsigned long clock_u();

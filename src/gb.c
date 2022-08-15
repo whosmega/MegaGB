@@ -19,6 +19,10 @@
 static void initGB(GB* gb) {
     gb->cartridge = NULL;
     gb->emuMode = EMU_DMG;
+    gb->wram = NULL;
+    gb->vram = NULL;
+    gb->selectedVRAMBank = 0;
+    gb->selectedWRAMBank = 0;
     gb->memController = NULL;
     gb->memControllerType = MBC_NONE;
     gb->run = false;
@@ -119,15 +123,16 @@ static void initGBCartridge(GB* gb, Cartridge* cartridge) {
         gb->cyclesSinceLastMode = 0;
 
         /* CGB needs WRAM, VRAM and CRAM banks allocated */
-        gb->wramBanks = (uint8_t*)malloc(sizeof(uint8_t) * 0x1000 * 7);
-        gb->vramBank = (uint8_t*)malloc(sizeof(uint8_t) * 0x2000);
-        gb->bgColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
-        gb->spriteColorRAM = (uint8_t*)malloc(sizeof(uint8_t) * 64);
+        gb->wram = (uint8_t*)malloc(0x1000 * 8);            /* 8 WRAM banks */
+        gb->vram = (uint8_t*)malloc(0x2000 * 2);            /* 2 VRAM banks */
+        gb->bgColorRAM = (uint8_t*)malloc(64);
+        gb->spriteColorRAM = (uint8_t*)malloc(64);
 
-        if (gb->wramBanks == NULL || gb->vramBank == NULL || gb->bgColorRAM == NULL ||
+        if (gb->wram == NULL || gb->vram == NULL || gb->bgColorRAM == NULL ||
                 gb->spriteColorRAM == NULL) {
 
             log_fatal(gb, "[FATAL] Could not allocate space for CGB WRAM/VRAM/CRAM\n");
+            return;
         }
 
         /* Set registers & flags to GBC specifics */
@@ -137,9 +142,21 @@ static void initGBCartridge(GB* gb, Cartridge* cartridge) {
          * Because the default value of SVBK is 0xFF, which means bank 7 is selected
          * by default
          * Same goes for VBK, bank 1 will be selected by default*/
-        switchCGB_WRAM(gb, 1, 7);
-        switchCGB_VRAM(gb, 0, 1);
+        gb->selectedVRAMBank = 1;
+        gb->selectedWRAMBank = 7;
     } else if (gb->emuMode == EMU_DMG) {
+        gb->wram = (uint8_t*)malloc(0x1000 * 2);        /* 2 WRAM banks */
+        gb->vram = (uint8_t*)malloc(0x2000 * 1);        /* 1 VRAM bank */
+
+        /* These values are constant throughout */
+        gb->selectedVRAMBank = 0;
+        gb->selectedWRAMBank = 1;
+
+        if (gb->wram == NULL || gb->vram == NULL) {
+            log_fatal(gb, "[FATAL] Could not allocate space for DMG WRAM/VRAM\n");
+            return;
+        }
+
         /* When the PPU first starts up, it takes 4 cycles less on the first frame,
          * it also doesnt lock OAM */
         gb->lockOAM = false;
@@ -147,10 +164,8 @@ static void initGBCartridge(GB* gb, Cartridge* cartridge) {
         gb->lockVRAM = false;
         gb->cyclesSinceLastFrame = 4;		/* 4 on DMG */
         gb->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */
-        gb->wramBanks = NULL;
         gb->bgColorRAM = NULL;
         gb->spriteColorRAM = NULL;
-        gb->vramBank = NULL;
 
         resetGB(gb);
     }
@@ -214,39 +229,6 @@ void incrementTIMA(GB* gb) {
         requestInterrupt(gb, INTERRUPT_TIMER);
     } else {
         gb->MEM[R_TIMA]++;
-    }
-}
-
-/* CGB Specific WRAM & VRAM banking */
-
-void switchCGB_WRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber) {
-    /* Switch WRAM bank (0xD000-0xDFFF) from oldBankNumber to bankNumber */
-
-    /* Copy contents of the old bank number to its respective bank buffer */
-    /* We do oldBankNumber - 1 because bank 0 is not stored in this buffer,
-     * the first ram number that gets stored here is 1 */
-    memcpy(&gb->wramBanks[0x1000 * (oldBankNumber - 1)], &gb->MEM[WRAM_NN_4KB], 0x1000);
-
-    /* If old bank buffer is the same as the one to be switched to, copying
-     * the buffer to the address will cause a previous version of the ram to be loaded
-     * so we put this check in place */
-
-    if (oldBankNumber != bankNumber) {
-        memcpy(&gb->MEM[WRAM_NN_4KB], &gb->wramBanks[0x1000 * (bankNumber - 1)], 0x1000);
-    }
-}
-
-void switchCGB_VRAM(GB* gb, uint8_t oldBankNumber, uint8_t bankNumber) {
-    /* There are only 2 VRAM banks in total so we can basically just swap them */
-    if (oldBankNumber != bankNumber) {
-        /* Swap */
-        for (int i = 0; i < 0x2000; i++) {
-            uint8_t b1 = gb->MEM[VRAM_N0_8KB + i];
-            uint8_t b2 = gb->vramBank[i];
-
-            gb->MEM[VRAM_N0_8KB + i] = b2;
-            gb->vramBank[i] = b1;
-        }
     }
 }
 
@@ -632,10 +614,11 @@ void stopEmulator(GB* gb) {
     /* Free up MBC allocations */
     mbc_free(gb);
 
+    free(gb->wram);
+    free(gb->vram);
+
     if (gb->emuMode == EMU_CGB) {
         /* Free memory allocated specifically for CGB */
-        free(gb->vramBank);
-        free(gb->wramBanks);
         free(gb->bgColorRAM);
         free(gb->spriteColorRAM);
     }
