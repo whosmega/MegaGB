@@ -81,7 +81,7 @@ void mbc1_allocate(GB* gb, bool externalRam) {
 }
 
 uint8_t mbc1_readROM(GB *gb, uint16_t addr) {
-    return 0xFF;
+    return gb->cartridge->allocated[addr];
 }
 
 void mbc1_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte) {
@@ -175,7 +175,7 @@ void mbc1_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte) {
          *
          * 32 KiB cartridges are the smallest and wont need any extra banks */
         switch (gb->cartridge->romSize) {
-            case ROM_32KB:  log_fatal(gb, "Bruh why an MBC with a 32KB cart"); break;
+            case ROM_32KB:  bankNumber &= 0b00000001; break;
             case ROM_64KB:  bankNumber &= 0b00000011; break;
             case ROM_128KB: bankNumber &= 0b00000111; break;
             case ROM_256KB: bankNumber &= 0b00001111; break;

@@ -36,7 +36,8 @@ void mbc_allocate(GB* gb) {
         case CARTRIDGE_MBC1_RAM:
         case CARTRIDGE_MBC1_RAM_BATTERY: mbc1_allocate(gb, true); break;
         case CARTRIDGE_MBC2:
-        case CARTRIDGE_MBC2_BATTERY: mbc2_allocate(gb); break; */
+        case CARTRIDGE_MBC2_BATTERY: mbc2_allocate(gb); break;
+*/
         default: log_fatal(gb, "MBC/External Hardware Not Supported"); break;
     }
 }
