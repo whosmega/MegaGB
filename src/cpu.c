@@ -188,16 +188,14 @@ void resetGBC(GB* gb) {
     };
 
     for (int i = 0x00; i < 0x50; i++) {
-        gb->MEM[0xFF00 + i] = hreg_defaults[i];
+        gb->IO[i] = hreg_defaults[i];
     }
 
-    /* Initialise OAM to off screen */
-    memset(&gb->MEM[OAM_N0_160B], 0xFF, 160);
     /* Reset all background colors to white (ffff) */
     memset(gb->bgColorRAM, 0xFF, 64);
     memset(gb->spriteColorRAM, 0xFF, 64);
     /* 0xFF50 to 0xFFFE = 0xFF */
-    memset(&gb->MEM[0xFF50], 0xFF, 0xAF);
+    memset(&gb->IO[0x50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(gb);
 }
 
@@ -228,14 +226,11 @@ void resetGB(GB* gb) {
     };
 
     for (int i = 0x00; i < 0x50; i++) {
-        gb->MEM[0xFF00 + i] = hreg_defaults[i];
+        gb->IO[i] = hreg_defaults[i];
     }
 
-    /* Initialise OAM to off screen */
-    memset(&gb->MEM[OAM_N0_160B], 0xFF, 160);
-
     /* 0xFF50 to 0xFFFE = 0xFF */
-    memset(&gb->MEM[0xFF50], 0xFF, 0xAF);
+    memset(&gb->IO[0x50], 0xFF, 0xAF);
     INTERRUPT_MASTER_DISABLE(gb);
 }
 
@@ -1153,7 +1148,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
         mbc_interceptROMWrite(gb, addr, byte);
         return;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
-        gb->MEM[addr - 0x2000] = byte;
+        gb->wram[addr - ECHO_N0_8KB] = byte;
         return;
     } else if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
         if (addr >= WRAM_NN_4KB) {
@@ -1179,11 +1174,11 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
                               /* Writing to TAC sometimes glitches TIMA,
                                * algorithm from 'https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html' */
-                              uint8_t oldTAC = gb->MEM[R_TAC];
+                              uint8_t oldTAC = gb->IO[R_TAC];
                               /* Make sure unused bits are unchanged */
                               uint8_t newTAC = byte | 0xF8;
 
-                              gb->MEM[R_TAC] = newTAC;
+                              gb->IO[R_TAC] = newTAC;
 
                               int clocks_array[] = {1024, 16, 64, 256};
                               uint8_t old_clock = clocks_array[oldTAC & 3];
@@ -1212,21 +1207,21 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                               /* Write to DIV resets it */
                               syncTimer(gb);
 
-                              if (gb->MEM[R_DIV] == 1 && ((gb->MEM[R_TAC] >> 2) & 1)) {
+                              if (gb->IO[R_DIV] == 1 && ((gb->IO[R_TAC] >> 2) & 1)) {
                                   /* If DIV = 1 and timer is enabled, theres a bug in which
                                    * the TIMA increases */
-                                  gb->MEM[R_DIV] = 0;
+                                  gb->IO[R_DIV] = 0;
                                   incrementTIMA(gb);
                                   return;
                               }
-                              gb->MEM[R_DIV] = 0;
+                              gb->IO[R_DIV] = 0;
                               return;
                           }
             case R_SC:
 #ifdef DEBUG_PRINT_SERIAL_OUTPUT
                           if (byte == 0x81) {
-                              printf("%c", gb->MEM[R_SB]);
-                              gb->MEM[addr] = 0x00;
+                              printf("%c", gb->IO[R_SB]);
+                              gb->IO[addr] = 0x00;
                           }
 #endif
                           break;
@@ -1237,14 +1232,14 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
                           /* Make sure the lower nibble if unaffected */
                           byte &= 0xF0;
-                          byte |= gb->MEM[addr] & 0xF;
+                          byte |= gb->IO[R_P1_JOYP] & 0xF;
 
                           /* Check bit 4-5to get selected mode */
                           uint8_t selected = ((byte >> 4) & 0b11);
                           gb->joypadSelectedMode = selected;
 
                           /* Write the selected mode */
-                          gb->MEM[addr] = byte;
+                          gb->IO[R_P1_JOYP] = byte;
 
                           /* Update register to show the keys for the new mode */
                           updateJoypadRegBuffer(gb, selected);
@@ -1257,7 +1252,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                              if (bankNumber == 0) bankNumber = 1;
                              gb->selectedWRAMBank = bankNumber;
                              /* Ignore bits 7-3 */
-                             gb->MEM[R_SVBK] = byte | 0b11111000;
+                             gb->IO[R_SVBK] = byte | 0b11111000;
                              return;
                          }
             case R_VBK: {
@@ -1269,13 +1264,13 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
                             gb->selectedVRAMBank = bankNumber;
                             /* Ignore all bits other than bit 0 */
-                            gb->MEM[R_VBK] = byte | ~1;
+                            gb->IO[R_VBK] = byte | ~1;
                             return;
                         }
             case R_BCPD: {
                              if (gb->emuMode != EMU_CGB) return;
                              if (gb->lockPalettes) {
-                                 if (GET_BIT(gb->MEM[R_BCPS], 7)) {
+                                 if (GET_BIT(gb->IO[R_BCPS], 7)) {
                                      /* If auto increment is enabled, writes to
                                       * BCPD increment the color ram index address
                                       *
@@ -1292,7 +1287,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
                              // printf("Writing %02x to color ram address %02x\n", byte, gb->currentCRAMIndex);
                              gb->bgColorRAM[gb->currentBackgroundCRAMIndex] = byte;
-                             if (GET_BIT(gb->MEM[R_BCPS], 7)) {
+                             if (GET_BIT(gb->IO[R_BCPS], 7)) {
                                  gb->currentBackgroundCRAMIndex++;
 
                                  if (gb->currentBackgroundCRAMIndex >= 0x40) {
@@ -1313,7 +1308,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
             case R_OCPD: {
                              if (gb->emuMode != EMU_CGB) return;
                              if (gb->lockPalettes) {
-                                 if (GET_BIT(gb->MEM[R_OCPS], 7)) {
+                                 if (GET_BIT(gb->IO[R_OCPS], 7)) {
                                      /* If auto increment is enabled, writes to
                                       * OCPD increment the color ram index address
                                       *
@@ -1330,7 +1325,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
                              // printf("Writing %02x to color ram address %02x\n", byte, gb->currentCRAMIndex);
                              gb->spriteColorRAM[gb->currentSpriteCRAMIndex] = byte;
-                             if (GET_BIT(gb->MEM[R_OCPS], 7)) {
+                             if (GET_BIT(gb->IO[R_OCPS], 7)) {
                                  gb->currentSpriteCRAMIndex++;
 
                                  if (gb->currentSpriteCRAMIndex >= 0x40) {
@@ -1364,13 +1359,13 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                         /* Clear last 3 bits */
                         byte &= ~0x7;
                         /* Set the last 3 bits of STAT to byte */
-                        byte |= gb->MEM[R_STAT] & 0x7;
+                        byte |= gb->IO[R_STAT] & 0x7;
 
-                        gb->MEM[R_STAT] = byte;
+                        gb->IO[R_STAT] = byte;
                         return;
             case R_LCDC: {
                              /* Bit 7 = LCD/PPU enable */
-                             uint8_t lcdcBit7 = GET_BIT(gb->MEM[R_LCDC], 7);
+                             uint8_t lcdcBit7 = GET_BIT(gb->IO[R_LCDC], 7);
                              uint8_t byteBit7 = GET_BIT(byte, 7);
 
                              if (lcdcBit7 != byteBit7) {
@@ -1386,6 +1381,9 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                          }
             case R_DMA: scheduleDMATransfer(gb, byte); break;
         }
+
+        gb->IO[addr - IO_REG] = byte;
+        return;
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
         /* Handle the case when VRAM has been locked by PPU */
         if (gb->lockVRAM) {
@@ -1421,7 +1419,7 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
          * actions before the read is done in some cases
          *
          * or modify the read values accordingly*/
-        switch (addr) {
+        switch (addr - IO_REG) {
             case R_DIV  :
             case R_TIMA :
             case R_TMA  :
@@ -1440,6 +1438,8 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
                          if (gb->lockPalettes) return 0xFF;
                          break;
         }
+
+        return gb->IO[addr - IO_REG];
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
         /* Handle the case when VRAM has been locked by the PPU */
         if (gb->lockVRAM) return 0xFF;
@@ -1453,7 +1453,7 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
     } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
         return 0xFF;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
-        return gb->MEM[addr - 0x2000];
+        return gb->wram[addr - ECHO_N0_8KB];
     }
 
     return gb->MEM[addr];
@@ -1478,7 +1478,7 @@ void requestInterrupt(GB* gb, INTERRUPT interrupt) {
     /* This is called by external hardware to request interrupts
      *
      * We set the corresponding bit */
-    gb->MEM[R_IF] |= 1 << interrupt;
+    gb->IO[R_IF] |= 1 << interrupt;
 }
 
 static void dispatchInterrupt(GB* gb, INTERRUPT interrupt) {
@@ -1486,7 +1486,7 @@ static void dispatchInterrupt(GB* gb, INTERRUPT interrupt) {
     INTERRUPT_MASTER_DISABLE(gb);
 
     /* Set the bit of this interrupt in the IF register to 0 */
-    gb->MEM[R_IF] &= ~(1 << interrupt);
+    gb->IO[R_IF] &= ~(1 << interrupt);
 
     /* Now we pass control to the interrupt handler
      *
@@ -1514,8 +1514,8 @@ static void handleInterrupts(GB* gb) {
 
     /* We read interrupt flags, which tell us which interrupts are requested
      * if any */
-    uint8_t requestedInterrupts = gb->MEM[R_IF];
-    uint8_t enabledInterrups = gb->MEM[R_IE];
+    uint8_t requestedInterrupts = gb->IO[R_IF];
+    uint8_t enabledInterrups = gb->IE;
 
     if (gb->IME) {
         if ((enabledInterrups & requestedInterrupts & 0x1F) != 0) {
@@ -1553,8 +1553,8 @@ static void handleInterrupts(GB* gb) {
 
 static void halt(GB* gb) {
     /* HALT Instruction procedure */
-    uint8_t IE = gb->MEM[R_IE];
-    uint8_t IF = gb->MEM[R_IF];
+    uint8_t IE = gb->IE;
+    uint8_t IF = gb->IO[R_IF];
 
     if (gb->IME) {
         if ((IE & IF & 0x1F) == 0) {
