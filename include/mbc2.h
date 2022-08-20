@@ -9,6 +9,7 @@ typedef struct {
 } MBC_2;
 
 void mbc2_allocate(GB* gb);
+uint8_t mbc2_readROM(GB* gb, uint16_t addr);
 void mbc2_writeBuiltInRAM(GB* gb, uint16_t addr, uint8_t byte);
 uint8_t mbc2_readBuiltInRAM(GB* gb, uint16_t addr);
 void mbc2_free(GB* gb);

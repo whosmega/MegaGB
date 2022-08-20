@@ -70,6 +70,10 @@ void mbc2_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte) {
     }
 }
 
+uint8_t mbc2_readROM(GB *gb, uint16_t addr) {
+    return 0xFF;
+}
+
 void mbc2_writeBuiltInRAM(GB* gb, uint16_t addr, uint8_t byte) {
     MBC_2* mbc = (MBC_2*)gb->memController;
     if (!mbc->ramEnabled) log_warning(gb, "It is recommended to enable RAM when writing");

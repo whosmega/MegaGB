@@ -1138,19 +1138,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
     printf("Writing 0x%02x to address 0x%04x\n", byte, addr);
 #endif
 
-    if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
-        /* External RAM write request */
-        mbc_writeExternalRAM(gb, addr, byte);
-        return;
-    } else if (addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) {
-        /* Pass over control to an MBC, maybe this is a call for
-         * bank switch */
-        mbc_interceptROMWrite(gb, addr, byte);
-        return;
-    } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
-        gb->wram[addr - ECHO_N0_8KB] = byte;
-        return;
-    } else if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
+    if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
         if (addr >= WRAM_NN_4KB) {
             /* Respect banking */
             gb->wram[(gb->selectedWRAMBank * 0x1000) + (addr - WRAM_NN_4KB)] = byte;
@@ -1160,8 +1148,9 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
         /* Otherwise use bank 0 */
         gb->wram[addr - WRAM_N0_4KB] = byte;
         return;
-    } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
-        printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
+    } else if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
+        /* External RAM write request */
+        mbc_writeExternalRAM(gb, addr, byte);
         return;
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* We perform some actions before writing in some
@@ -1392,23 +1381,43 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
         gb->vram[(gb->selectedVRAMBank * 0x2000) + (addr - VRAM_N0_8KB)] = byte;
         return;
+    } else if (addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) {
+        /* Pass over control to an MBC, maybe this is a call for
+         * bank switch */
+        mbc_interceptROMWrite(gb, addr, byte);
+        return;
+    } else if (addr >= HRAM_N0 && addr <= HRAM_N0_END) {
+        gb->hram[addr - HRAM_N0] = byte;
+        return;
+    } else if (addr == R_IE) {
+        gb->IE = byte;
+        return;
     } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
         /* Handle the case when OAM has been locked by PPU */
         if (gb->lockOAM || gb->doingDMA) return;
 
         gb->OAM[addr - OAM_N0_160B] = byte;
         return;
-    } else if (addr == R_IE) {
-        gb->IE = byte;
+    } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
+        gb->wram[addr - ECHO_N0_8KB] = byte;
         return;
-    }
-    gb->MEM[addr] = byte;
+    } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
+#ifdef DEBUG_LOGGING
+        printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
+#endif
+        return;
+    } 
+    
+    printf("dropped\n");
 }
 
 uint8_t readAddr(GB* gb, uint16_t addr) {
-    if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
-        /* Read from external RAM */
-        return mbc_readExternalRAM(gb, addr);
+    if (addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) {
+        if (gb->memControllerType == MBC_NONE) {
+            return gb->cartridge->allocated[addr];
+        }
+
+        return mbc_readROM(gb, addr);
     } else if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
         if (addr >= WRAM_NN_4KB) {
             /* Respect banking */
@@ -1417,7 +1426,10 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
 
         /* Otherwise use bank 0 */
         return gb->wram[addr - WRAM_N0_4KB];
-    } else if (addr >= IO_REG && addr <= IO_REG_END) {
+    } else if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
+        /* Read from external RAM */
+        return mbc_readExternalRAM(gb, addr);
+    }  else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* If we have IO registers to read from, we perform some
          * actions before the read is done in some cases
          *
@@ -1443,6 +1455,10 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
         }
 
         return gb->IO[addr - IO_REG];
+    } else if (addr == R_IE) {
+        return gb->IE;
+    } else if (addr >= HRAM_N0 && addr <= HRAM_N0_END) {
+        return gb->hram[addr - HRAM_N0];
     } else if (addr >= VRAM_N0_8KB && addr <= VRAM_N0_8KB_END) {
         /* Handle the case when VRAM has been locked by the PPU */
         if (gb->lockVRAM) return 0xFF;
@@ -1457,11 +1473,9 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
         return 0xFF;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
         return gb->wram[addr - ECHO_N0_8KB];
-    } else if (addr == R_IE) {
-        return gb->IE;
-    }
+    } 
 
-    return gb->MEM[addr];
+    return 0xFF;
 }
 
 

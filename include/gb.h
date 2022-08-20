@@ -129,7 +129,6 @@ struct GB {
     bool haltMode;						/* If set to true, the CPU enters the halt
                                            procedure */
     /* ------------- Memory ---------------- */
-    uint8_t MEM[0x10000];
     uint8_t* vram;                      /* Stores VRAM along with all banks in blocks of 0x2000 */
     uint8_t* wram;                      /* Stores WRAM along with all banks in blocks of 0x1000 */
     uint8_t OAM[0xA0];                  /* OAM memory */

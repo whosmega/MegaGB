@@ -23,6 +23,7 @@ typedef struct {
 } MBC_1;
 
 void mbc1_allocate(GB* gb, bool externalRam);
+uint8_t mbc1_readROM(GB* gb, uint16_t addr);
 void mbc1_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte);
 uint8_t mbc1_readExternalRAM(GB* gb, uint16_t addr);
 void mbc1_free(GB* gb);

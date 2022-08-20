@@ -5,7 +5,6 @@
 static inline void mbc1_switchRAMBank(GB* gb, MBC_1* mbc, int bankNumber) {
     /* Each bank is 8KB = 0x2000
      * Checks arent done by this function */
-    memcpy(&gb->MEM[RAM_NN_8KB], &mbc->ramBanks[bankNumber], 0x2000);
 }
 
 static void mbc1_switchROMBankingMode(GB* gb, MBC_1* mbc) {
@@ -79,6 +78,10 @@ void mbc1_allocate(GB* gb, bool externalRam) {
     gb->memControllerType = MBC_TYPE_1;
 
     mbc1_switchROMBankingMode(gb, mbc);
+}
+
+uint8_t mbc1_readROM(GB *gb, uint16_t addr) {
+    return 0xFF;
 }
 
 void mbc1_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte) {

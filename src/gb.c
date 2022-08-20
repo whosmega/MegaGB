@@ -203,10 +203,6 @@ static void bootROM(GB* gb) {
         log_fatal(gb, "Header Checksum Doesn't Match, it is possibly corrupted");
     }
 #endif
-
-    /* Map the cartridge rom to the GBC rom space
-     * occupying bank 0 and 1, a total of 32 KB*/
-    memcpy(&gb->MEM[ROM_N0_16KB], gb->cartridge->allocated, 0x8000);
 }
 
 /* Utility */

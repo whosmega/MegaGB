@@ -14,8 +14,6 @@ void switchROMBank(GB* gb, int bankNumber) {
     uint8_t* allocated = gb->cartridge->allocated;
     uint8_t* bank = &allocated[bankNumber * 0x4000];    /* Size of each bank is 16 KiB */
 
-    memcpy(&gb->MEM[ROM_NN_16KB], bank, 0x4000);             /* Write the contents of the bank */
-
 #ifdef DEBUG_LOGGING
     printf("MBC : Switched ROM Bank to 0x%x\n", bankNumber);
 #endif
@@ -26,7 +24,6 @@ void switchROMBank(GB* gb, int bankNumber) {
  * cases */
 
 void switchRestrictedROMBank(GB* gb, int bankNumber) {
-    memcpy(&gb->MEM[ROM_N0_16KB], gb->cartridge->allocated, 0x4000);
 }
 
 void mbc_allocate(GB* gb) {
@@ -34,11 +31,12 @@ void mbc_allocate(GB* gb) {
     CARTRIDGE_TYPE type = gb->cartridge->cType;
     switch (type) {
         case CARTRIDGE_NONE: break;         /* No MBC */
+/*
         case CARTRIDGE_MBC1: mbc1_allocate(gb, false); break;
         case CARTRIDGE_MBC1_RAM:
         case CARTRIDGE_MBC1_RAM_BATTERY: mbc1_allocate(gb, true); break;
         case CARTRIDGE_MBC2:
-        case CARTRIDGE_MBC2_BATTERY: mbc2_allocate(gb); break;
+        case CARTRIDGE_MBC2_BATTERY: mbc2_allocate(gb); break; */
         default: log_fatal(gb, "MBC/External Hardware Not Supported"); break;
     }
 }
@@ -49,6 +47,15 @@ void mbc_free(GB* gb) {
         case MBC_TYPE_1: mbc1_free(gb); break;
         case MBC_TYPE_2: mbc2_free(gb); break;
         default: break;
+    }
+}
+
+uint8_t mbc_readROM(GB* gb, uint16_t addr) {
+    /* This is used only when an MBC has been identified */
+    switch (gb->memControllerType) {
+        case MBC_TYPE_1: return mbc1_readROM(gb, addr); break;
+        case MBC_TYPE_2: return mbc2_readROM(gb, addr); break;
+        default: return 0xFF;
     }
 }
 
