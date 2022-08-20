@@ -1397,6 +1397,9 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
     } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
         /* Handle the case when OAM has been locked by PPU */
         if (gb->lockOAM || gb->doingDMA) return;
+
+        gb->OAM[addr - OAM_N0_160B] = byte;
+        return;
     }
     gb->MEM[addr] = byte;
 }
@@ -1445,6 +1448,8 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
     } else if (addr >= OAM_N0_160B && addr <= OAM_N0_160B_END) {
         /* Handle the case when OAM has been locked by the PPU */
         if (gb->lockOAM || gb->doingDMA) return 0xFF;
+
+        return gb->OAM[addr - OAM_N0_160B];
     } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
         return 0xFF;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {

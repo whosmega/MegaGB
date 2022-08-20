@@ -847,8 +847,8 @@ static void advanceMode2(GB* gb) {
 
     gb->spriteSize = isLargeSprite;
 
-    uint16_t spriteIndex = OAM_N0_160B + (index * 4);
-    uint8_t spriteY = gb->MEM[spriteIndex];
+    uint16_t spriteIndex = index * 4;
+    uint8_t spriteY = gb->OAM[spriteIndex];
     uint8_t firstRowY, lastRowY;
     bool partial = false;
 
@@ -894,7 +894,7 @@ static void advanceMode2(GB* gb) {
             gb->oamDataBuffer[bufferIndex] = row;
         } else gb->oamDataBuffer[bufferIndex] = gb->MEM[R_LY] - firstRowY;
 
-        memcpy(&gb->oamDataBuffer[bufferIndex+1], &gb->MEM[spriteIndex+1], 3);
+        memcpy(&gb->oamDataBuffer[bufferIndex+1], &gb->OAM[spriteIndex+1], 3);
         gb->oamDataBuffer[bufferIndex+4] = index;
 
         gb->spritesInScanline++;
