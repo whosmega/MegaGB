@@ -1166,7 +1166,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* We perform some actions before writing in some
          * cases */
-        switch (addr) {
+        switch (addr - IO_REG) {
             case R_TIMA : syncTimer(gb); break;
             case R_TMA  : syncTimer(gb); break;
             case R_TAC  : {
@@ -1221,7 +1221,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 #ifdef DEBUG_PRINT_SERIAL_OUTPUT
                           if (byte == 0x81) {
                               printf("%c", gb->IO[R_SB]);
-                              gb->IO[addr] = 0x00;
+                              gb->IO[R_SC] = 0x00;
                           }
 #endif
                           break;
@@ -1398,6 +1398,9 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
         gb->OAM[addr - OAM_N0_160B] = byte;
         return;
+    } else if (addr == R_IE) {
+        gb->IE = byte;
+        return;
     }
     gb->MEM[addr] = byte;
 }
@@ -1454,6 +1457,8 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
         return 0xFF;
     } else if (addr >= ECHO_N0_8KB && addr <= ECHO_N0_8KB_END) {
         return gb->wram[addr - ECHO_N0_8KB];
+    } else if (addr == R_IE) {
+        return gb->IE;
     }
 
     return gb->MEM[addr];

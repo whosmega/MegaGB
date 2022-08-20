@@ -40,7 +40,7 @@ typedef enum {
     IO_REG_END = 0xFF7F,
     HRAM_N0 = 0xFF80,                           /* High Ram or 'fast ram' */
     HRAM_N0_END = 0xFFFE,
-    INTERRUPT_ENABLE = 0xFFFF                   /* register which stores if interrupts are enabled */
+    R_IE = 0xFFFF                               /* register which stores if interrupts are enabled */
 } MEM_ADDR;
 
 typedef enum {
@@ -89,8 +89,7 @@ typedef enum {
     R_BCPD    = 0x69,
     R_OCPS    = 0x6A,
     R_OCPD    = 0x6B,
-    R_SVBK    = 0x70,
-    R_IE      = INTERRUPT_ENABLE
+    R_SVBK    = 0x70
 } HREG;
 
 struct GB {

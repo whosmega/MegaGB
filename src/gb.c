@@ -221,14 +221,14 @@ unsigned long clock_u() {
 /* Timer */
 
 void incrementTIMA(GB* gb) {
-    uint8_t old = gb->MEM[R_TIMA];
+    uint8_t old = gb->IO[R_TIMA];
 
     if (old == 0xFF) {
         /* Overflow */
-        gb->MEM[R_TIMA] = gb->MEM[R_TMA];
+        gb->IO[R_TIMA] = gb->IO[R_TMA];
         requestInterrupt(gb, INTERRUPT_TIMER);
     } else {
-        gb->MEM[R_TIMA]++;
+        gb->IO[R_TIMA]++;
     }
 }
 
@@ -261,12 +261,12 @@ void syncTimer(GB* gb) {
         /* 'Rewind' the last timer sync in case the timer should have been
          * incremented on an earlier cycle */
         gb->lastDIVSync = cycles - (cyclesElapsedDIV - T_CYCLES_PER_DIV);
-        gb->MEM[R_DIV]++;
+        gb->IO[R_DIV]++;
     }
 
     /* Sync TIMA */
     unsigned int cyclesElapsedTIMA = cycles - gb->lastTIMASync;
-    uint8_t timerControl    =  gb->MEM[R_TAC];
+    uint8_t timerControl    =  gb->IO[R_TAC];
     uint8_t timerEnabled    =  (timerControl >> 2) & 1;
     uint8_t timerFrequency  =  timerControl & 0b00000011;
 
@@ -347,7 +347,7 @@ static void syncDMA(GB* gb) {
         uint8_t addressLow = currentSpriteIndex * 4;
 
         for (int i = 0; i < 4; i++) {
-            gb->MEM[OAM_N0_160B + addressLow + i] = readAddr(gb, gb->dmaSource + addressLow + i);
+            gb->OAM[addressLow + i] = readAddr(gb, gb->dmaSource + addressLow + i);
         }
     }
 
@@ -521,24 +521,24 @@ void updateJoypadRegBuffer(GB* gb, JOYPAD_SELECT mode) {
         case JOYPAD_SELECT_DIRECTION_ACTION:
             /* The program has selected action and direction both,
              * so my best guess is to just bitwise OR them and set the value */
-            gb->MEM[R_P1_JOYP] &= 0xF0;
-            gb->MEM[R_P1_JOYP] |= ~(~gb->joypadDirectionBuffer | ~gb->joypadActionBuffer) & 0xF;
+            gb->IO[R_P1_JOYP] &= 0xF0;
+            gb->IO[R_P1_JOYP] |= ~(~gb->joypadDirectionBuffer | ~gb->joypadActionBuffer) & 0xF;
             break;
         case JOYPAD_SELECT_ACTION:
             /* Select Action */
-            gb->MEM[R_P1_JOYP] &= 0xF0;
-            gb->MEM[R_P1_JOYP] |= gb->joypadActionBuffer & 0xF;
+            gb->IO[R_P1_JOYP] &= 0xF0;
+            gb->IO[R_P1_JOYP] |= gb->joypadActionBuffer & 0xF;
 
             break;
         case JOYPAD_SELECT_DIRECTION:
             /* Select Direction */
-            gb->MEM[R_P1_JOYP] &= 0xF0;
-            gb->MEM[R_P1_JOYP] |= gb->joypadDirectionBuffer & 0xF;
+            gb->IO[R_P1_JOYP] &= 0xF0;
+            gb->IO[R_P1_JOYP] |= gb->joypadDirectionBuffer & 0xF;
 
             break;
         case JOYPAD_SELECT_NONE:
             /* Select None */
-            gb->MEM[R_P1_JOYP] &= 0xF0;
+            gb->IO[R_P1_JOYP] &= 0xF0;
             break;
     }
 }

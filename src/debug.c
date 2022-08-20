@@ -17,8 +17,8 @@ void log_warning(GB* gb, const char* string) {
 }
 
 static uint16_t read2Bytes(GB* gb) {
-    uint8_t b1 = gb->MEM[gb->PC + 1];
-    uint8_t b2 = gb->MEM[gb->PC + 2];
+    uint8_t b1 = readAddr(gb, gb->PC + 1);
+    uint8_t b2 = readAddr(gb, gb->PC + 2);
     uint16_t D16 = (b2 << 8) | b1;
     return D16;
 }
@@ -41,7 +41,7 @@ static void d16(GB* gb, char* ins) {
 }
 
 static void d8(GB* gb, char* ins) {
-    printf("%s (0x%02x)\n", ins, gb->MEM[gb->PC + 1]);
+    printf("%s (0x%02x)\n", ins, readAddr(gb, gb->PC + 1));
 }
 
 static void a16(GB* gb, char* ins) {
@@ -49,7 +49,7 @@ static void a16(GB* gb, char* ins) {
 }
 
 static void r8(GB* gb, char* ins) {
-    printf("%s (%d)\n", ins, (int8_t)gb->MEM[gb->PC + 1]);
+    printf("%s (%d)\n", ins, (int8_t)readAddr(gb, gb->PC + 1));
 }
 
 void printCBInstruction(GB* gb, uint8_t byte) {
@@ -63,11 +63,11 @@ void printCBInstruction(GB* gb, uint8_t byte) {
     printf("[%ld]", gb->clock);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
-    printf("[sel:%x|", (gb->MEM[R_P1_JOYP] >> 4) & 0x3);
-    printf("sig:%x]", (gb->MEM[R_P1_JOYP] & 0b00001111));
+    printf("[sel:%x|", (gb->IO[R_P1_JOYP] >> 4) & 0x3);
+    printf("sig:%x]", (gb->IO[R_P1_JOYP] & 0b00001111));
 #endif
 #ifdef DEBUG_PRINT_TIMERS
-    printf("[%x|%x|%x|%x]", gb->MEM[R_DIV], gb->MEM[R_TIMA], gb->MEM[R_TMA], gb->MEM[R_TAC]);
+    printf("[%x|%x|%x|%x]", gb->IO[R_DIV], gb->IO[R_TIMA], gb->IO[R_TMA], gb->IO[R_TAC]);
 #endif
     printf(" %5s", "");
 
@@ -343,15 +343,15 @@ void printInstruction(GB* gb) {
     printf("[%ld]", gb->clock * 4);
 #endif
 #ifdef DEBUG_PRINT_JOYPAD_REG
-    printf("[sel:%x|", (gb->MEM[R_P1_JOYP] >> 4) & 0x3);
-    printf("sig:%x]", (gb->MEM[R_P1_JOYP] & 0b00001111));
+    printf("[sel:%x|", (gb->IO[R_P1_JOYP] >> 4) & 0x3);
+    printf("sig:%x]", (gb->IO[R_P1_JOYP] & 0b00001111));
 #endif
 #ifdef DEBUG_PRINT_TIMERS
-    printf("[%x|%x|%x|%x]", gb->MEM[R_DIV], gb->MEM[R_TIMA], gb->MEM[R_TMA], gb->MEM[R_TAC]);
+    printf("[%x|%x|%x|%x]", gb->IO[R_DIV], gb->IO[R_TIMA], gb->IO[R_TMA], gb->IO[R_TAC]);
 #endif
     printf(" %5s", "");
 
-    switch (gb->MEM[gb->PC]) {
+    switch (readAddr(gb, gb->PC)) {
         case 0x00: return simpleInstruction(gb, "NOP");
         case 0x01: return d16(gb, "LD BC, d16");
         case 0x02: return simpleInstruction(gb, "LD (BC), A");

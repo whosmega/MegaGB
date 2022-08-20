@@ -43,28 +43,28 @@ static void updateSTAT(GB* gb, STAT_UPDATE_TYPE type) {
     /* This function updates the STAT register depending on the type of update
      * that is requested */
 
-#define SWITCH_MODE(mode) gb->MEM[R_STAT] &= ~0x3; \
-    gb->MEM[R_STAT] |= mode
+#define SWITCH_MODE(mode) gb->IO[R_STAT] &= ~0x3; \
+    gb->IO[R_STAT] |= mode
 
     switch (type) {
         case STAT_UPDATE_LY_LYC:
-            if (gb->MEM[R_LY] == gb->MEM[R_LYC]) {
+            if (gb->IO[R_LY] == gb->IO[R_LYC]) {
                 /* Set bit 2 */
-                SET_BIT(gb->MEM[R_STAT], 2);
+                SET_BIT(gb->IO[R_STAT], 2);
 
-                if (GET_BIT(gb->MEM[R_STAT], 6)) {
+                if (GET_BIT(gb->IO[R_STAT], 6)) {
                     /* If bit 6 is set, we can trigger the STAT interrupt */
                     requestInterrupt(gb, INTERRUPT_LCD_STAT);
                 }
             } else {
                 /* Clear bit 2 */
-                CLEAR_BIT(gb->MEM[R_STAT], 2);
+                CLEAR_BIT(gb->IO[R_STAT], 2);
             }
             break;
         case STAT_UPDATE_SWITCH_MODE0:
             /* Switch to mode 0 */
             SWITCH_MODE(PPU_MODE_0);
-            if (GET_BIT(gb->MEM[R_STAT], 3)) {
+            if (GET_BIT(gb->IO[R_STAT], 3)) {
                 /* If mode 0 interrupt source is enabled */
                 requestInterrupt(gb, INTERRUPT_LCD_STAT);
             }
@@ -73,14 +73,14 @@ static void updateSTAT(GB* gb, STAT_UPDATE_TYPE type) {
             /* Switch to mode 1 */
             SWITCH_MODE(PPU_MODE_1);
 
-            if (GET_BIT(gb->MEM[R_STAT], 4)) {
+            if (GET_BIT(gb->IO[R_STAT], 4)) {
                 requestInterrupt(gb, INTERRUPT_LCD_STAT);
             }
             break;
         case STAT_UPDATE_SWITCH_MODE2:
             SWITCH_MODE(PPU_MODE_2);
 
-            if (GET_BIT(gb->MEM[R_STAT], 5)) {
+            if (GET_BIT(gb->IO[R_STAT], 5)) {
                 requestInterrupt(gb, INTERRUPT_LCD_STAT);
             }
             break;
@@ -130,7 +130,7 @@ static uint8_t* getCurrentFetcherTileData(GB* gb) {
      *
      * can be BG/Window/Sprite */
 
-    uint16_t tileMapBaseAddress = GET_BIT(gb->MEM[R_LCDC], 3) ? 0x1C00 : 0x1800;
+    uint16_t tileMapBaseAddress = GET_BIT(gb->IO[R_LCDC], 3) ? 0x1C00 : 0x1800;
 
     /* Each row takes 2 bytes from the tile data of every tile per scanline
      * which 2 bytes are taken is determined by the Y position of the fetcher,
@@ -175,7 +175,7 @@ static uint8_t* getCurrentFetcherTileData(GB* gb) {
         /* Get tile data for window/bg */
         uint8_t tileIndex = vramBank0Pointer[gb->fetcherTileAddress];
         /* Find out the addressing method to use */
-        bool method8k = GET_BIT(gb->MEM[R_LCDC], 4);
+        bool method8k = GET_BIT(gb->IO[R_LCDC], 4);
 
         if (method8k) {
             /* $8000 method */
@@ -235,7 +235,7 @@ static void getPixelColor_DMG(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
     int paletteReg = R_BGP;
     if (isSprite) paletteReg = pixel.colorPalette == 0 ? R_OBP0 : R_OBP1;
 
-    uint8_t shadeId = (gb->MEM[paletteReg] >> (pixel.colorID * 2)) & 0b00000011;
+    uint8_t shadeId = (gb->IO[paletteReg] >> (pixel.colorID * 2)) & 0b00000011;
     uint8_t shade = 0x00;
 
     switch (shadeId) {
@@ -288,7 +288,7 @@ static void renderPixel(GB* gb) {
                 }
             } else if (gb->emuMode == EMU_CGB) {
                 /* For CGB, we've got additional 2 priority flags to check */
-                if (!GET_BIT(gb->MEM[R_LCDC], 0)) {
+                if (!GET_BIT(gb->IO[R_LCDC], 0)) {
                     /* Sprites will be displayed on top because master priority */
                     pixel = spritePixel;
                     isSprite = true;
@@ -333,7 +333,7 @@ static void renderPixel(GB* gb) {
 static uint8_t* getSprite(GB* gb) {
     if (gb->spritesInScanline == 0) return NULL;
     /* If OBJ isnt enabled, its instantly aborted */
-    if (!(GET_BIT(gb->MEM[R_LCDC], 1))) return NULL;
+    if (!(GET_BIT(gb->IO[R_LCDC], 1))) return NULL;
     /* Read OAM Memory to find a sprite that can be rendered at the current X and Y of the
      * fetcher if it is not found we return NULL */
 
@@ -350,7 +350,6 @@ static uint8_t* getSprite(GB* gb) {
 
         int startX = spriteX - 8;
 
-        // if (gb->MEM[R_LY] == 72 && startX == gb->nextPushPixelX && startX == 72) printf("\nEPIC\n");
         if (gb->nextPushPixelX == startX || (gb->nextPushPixelX == 0 && startX < 0)) {
             if (gb->isLastSpriteOverlap && startX == gb->lastSpriteOverlapX) {
                 if (gb->oamDataBuffer[spriteIndex + 4] > gb->lastSpriteOverlapPushIndex)
@@ -432,8 +431,8 @@ static void pushPixels(GB* gb) {
             break;
         }
 
-        if (GET_BIT(gb->MEM[R_LCDC], 5) &&
-                gb->lyWasWY && !gb->renderingWindow && (gb->nextPushPixelX == gb->MEM[R_WX] - 7 || gb->MEM[R_WX] < 7)) {
+        if (GET_BIT(gb->IO[R_LCDC], 5) &&
+                gb->lyWasWY && !gb->renderingWindow && (gb->nextPushPixelX == gb->IO[R_WX] - 7 || gb->IO[R_WX] < 7)) {
             /* Window layer is enabled, and the current pixel to render is a window
              * pixel, if a scanline has window tiles, it takes 6 more cycles anyhow
              * as the BG fetch is aborted
@@ -449,12 +448,12 @@ static void pushPixels(GB* gb) {
              * This means the current cycle does the job of sleeping automatically */
             gb->currentFetcherTask = 1;
 
-            if (gb->MEM[R_WX] <= 7) {
-                if (gb->MEM[R_WX] == 0 && gb->pixelsToDiscard != 0) {
+            if (gb->IO[R_WX] <= 7) {
+                if (gb->IO[R_WX] == 0 && gb->pixelsToDiscard != 0) {
                     /* Shorten mode 3 by 1 dot (bug) */
                     gb->cyclesSinceLastMode--;
                 }
-                gb->pixelsToDiscard = 7 - gb->MEM[R_WX];
+                gb->pixelsToDiscard = 7 - gb->IO[R_WX];
             } else {
                 gb->pixelsToDiscard = 0;
             }
@@ -489,7 +488,7 @@ static void pushPixels(GB* gb) {
         } else if (gb->emuMode == EMU_DMG) {
             pixel.colorPalette = 0;
             /* On DMG, if background/window is disabled through lcdc, bgp color 0 is rendered */
-            if (GET_BIT(gb->MEM[R_LCDC], 0)) {
+            if (GET_BIT(gb->IO[R_LCDC], 0)) {
                 pixel.colorID = (higherBit << 1) | lowerBit;
             } else {
                 pixel.colorID = 0;
@@ -683,7 +682,7 @@ static void advanceFetcher(GB* gb) {
                  * scanline begins, mid scanline writes to window enable bit in lcdc are supposed
                  * to make it switch back to bg tiles for the scanline but we dont emulate that
                  * yet */
-                if (GET_BIT(gb->MEM[R_LCDC], 6)) {
+                if (GET_BIT(gb->IO[R_LCDC], 6)) {
                     tileMapBaseAddress = 0x1C00;
                 } else {
                     tileMapBaseAddress = 0x1800;
@@ -708,7 +707,7 @@ static void advanceFetcher(GB* gb) {
             } else {
                 /* Fetch BG Tiles */
                 /* There are two tile maps, check which one to use */
-                if (GET_BIT(gb->MEM[R_LCDC], 3)) {
+                if (GET_BIT(gb->IO[R_LCDC], 3)) {
                     tileMapBaseAddress = 0x1C00;
                 } else {
                     tileMapBaseAddress = 0x1800;
@@ -716,13 +715,11 @@ static void advanceFetcher(GB* gb) {
 
                 /* Fetcher X and Y are not the final x and y coordinates we get the tile from
                  * First scrolling has to be calculated */
-                uint8_t scx = gb->MEM[R_SCX] & ~0b00000111;         // clear the last 3 bits
+                uint8_t scx = gb->IO[R_SCX] & ~0b00000111;         // clear the last 3 bits
                 uint8_t x = (scx/8 + gb->fetcherX);
                 x &= 0x1F;                                          // wrap it around if it exceeds
-                uint8_t y = (uint16_t)(gb->fetcherY + gb->MEM[R_SCY]) & 0xFF;
-
+                uint8_t y = (uint16_t)(gb->fetcherY + gb->IO[R_SCY]) & 0xFF;
                 gb->fetcherTileAddress = tileMapBaseAddress + x + (y / 8) * 32;
-                // printf("taddr %04x, tindx %02x, tattr %02x, x %d, y %d \n", gb->fetcherTileAddress, gb->MEM[VRAM_N0_8KB + gb->fetcherTileAddress], gb->fetcherTileAttributes, x, y);
 
                 if (gb->emuMode == EMU_CGB) {
                     /* Handle tile attributes if on a CGB
@@ -751,7 +748,7 @@ static void advanceFetcher(GB* gb) {
             } else {
                 /* For BG tiles
                  * Now retrieve the lower byte of this row */
-                currentRowInTile = (gb->fetcherY + gb->MEM[R_SCY]) % 8;
+                currentRowInTile = (gb->fetcherY + gb->IO[R_SCY]) % 8;
             }
 
             /* Vertical flip works for sprites on DMG and CGB, and it works for BG/Window
@@ -779,7 +776,7 @@ static void advanceFetcher(GB* gb) {
                 currentRowInTile = gb->windowYCounter % 8;
             } else {
                 /* BG Tiles */
-                currentRowInTile = (gb->fetcherY + gb->MEM[R_SCY]) % 8;
+                currentRowInTile = (gb->fetcherY + gb->IO[R_SCY]) % 8;
             }
 
             if (gb->renderingSprites || gb->emuMode == EMU_CGB) {
@@ -842,7 +839,7 @@ static void advanceFetcher(GB* gb) {
 static void advanceMode2(GB* gb) {
     if (gb->spritesInScanline >= 10) return;
 
-    uint8_t isLargeSprite = GET_BIT(gb->MEM[R_LCDC], 2);
+    uint8_t isLargeSprite = GET_BIT(gb->IO[R_LCDC], 2);
     uint8_t index = (gb->cyclesSinceLastMode / 2) - 1;
 
     gb->spriteSize = isLargeSprite;
@@ -879,7 +876,7 @@ static void advanceMode2(GB* gb) {
         }
     }
 
-    if (gb->MEM[R_LY] >= firstRowY && gb->MEM[R_LY] <= lastRowY) {
+    if (gb->IO[R_LY] >= firstRowY && gb->IO[R_LY] <= lastRowY) {
         /* Sprite has to be rendered on this scanline */
         uint8_t bufferIndex = gb->spritesInScanline * 5;
 
@@ -888,11 +885,11 @@ static void advanceMode2(GB* gb) {
          * so it doesnt have to be recalculated */
         if (partial) {
             uint8_t row;
-            if (isLargeSprite) row = (15 - lastRowY) + gb->MEM[R_LY];
-            else row = (7 - lastRowY) + gb->MEM[R_LY];
+            if (isLargeSprite) row = (15 - lastRowY) + gb->IO[R_LY];
+            else row = (7 - lastRowY) + gb->IO[R_LY];
 
             gb->oamDataBuffer[bufferIndex] = row;
-        } else gb->oamDataBuffer[bufferIndex] = gb->MEM[R_LY] - firstRowY;
+        } else gb->oamDataBuffer[bufferIndex] = gb->IO[R_LY] - firstRowY;
 
         memcpy(&gb->oamDataBuffer[bufferIndex+1], &gb->OAM[spriteIndex+1], 3);
         gb->oamDataBuffer[bufferIndex+4] = index;
@@ -922,12 +919,12 @@ static void advancePPU(GB* gb) {
             }
 
             if (gb->cyclesSinceLastMode == 1) {
-                if (!GET_BIT(gb->MEM[R_LCDC], 5)) break;
+                if (!GET_BIT(gb->IO[R_LCDC], 5)) break;
 
-                uint8_t wx = gb->MEM[R_WX];
-                uint8_t wy = gb->MEM[R_WY];
+                uint8_t wx = gb->IO[R_WX];
+                uint8_t wy = gb->IO[R_WY];
                 /* On the first cycle, read WY */
-                if (wy == gb->MEM[R_LY]) {
+                if (wy == gb->IO[R_LY]) {
                     /* TODO - Still need to confirm if the check is done with the internal LY
                      * counter or what the LY register reads, since LY is incremented 6 cycles
                      * earlier, its safe to assume the latter for now */
@@ -956,8 +953,8 @@ static void advancePPU(GB* gb) {
                 /* If SCX % 8 is not zero at the start of a scanline, the ppu pauses for as many
                  * dots as the remainder pixels,
                  * we pause the first dot aswell */
-                uint8_t remainderPixels = gb->MEM[R_SCX] % 8;
-                gb->pixelsToDiscard = gb->MEM[R_SCX] & 0b00000111;
+                uint8_t remainderPixels = gb->IO[R_SCX] % 8;
+                gb->pixelsToDiscard = gb->IO[R_SCX] & 0b00000111;
                 gb->pauseDotClock = 0;
 
                 if (remainderPixels != 0) {
@@ -1026,7 +1023,7 @@ static void advancePPU(GB* gb) {
 
             } else if (gb->cyclesSinceLastMode == gb->hblankDuration - 6) {
                 /* LY register gets incremented 6 dots before the *true* increment */
-                gb->MEM[R_LY]++;
+                gb->IO[R_LY]++;
                 updateSTAT(gb, STAT_UPDATE_LY_LYC);
             }
 
@@ -1044,15 +1041,15 @@ static void advancePPU(GB* gb) {
                 /* LY register Increments 6 cycles before *true* LY, only when
                  * the line is other than 153, because on line 153 it resets early
                  * LY also stays 0 at the end of line 153 so dont increment when its 0 */
-                if (gb->MEM[R_LY] != 0) {
-                    gb->MEM[R_LY]++;
+                if (gb->IO[R_LY] != 0) {
+                    gb->IO[R_LY]++;
                 }
                 updateSTAT(gb, STAT_UPDATE_LY_LYC);
             } else if (gb->cyclesSinceLastMode == T_CYCLES_PER_VBLANK) {
                 /* vblank has ended */
                 switchModePPU(gb, PPU_MODE_2);
             } else if (gb->cyclesSinceLastMode == cycleAtLYReset) {
-                gb->MEM[R_LY] = 0;
+                gb->IO[R_LY] = 0;
             } else if (gb->cyclesSinceLastMode == cycleAtLYCInterrupt) {
                 /* The STAT update can be issued now */
                 updateSTAT(gb, STAT_UPDATE_LY_LYC);
@@ -1085,7 +1082,7 @@ void disablePPU(GB* gb) {
     }
 
     gb->ppuEnabled = false;
-    gb->MEM[R_LY] = 0;
+    gb->IO[R_LY] = 0;
 
     /* Set STAT mode to 0 */
     switchModePPU(gb, PPU_MODE_0);
@@ -1188,7 +1185,7 @@ void syncDisplay(GB* gb, unsigned int cycles) {
     for (unsigned int i = 0; i < cycles; i++) {
         gb->cyclesSinceLastFrame++;
 #ifdef DEBUG_PRINT_PPU
-        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->MEM[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
+        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->IO[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
 #endif
         advancePPU(gb);
 
