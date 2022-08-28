@@ -1081,6 +1081,10 @@ void disablePPU(GB* gb) {
         printf("[WARNING] Turning off LCD when not in VBlank can damage a real gameboy\n");
     }
 
+    /* On CGB and DMG, the screen goes blank or white when the PPU is disabled */
+    SDL_SetRenderDrawColor(gb->sdl_renderer, 255, 255, 255, 255);
+    SDL_RenderClear(gb->sdl_renderer);
+
     gb->ppuEnabled = false;
     gb->IO[R_LY] = 0;
 
@@ -1097,11 +1101,6 @@ void clearFIFO(FIFO *fifo) {
 }
 
 void pushFIFO(FIFO* fifo, FIFO_Pixel pixel) {
-    if (fifo->count == FIFO_MAX_COUNT) {
-        // printf("FIFO Error : Pushing beyond max limit\n");
-        return;
-    }
-
     fifo->contents[fifo->nextPushIndex] = pixel;
     fifo->count++;
     fifo->nextPushIndex++;
@@ -1114,12 +1113,6 @@ void pushFIFO(FIFO* fifo, FIFO_Pixel pixel) {
 
 FIFO_Pixel popFIFO(FIFO* fifo) {
     FIFO_Pixel pixel;
-
-    if (fifo->count == 0) {
-        // printf("FIFO Error : Popping when no pixels are pushed\n");
-        return pixel;
-    }
-
     pixel = fifo->contents[fifo->nextPopIndex];
     fifo->count--;
     fifo->nextPopIndex++;
@@ -1134,11 +1127,6 @@ FIFO_Pixel popFIFO(FIFO* fifo) {
 FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index) {
     FIFO_Pixel pixel;
 
-    if (fifo->count < index + 1) {
-        // printf("FIFO Error : Peek index out of range\n");
-        return pixel;
-    }
-
     /* Handle wrapping */
     if (fifo->nextPopIndex + index >= FIFO_MAX_COUNT)
         pixel = fifo->contents[(fifo->nextPopIndex + index) - FIFO_MAX_COUNT];
@@ -1148,58 +1136,38 @@ FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index) {
 }
 
 void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index) {
-    if (fifo->count < index + 1) {
-        // printf("FIFO Error : Insert index out of range\n");
-        return;
-    }
-
     if (fifo->nextPopIndex + index >= FIFO_MAX_COUNT)
         fifo->contents[(fifo->nextPopIndex + index) - FIFO_MAX_COUNT] = pixel;
 
     else fifo->contents[fifo->nextPopIndex + index] = pixel;
 }
 
-void syncDisplay(GB* gb, unsigned int cycles) {
+void syncDisplay(GB* gb) {
     /* We sync the display by running the PPU for the correct number of
-     * dots (1 dot = 1 tcycle in normal speed) */
-    if (!gb->ppuEnabled) {
-        /* Keep locking to framerate even if PPU is off */
-        for (unsigned int i = 0; i < cycles; i++) {
+     * dots (1 dot = 1 tcycle in normal speed), we run for 4 dots every sync */ 
+    if (gb->ppuEnabled) {
+        for (int i = 0; i < 4; i++) {
             gb->cyclesSinceLastFrame++;
-
-            if (gb->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
-                gb->cyclesSinceLastFrame = 0;
-
-                /* On CGB and DMG, the screen goes blank or white when the PPU is disabled */
-                SDL_SetRenderDrawColor(gb->sdl_renderer, 255, 255, 255, 255);
-                SDL_RenderClear(gb->sdl_renderer);
-                SDL_RenderPresent(gb->sdl_renderer);
-
-                lockToFramerate(gb);
-            }
+    #ifdef DEBUG_PRINT_PPU
+            printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->IO[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
+    #endif
+            advancePPU(gb);
         }
-
-        return;
+    } else {
+        gb->cyclesSinceLastFrame += 4;
     }
 
-    for (unsigned int i = 0; i < cycles; i++) {
-        gb->cyclesSinceLastFrame++;
-#ifdef DEBUG_PRINT_PPU
-        printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->IO[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
+    if (gb->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
+        /* End of frame */
+        gb->cyclesSinceLastFrame = 0;
+        /* Draw frame */
+
+        handleSDLEvents(gb);
+        if (!gb->skipFrame) {
+            SDL_RenderPresent(gb->sdl_renderer);
+        } else gb->skipFrame = false; 
+#ifndef DEBUG_UNLOCK_FRAMERATE
+        lockToFramerate(gb);
 #endif
-        advancePPU(gb);
-
-        if (gb->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {
-            /* End of frame */
-            gb->cyclesSinceLastFrame = 0;
-            /* Draw frame */
-
-            if (gb->skipFrame) {
-                gb->skipFrame = false;
-            } else {
-                SDL_RenderPresent(gb->sdl_renderer);
-            }
-            lockToFramerate(gb);
-        }
     }
 }

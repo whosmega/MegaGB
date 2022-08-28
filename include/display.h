@@ -8,6 +8,7 @@
 
 #define FIFO_MAX_COUNT 8
 
+#define T_CYCLES_PER_SEC 4194304
 #define T_CYCLES_PER_FRAME 70224
 #define T_CYCLES_PER_SCANLINE 456
 #define DEFAULT_FRAMERATE 59.7275
@@ -73,7 +74,7 @@ FIFO_Pixel peekFIFO(FIFO* fifo, uint8_t index);
 void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index);
 void clearFIFO(FIFO* fifo);
 
-void syncDisplay(struct GB* gb, unsigned int cycles);
+void syncDisplay(struct GB* gb);
 void enablePPU(struct GB* gb);
 void disablePPU(struct GB* gb);
 

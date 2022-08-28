@@ -362,12 +362,7 @@ static void run(GB* gb) {
 
     while (gb->run) {
         /* Handle Events */
-        handleSDLEvents(gb);
-
-        for (int i = 0; (i < 1000) && gb->run; i++) {
-            /* Run the next CPU instruction */
-            dispatch(gb);
-        }
+        dispatch(gb);
     }
 }
 
@@ -381,7 +376,7 @@ void cyclesSync_4(GB* gb) {
      */
     gb->clock += 4;
 
-    syncDisplay(gb, 4);
+    syncDisplay(gb);
 
     if (gb->doingDMA) syncDMA(gb);
     if (gb->scheduleDMA) {
@@ -600,6 +595,9 @@ void unpauseEmulator(GB* gb) {
 void stopEmulator(GB* gb) {
 #ifdef DEBUG_LOGGING
     double totalElapsed = (clock_u() - gb->ticksAtStartup) / 1e6;
+    unsigned long long ticksPerSec = round(gb->clock / totalElapsed);
+
+    printf("Ticks Per Second : %llu, x%g faster than normal speed\n", ticksPerSec, (double)ticksPerSec/(double)T_CYCLES_PER_SEC);
     printf("Time Elapsed : %g\n", totalElapsed);
     printf("Stopping Emulator Now\n");
     printf("Cleaning allocations\n");

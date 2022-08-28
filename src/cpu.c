@@ -1403,12 +1403,10 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
         return;
     } else if (addr >= UNUSABLE_N0 && addr <= UNUSABLE_N0_END) {
 #ifdef DEBUG_LOGGING
-        printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
+        // printf("[WARNING] Attempt to write to address 0x%x (read only)\n", addr);
 #endif
         return;
     } 
-    
-    printf("dropped\n");
 }
 
 uint8_t readAddr(GB* gb, uint16_t addr) {
