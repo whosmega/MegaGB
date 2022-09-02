@@ -13,11 +13,11 @@
 // #define DEBUG_PRINT_JOYPAD_REG
 
 // #define DEBUG_PRINT_CARTRIDGE_INFO
-#define DEBUG_LOGGING
+// #define DEBUG_LOGGING
 // #define DEBUG_MEM_LOGGING
 // #define DEBUG_PRINT_SERIAL_OUTPUT
 #define DEBUG_SUPPORT_SLOW_EMULATION
-#define DEBUG_UNLOCK_FRAMERATE
+// #define DEBUG_UNLOCK_FRAMERATE
 
 /* Stops running when encounters opcode 0x40, LD B, B */
 // #define DEBUG_LDBB_BREAKPOINT

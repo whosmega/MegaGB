@@ -360,7 +360,7 @@ static void run(GB* gb) {
     /* We do input polling every 1000 cpu ticks */
     gb->ticksAtStartup = clock_u();
 
-    while (gb->run) {
+    for (;gb->run;) {
         /* Handle Events */
         dispatch(gb);
     }

@@ -1105,10 +1105,7 @@ void pushFIFO(FIFO* fifo, FIFO_Pixel pixel) {
     fifo->count++;
     fifo->nextPushIndex++;
 
-    if (fifo->nextPushIndex == FIFO_MAX_COUNT) {
-        /* Wrap it around */
-        fifo->nextPushIndex = 0;
-    }
+    fifo->nextPushIndex &= 7;
 }
 
 FIFO_Pixel popFIFO(FIFO* fifo) {
@@ -1117,9 +1114,9 @@ FIFO_Pixel popFIFO(FIFO* fifo) {
     fifo->count--;
     fifo->nextPopIndex++;
 
-    if (fifo->nextPopIndex == FIFO_MAX_COUNT) {
-        fifo->nextPopIndex = 0;
-    }
+    /* If its 8, reset it to 0 */
+    fifo->nextPopIndex &= 7;
+
 
     return pixel;
 }
