@@ -28,7 +28,8 @@ typedef enum {
 
 void mbc_allocate(struct GB* gb);
 void mbc_free(struct GB* gb);
-uint8_t mbc_readROM(struct GB* gb, uint16_t addr);
+uint8_t mbc_readROM_N0(struct GB* gb, uint16_t addr);
+uint8_t mbc_readROM_NN(struct GB* gb, uint16_t addr);
 void mbc_writeExternalRAM(struct GB* gb, uint16_t addr, uint8_t byte);
 uint8_t mbc_readExternalRAM(struct GB* gb, uint16_t addr);
 void mbc_interceptROMWrite(struct GB* gb, uint16_t addr, uint8_t byte);

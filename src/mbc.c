@@ -19,22 +19,16 @@ void switchROMBank(GB* gb, int bankNumber) {
 #endif
 }
 
-/* This function switches the restricted ROM bank which is normally
- * considered 'unbankable', but it needs to be remapped in special
- * cases */
-
-void switchRestrictedROMBank(GB* gb, int bankNumber) {
-}
-
 void mbc_allocate(GB* gb) {
     /* Detect the correct MBC that needs to be used and allocate it */
     CARTRIDGE_TYPE type = gb->cartridge->cType;
     switch (type) {
         case CARTRIDGE_NONE: break;         /* No MBC */
-/*
+
         case CARTRIDGE_MBC1: mbc1_allocate(gb, false); break;
         case CARTRIDGE_MBC1_RAM:
         case CARTRIDGE_MBC1_RAM_BATTERY: mbc1_allocate(gb, true); break;
+/*
         case CARTRIDGE_MBC2:
         case CARTRIDGE_MBC2_BATTERY: mbc2_allocate(gb); break;
 */
@@ -51,11 +45,18 @@ void mbc_free(GB* gb) {
     }
 }
 
-uint8_t mbc_readROM(GB* gb, uint16_t addr) {
+uint8_t mbc_readROM_N0(GB* gb, uint16_t addr) {
     /* This is used only when an MBC has been identified */
     switch (gb->memControllerType) {
-        case MBC_TYPE_1: return mbc1_readROM(gb, addr); break;
-        case MBC_TYPE_2: return mbc2_readROM(gb, addr); break;
+        case MBC_TYPE_1: return mbc1_readROM_N0(gb, addr);
+        // case MBC_TYPE_2: return mbc2_readROM(gb, addr);
+        default: return 0xFF;
+    }
+}
+
+uint8_t mbc_readROM_NN(GB* gb, uint16_t addr) {
+    switch (gb->memControllerType) {
+        case MBC_TYPE_1: return mbc1_readROM_NN(gb, addr);
         default: return 0xFF;
     }
 }

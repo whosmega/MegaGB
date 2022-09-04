@@ -1150,7 +1150,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
         return;
     } else if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* External RAM write request */
-        mbc_writeExternalRAM(gb, addr, byte);
+        mbc_writeExternalRAM(gb, addr - RAM_NN_8KB, byte);
         return;
     } else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* We perform some actions before writing in some
@@ -1369,6 +1369,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                              break;
                          }
             case R_DMA: scheduleDMATransfer(gb, byte); break;
+            case R_LY: return;
         }
 
         gb->IO[addr - IO_REG] = byte;
@@ -1410,12 +1411,18 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 }
 
 uint8_t readAddr(GB* gb, uint16_t addr) {
-    if (addr >= ROM_N0_16KB && addr <= ROM_NN_16KB_END) {
+    if (addr >= ROM_N0_16KB && addr <= ROM_N0_16KB_END) {
         if (gb->memControllerType == MBC_NONE) {
             return gb->cartridge->allocated[addr];
         }
 
-        return mbc_readROM(gb, addr);
+        return mbc_readROM_N0(gb, addr);
+    } else if (addr >= ROM_NN_16KB && addr <= ROM_NN_16KB_END) {
+        if (gb->memControllerType == MBC_NONE) {
+            return gb->cartridge->allocated[addr];
+        }
+
+        return mbc_readROM_NN(gb, addr - ROM_NN_16KB);
     } else if (addr >= WRAM_N0_4KB && addr <= WRAM_NN_4KB_END) {
         if (addr >= WRAM_NN_4KB) {
             /* Respect banking */
@@ -1426,7 +1433,7 @@ uint8_t readAddr(GB* gb, uint16_t addr) {
         return gb->wram[addr - WRAM_N0_4KB];
     } else if (addr >= RAM_NN_8KB && addr <= RAM_NN_8KB_END) {
         /* Read from external RAM */
-        return mbc_readExternalRAM(gb, addr);
+        return mbc_readExternalRAM(gb, addr - RAM_NN_8KB);
     }  else if (addr >= IO_REG && addr <= IO_REG_END) {
         /* If we have IO registers to read from, we perform some
          * actions before the read is done in some cases
