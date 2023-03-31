@@ -52,9 +52,11 @@ debug.o : include/gb.h include/debug.h \
 		 src/debug.c
 	$(CC) -c src/debug.c $(CFLAGS)
 # --------------------------------------------------------------------
-tests: edge_sprite.o
+tests: edge_sprite.o sound.o
 	rgblink -o edge_sprite.gb edge_sprite.o
+	rgblink -o sound.gb sound.o
 	rgbfix -v -p 0xFF edge_sprite.gb
+	rgbfix -v -p 0xFF sound.gb
 
 	mkdir -p roms_bin
 	mv *.o roms_bin/
@@ -63,6 +65,9 @@ tests: edge_sprite.o
 
 edge_sprite.o :
 	rgbasm $(ASMFLAGS) -L -o edge_sprite.o debug/test_suite/edge_sprite.s
+
+sound.o :
+	rgbasm $(ASMFLAGS) -L -o sound.o debug/test_suite/sound.s
 
 clean:
 	rm -rf bin

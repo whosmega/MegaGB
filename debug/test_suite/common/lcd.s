@@ -72,7 +72,7 @@ loadTiles_8000h:
 
 .endloop:
     pop af
-    jp endloop2
+    jp .endloop2
     /* 
         Basically A = 255 - A
         If A was 0, 1 tile was loaded. This preserves that aswell. So A = 255 - 0 = 255
