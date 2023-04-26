@@ -1,6 +1,6 @@
 #ifndef MEGAGBC_DEBUG_H
 #define MEGAGBC_DEBUG_H
-#include "../include/gb.h"
+#include <gb/gb.h>
 
 // #define DEBUG_NO_CARTRIDGE_VERIFICATION
 // #define DEBUG_REALTIME_PRINTING

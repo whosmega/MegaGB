@@ -2,8 +2,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "../include/cartridge.h"
-#include "../include/gb.h"
+#include <gb/cartridge.h>
+#include <gb/gb.h>
 
 bool initCartridge(Cartridge* c, uint8_t* data, size_t size) {
     if (data == NULL) {

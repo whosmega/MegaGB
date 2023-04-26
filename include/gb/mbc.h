@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "../include/cartridge.h"
+#include <gb/cartridge.h>
 
 /* Forward Declare GB instead of including gb.h
  * to avoid a circular include */

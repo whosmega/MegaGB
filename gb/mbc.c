@@ -1,8 +1,8 @@
-#include "../include/mbc.h"
-#include "../include/gb.h"
-#include "../include/mbc1.h"
-#include "../include/mbc2.h"
-#include "../include/debug.h"
+#include <gb/mbc.h>
+#include <gb/gb.h>
+#include <gb/mbc1.h>
+#include <gb/mbc2.h>
+#include <gb/debug.h>
 #include <stddef.h>
 #include <stdint.h>
 

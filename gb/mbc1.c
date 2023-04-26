@@ -1,6 +1,6 @@
-#include "../include/debug.h"
-#include "../include/mbc.h"
-#include "../include/mbc1.h"
+#include <gb/debug.h>
+#include <gb/mbc.h>
+#include <gb/mbc1.h>
 
 
 void mbc1_allocate(GB* gb, bool externalRam) {

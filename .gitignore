@@ -7,4 +7,4 @@ megagbc
 *.txt
 roms
 roms_bin
-
+compile_flags.txt

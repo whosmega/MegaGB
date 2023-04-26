@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "../include/debug.h"
+#include <gb/debug.h>
 
 void log_fatal(GB* gb, const char* string) {
     printf("[FATAL]");

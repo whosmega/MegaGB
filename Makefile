@@ -1,56 +1,61 @@
 # megagbc
 
-CC = gcc
-CFLAGS = -O2 `sdl2-config --cflags`
-LFLAGS = -O2 `sdl2-config --libs` -lm
-EXE = megagbc
+INCLUDE=include
+INCLUDE_GB=$(INCLUDE)/gb
+SRC_GB=gb
+DEBUG=debug
 
-BIN = cartridge.o gb.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
+CC = gcc
+CFLAGS = -O2 `sdl2-config --cflags` -I$(INCLUDE)
+LFLAGS = -O2 `sdl2-config --libs` -lm
+EXE = megagb
+
+BIN_GB = cartridge.o gb.o main.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o
 
 # test suite
 
-ASMFLAGS = -i debug/test_suite/
+ASMFLAGS = -i $(DEBUG)/test_suite/
 
-$(EXE): $(BIN)
-	$(CC) $(BIN) $(LFLAGS) -o $(EXE)
+$(EXE): $(BIN_GB)
+	$(CC) $(BIN_GB) $(LFLAGS) -o $(EXE)
 	mkdir -p bin
 	mv *.o bin
 
-cartridge.o : include/cartridge.h \
-			  src/cartridge.c
-	$(CC) -c src/cartridge.c $(CFLAGS)
+cartridge.o : $(INCLUDE_GB)/cartridge.h \
+			  $(SRC_GB)/cartridge.c
+	$(CC) -c $(SRC_GB)/cartridge.c $(CFLAGS)
 
-gb.o : include/gb.h \
-	   src/gb.c
-	$(CC) -c src/gb.c $(CFLAGS)
+gb.o : $(INCLUDE_GB)/gb.h \
+	   $(SRC_GB)/gb.c
+	$(CC) -c $(SRC_GB)/gb.c $(CFLAGS)
 
-main.o : include/gb.h include/cartridge.h \
-		 src/main.c
-	$(CC) -c src/main.c $(CFLAGS)
+main.o : $(INCLUDE_GB)/gb.h $(INCLUDE_GB)/cartridge.h \
+		 $(SRC_GB)/main.c
+	$(CC) -c $(SRC_GB)/main.c $(CFLAGS)
 
-cpu.o : include/cpu.h \
-		src/cpu.c
-	$(CC) -c src/cpu.c $(CFLAGS)
+cpu.o : $(INCLUDE_GB)/cpu.h \
+		$(SRC_GB)/cpu.c
+	$(CC) -c $(SRC_GB)/cpu.c $(CFLAGS)
 
-mbc.o : include/mbc.h \
-		src/mbc.c
-	$(CC) -c src/mbc.c $(CFLAGS)
+mbc.o : $(INCLUDE_GB)/mbc.h \
+		$(SRC_GB)/mbc.c
+	$(CC) -c $(SRC_GB)/mbc.c $(CFLAGS)
 
-mbc1.o : include/mbc1.h \
-		src/mbc1.c
-	$(CC) -c src/mbc1.c $(CFLAGS)
+mbc1.o : $(INCLUDE_GB)/mbc1.h \
+		$(SRC_GB)/mbc1.c
+	$(CC) -c $(SRC_GB)/mbc1.c $(CFLAGS)
 
-mbc2.o : include/mbc2.h \
-		src/mbc2.c
-	$(CC) -c src/mbc2.c $(CFLAGS)
+mbc2.o : $(INCLUDE_GB)/mbc2.h \
+		$(SRC_GB)/mbc2.c
+	$(CC) -c $(SRC_GB)/mbc2.c $(CFLAGS)
 
-display.o : include/display.h \
-			src/display.c
-	$(CC) -c src/display.c $(CFLAGS)
+display.o : $(INCLUDE_GB)/display.h \
+			$(SRC_GB)/display.c
+	$(CC) -c $(SRC_GB)/display.c $(CFLAGS)
 
-debug.o : include/gb.h include/debug.h \
-		 src/debug.c
-	$(CC) -c src/debug.c $(CFLAGS)
+debug.o : $(INCLUDE_GB)/gb.h $(INCLUDE_GB)/debug.h \
+		 $(SRC_GB)/debug.c
+	$(CC) -c $(SRC_GB)/debug.c $(CFLAGS)
 # --------------------------------------------------------------------
 tests: edge_sprite.o sound.o
 	rgblink -o edge_sprite.gb edge_sprite.o
@@ -64,15 +69,15 @@ tests: edge_sprite.o sound.o
 	mv *.gb roms/
 
 edge_sprite.o :
-	rgbasm $(ASMFLAGS) -L -o edge_sprite.o debug/test_suite/edge_sprite.s
+	rgbasm $(ASMFLAGS) -L -o edge_sprite.o $(DEBUG)/test_suite/edge_sprite.s
 
 sound.o :
-	rgbasm $(ASMFLAGS) -L -o sound.o debug/test_suite/sound.s
+	rgbasm $(ASMFLAGS) -L -o sound.o $(DEBUG)/test_suite/sound.s
 
 clean:
 	rm -rf bin
 	rm -rf roms_bin
 	rm -rf roms
-	rm -f megagbc
+	rm -f $(EXE)
 	
 

@@ -1,6 +1,6 @@
 #ifndef megagbc_mbc2_h
 #define megagbc_mbc2_h
-#include "../include/gb.h"
+#include <gb/gb.h>
 
 typedef struct {
     uint8_t builtInRAM[0x200];              /* Built in 512x4 bit RAM */

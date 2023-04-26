@@ -1,6 +1,6 @@
-#include "../include/gb.h"
-#include "../include/display.h"
-#include "../include/debug.h"
+#include <gb/gb.h>
+#include <gb/display.h>
+#include <gb/debug.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_pixels.h>

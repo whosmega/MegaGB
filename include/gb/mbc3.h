@@ -1,6 +1,6 @@
 #ifndef megagbc_mbc3_h
 #define megagbc_mbc3_h
-#include "../include/gb.h"
+#include <gb/gb.h>
 
 typedef struct {
     uint8_t S;          /* Seconds (0-59) */

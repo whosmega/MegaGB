@@ -1,9 +1,9 @@
-#include "../include/cartridge.h"
-#include "../include/gb.h"
-#include "../include/cpu.h"
-#include "../include/debug.h"
-#include "../include/display.h"
-#include "../include/mbc.h"
+#include <gb/cartridge.h>
+#include <gb/gb.h>
+#include <gb/cpu.h>
+#include <gb/debug.h>
+#include <gb/display.h>
+#include <gb/mbc.h>
 
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_pixels.h>
@@ -396,7 +396,7 @@ int initSDL(GB* gb) {
 
     if (!gb->sdl_window) return 1;          /* Failed to create screen */
 
-    SDL_SetWindowTitle(gb->sdl_window, "MegaGBC");
+    SDL_SetWindowTitle(gb->sdl_window, "MegaGB");
     SDL_RenderSetScale(gb->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
     return 0;
 }

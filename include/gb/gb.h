@@ -4,10 +4,10 @@
 #include <SDL2/SDL_render.h>
 #include <stdint.h>
 #include <unistd.h>
-#include "../include/cartridge.h"
-#include "../include/mbc.h"
-#include "../include/cpu.h"
-#include "../include/display.h"
+#include <gb/cartridge.h>
+#include <gb/mbc.h>
+#include <gb/cpu.h>
+#include <gb/display.h>
 
 /* Utility macros */
 #define SET_BIT(byte, bit) byte |= 1 << bit

@@ -1,5 +1,5 @@
-#include "../include/gb.h"
-#include "../include/cartridge.h"
+#include <gb/gb.h>
+#include <gb/cartridge.h>
 
 #include <stdio.h>
 #include <stdlib.h>

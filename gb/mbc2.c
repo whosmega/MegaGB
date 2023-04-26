@@ -1,6 +1,6 @@
-#include "../include/mbc.h"
-#include "../include/mbc2.h"
-#include "../include/debug.h"
+#include <gb/mbc.h>
+#include <gb/mbc2.h>
+#include <gb/debug.h>
 
 void mbc2_allocate(GB* gb) {
     MBC_2* mbc = (MBC_2*)malloc(sizeof(MBC_2));

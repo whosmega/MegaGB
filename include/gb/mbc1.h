@@ -1,6 +1,6 @@
 #ifndef megagbc_mbc1_h
 #define megagbc_mbc1_h
-#include "../include/gb.h"
+#include <gb/gb.h>
 
 typedef struct {
     /* External RAM Bank Storage
