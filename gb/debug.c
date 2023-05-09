@@ -6,7 +6,7 @@ void log_fatal(GB* gb, const char* string) {
     printf(" %s", string);
     printf("\n");
 
-    stopEmulator(gb);
+    stopGBEmulator(gb);
     exit(99);
 }
 

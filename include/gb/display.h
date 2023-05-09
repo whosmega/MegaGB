@@ -1,5 +1,5 @@
-#ifndef megagbc_display_h
-#define megagbc_display_h
+#ifndef gb_display_h
+#define gb_display_h
 #include <SDL2/SDL.h>
 
 #define DISPLAY_SCALING 4

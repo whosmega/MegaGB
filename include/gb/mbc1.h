@@ -1,5 +1,5 @@
-#ifndef megagbc_mbc1_h
-#define megagbc_mbc1_h
+#ifndef gb_mbc1_h
+#define gb_mbc1_h
 #include <gb/gb.h>
 
 typedef struct {

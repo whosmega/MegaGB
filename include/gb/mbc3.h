@@ -1,14 +1,6 @@
-#ifndef megagbc_mbc3_h
-#define megagbc_mbc3_h
+#ifndef gb_mbc3_h
+#define gb_mbc3_h
 #include <gb/gb.h>
-
-typedef struct {
-    uint8_t S;          /* Seconds (0-59) */
-    uint8_t M;          /* Minutes (0-59) */
-    uint8_t H;          /* Hours (0-23) */
-    uint8_t DL;         /* Low 8 bits of day counter (0-255) */
-    uint8_t DH;         /* Halt, Overflow, Bit 8 of Day */
-} RTC;
 
 typedef struct {
     /* External RAM Bank Storage
@@ -27,15 +19,11 @@ typedef struct {
 
     /* Internal State */
     bool rtcSupported;
-    bool isLatched;
     uint8_t selectedRTCRegister;
     uint8_t selectedROMBank;
     uint8_t selectedRAMBank; 
     
     /* RTC Registers */
-    RTC rtc;
-    RTC rtc_latched;            /* Stores latched values */
-    time_t rtcLastSync;
 } MBC_3;
 
 void mbc3_allocate(GB* gb, bool externalRam, bool rtc);

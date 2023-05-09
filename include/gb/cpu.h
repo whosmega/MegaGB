@@ -1,5 +1,5 @@
-#ifndef megagbc_cpu_h
-#define megagbc_cpu_h
+#ifndef gb_cpu_h
+#define gb_cpu_h
 
 #include <stdint.h>
 

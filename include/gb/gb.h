@@ -209,12 +209,12 @@ struct GB {
 typedef struct GB GB;
 
 /* Loads in the cartridge into the VM and starts the overall emulator */
-void startEmulator(Cartridge* cartridge);
+void startGBEmulator(Cartridge* cartridge);
 
-void pauseEmulator(GB* gb);
-void unpauseEmulator(GB* gb);
+void pauseGBEmulator(GB* gb);
+void unpauseGBEmulator(GB* gb);
 /* will perform a memory cleanup by freeing the VM state and then safely exiting */
-void stopEmulator(GB* gb);
+void stopGBEmulator(GB* gb);
 
 /* Increments the cycle count by 4 tcycles and syncs all hardware to act accordingly if necessary */
 void cyclesSync_4(GB* gb);

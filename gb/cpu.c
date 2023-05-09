@@ -1613,7 +1613,7 @@ static void prefixCB(GB* gb) {
     /* This function contains opcode interpretations for
      * all the instruction prefixed by opcode CB */
     uint8_t byte = readByte_4C(gb);
-
+	
 #ifdef DEBUG_PRINT_REGISTERS
     printRegisters(gb);
 #endif
@@ -1883,13 +1883,14 @@ static void prefixCB(GB* gb) {
 
 /* Instruction Set : https://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html */
 
-void dispatch(GB* gb) {
+void dispatch(GB* gb) {	
 #ifdef DEBUG_PRINT_REGISTERS
     printRegisters(gb);
 #endif
 #ifdef DEBUG_REALTIME_PRINTING
     printInstruction(gb);
 #endif
+
     uint8_t byte = 0; /* Will get set later */
 
     /* Enable interrupts if it was scheduled */

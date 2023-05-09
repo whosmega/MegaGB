@@ -1,5 +1,5 @@
-#ifndef megagbc_mbc_h
-#define megagbc_mbc_h
+#ifndef gb_mbc_h
+#define gb_mbc_h
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

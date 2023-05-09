@@ -1,6 +1,6 @@
-#include "../include/debug.h"
-#include "../include/mbc.h"
-#include "../include/mbc3.h"
+#include <gb/debug.h>
+#include <gb/mbc.h>
+#include <gb/mbc3.h>
 #include <time.h>
 
 void mbc3_allocate(GB* gb, bool externalRam, bool rtc) {
@@ -11,7 +11,6 @@ void mbc3_allocate(GB* gb, bool externalRam, bool rtc) {
         return;
     }
 
-    mbc->isLatched = false;
     mbc->latchRegister = 0x1; 
     mbc->ram_rtcBankNumber = 0;
     mbc->romBankNumber = 0;
@@ -23,9 +22,6 @@ void mbc3_allocate(GB* gb, bool externalRam, bool rtc) {
 
     mbc->ramBanks = NULL;
     mbc->rtcSupported = false;
-    /* Initialise all RTC Registers to 0 */
-    mbc->rtc = (RTC){0,0,0,0,0};
-    mbc->rtc_latched = mbc->rtc;
    
     if (externalRam) {
         switch (gb->cartridge->extRamSize) {
@@ -39,7 +35,6 @@ void mbc3_allocate(GB* gb, bool externalRam, bool rtc) {
     if (rtc) {
         /* The counting will happen when this flag is set */
         mbc->rtcSupported = true;
-        mbc->rtcLastSync = time(NULL);      /* RTC Starts ticking now */
     }
 
     gb->memController = (void*)mbc;
@@ -69,28 +64,73 @@ void mbc3_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte) {
         if ((byte & 0xF) == 0xA) mbc->ram_rtcEnabled = true;
         else mbc->ram_rtcEnabled = false;
     } else if (addr >= 0x2000 && addr <= 0x3FFF) {
-
+		mbc->romBankNumber = byte & 0b01111111;
+		/* Mask unused bits depending on rom size -> Supported upto 2 MB */
+		uint8_t bankNumber = byte & ((1 << (gb->cartridge->romSize + 1)) - 1);
+		if (bankNumber == 0) bankNumber = 1;
+		mbc->selectedROMBank = bankNumber;
     } else if (addr >= 0x4000 && addr <= 0x5FFF) {
+		byte &= 0xF;
+		
+		if (byte <= 0x03) {
+			if (mbc->ramBanks == NULL) return;
+			if (gb->cartridge->extRamSize == EXT_RAM_8KB) byte = 0;
 
+			mbc->ram_rtcBankNumber = byte;
+			mbc->selectedRAMBank = byte;
+		} else if (byte >= 0x08 && byte <= 0x0C) {
+			if (!mbc->rtcSupported) return;
+			mbc->ram_rtcBankNumber = byte;
+			mbc->selectedRTCRegister = byte;
+		}
+
+		/* All other writes are ignored and do nothing */
     } else if (addr >= 0x6000 && addr <= 0x7FFF) {
+		/* Used to latch time onto registers */
+		if (mbc->latchRegister == 0 && byte == 1) {
+			/* Latch */
+		}
 
-    } else if (addr >= 0xA000 && addr <= 0xBFFF) {
-
+		mbc->latchRegister = byte;
     }
 }
 
 uint8_t mbc3_readExternalRAM(GB* gb, uint16_t addr) {
-    return 0xFF;
+    /* Can be a read to RAM or RTC register */
+	MBC_3* mbc = (MBC_3*)gb->memController;
+
+	if (mbc->ram_rtcBankNumber < 0x04) {
+		/* RAM */
+		if (mbc->ramBanks == NULL) return 0xFF;
+		return mbc->ramBanks[mbc->selectedRAMBank * 0x2000 + addr];
+	} else {
+		/* RTC */
+		if (!mbc->rtcSupported) return 0;
+		return 0;
+	}
 }
 
 void mbc3_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte) {
+	MBC_3* mbc = (MBC_3*)gb->memController;
 
+	if (mbc->ram_rtcBankNumber < 0x04) {
+		/* RAM */
+		if (mbc->ramBanks == NULL) return;
+
+		mbc->ramBanks[mbc->selectedRAMBank * 0x2000 + addr] = byte;
+	} else {
+		/* RTC */
+		if (!mbc->rtcSupported) return;
+
+	}
 }
 
 uint8_t mbc3_readROM_N0(GB* gb, uint16_t addr) {
-    return 0xFF;
+	return gb->cartridge->allocated[addr];
 }
 
 uint8_t mbc3_readROM_NN(GB* gb, uint16_t addr) {
-    return 0xFF;
+	MBC_3* mbc = (MBC_3*)gb->memController;
+
+    return gb->cartridge->allocated[mbc->selectedROMBank * 0x4000 + addr];
 }

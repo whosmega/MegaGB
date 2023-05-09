@@ -335,10 +335,9 @@ static uint8_t* getSprite(GB* gb) {
     /* If OBJ isnt enabled, its instantly aborted */
     if (!(GET_BIT(gb->IO[R_LCDC], 1))) return NULL;
     /* Read OAM Memory to find a sprite that can be rendered at the current X and Y of the
-     * fetcher if it is not found we return NULL */
+     * fetcher if it is not found we return NULL */	
 
-
-    for (int i = 0; i < gb->spritesInScanline; i++) {
+    for (int i = 0; i < gb->spritesInScanline; i++) {	
         uint8_t spriteIndex = i * 5;
         uint8_t spriteX = gb->oamDataBuffer[spriteIndex + 1];
 
@@ -350,10 +349,19 @@ static uint8_t* getSprite(GB* gb) {
 
         int startX = spriteX - 8;
 
-        if (gb->nextPushPixelX == startX || (gb->nextPushPixelX == 0 && startX < 0)) {
-            if (gb->isLastSpriteOverlap && startX == gb->lastSpriteOverlapX) {
-                if (gb->oamDataBuffer[spriteIndex + 4] > gb->lastSpriteOverlapPushIndex)
-                    return &gb->oamDataBuffer[spriteIndex];
+        if (gb->nextPushPixelX == startX || ((gb->nextPushPixelX == 0) && (startX < 0))) {
+            if (gb->isLastSpriteOverlap && (
+						(startX == gb->lastSpriteOverlapX) || 
+						(startX < 1 && gb->lastSpriteOverlapX < 1))) {
+
+				/* We're fully overlapping the last sprite (could be the last sprite again,
+				 * in that case it fails the index priority check) 
+				 *
+				 * Note: We need to treat sprites at startX = 0 and startX < 0 the same way 
+				 * we treat a full overlap as even though the starting point isnt the same, 
+				 * it is triggered at the same point i.e the start of the scanline */
+
+                if (gb->oamDataBuffer[spriteIndex + 4] > gb->lastSpriteOverlapPushIndex) return &gb->oamDataBuffer[spriteIndex];
             } else {
                 return &gb->oamDataBuffer[spriteIndex];
             }
@@ -415,8 +423,7 @@ static void pushPixels(GB* gb) {
                      * to discard value has no use now */
                     if (i - 1 != 0) gb->pixelsToDiscard = i - 1;
                 }
-            }
-            else {
+            } else {
                 gb->pixelsToDiscard += gb->nextPushPixelX - (gb->lastSpriteOverlapX < 0 ? 0 : gb->lastSpriteOverlapX);
             }
 
@@ -429,7 +436,7 @@ static void pushPixels(GB* gb) {
             gb->preservedFetcherTileHigh = gb->fetcherTileRowHigh;
             gb->preservedFetcherTileAttributes = gb->fetcherTileAttributes;
             break;
-        }
+		}	
 
         if (GET_BIT(gb->IO[R_LCDC], 5) &&
                 gb->lyWasWY && !gb->renderingWindow && (gb->nextPushPixelX == gb->IO[R_WX] - 7 || gb->IO[R_WX] < 7)) {
@@ -459,7 +466,7 @@ static void pushPixels(GB* gb) {
             }
 
             break;
-        }
+        }	
 
         /* This would work for BG tiles and Window tiles both as when fetcherX is set to 0
          * after switching to window mode, pixelsToDiscard is also automatically set to the
@@ -471,6 +478,7 @@ static void pushPixels(GB* gb) {
         if (i <= gb->pixelsToDiscard) {
             continue;
         }
+
         // if (pixelsToDiscard > 0 && gb->fetcherX != 0 && !gb->renderingSprites && !gb->renderingWindow) printf("fuck x%d y%d %d\n", gb->nextPushPixelX - 1, gb->fetcherY, gb->pixelsToDiscard);
         FIFO_Pixel pixel;
         /* Check for horizontal bit flip */
@@ -512,9 +520,9 @@ static void pushPixels(GB* gb) {
     if (switchedToWindowRender) {
         gb->isLastSpriteOverlap = false;
         gb->currentFetcherTask = 0;
-    } else if (switchedToSpriteRender) {
+    } else if (switchedToSpriteRender) {	
         if (gb->currentFetcherTask == 7) gb->currentFetcherTask = 0;
-        else gb->currentFetcherTask++;
+        else gb->currentFetcherTask++;	
     } else {
         gb->isLastSpriteOverlap = false;
         gb->fetcherX++;
@@ -628,6 +636,7 @@ static void pushSpritePixels(GB* gb) {
 
     // printf("pixels to discard %d, X%d, Y%d\n", gb->pixelsToDiscard, gb->nextPushPixelX, gb->fetcherY);
 
+
     gb->isLastSpriteOverlap = true;
     gb->lastSpriteOverlapPushIndex = spriteOAMIndex;
     gb->lastSpriteOverlapX = startX;
@@ -640,7 +649,8 @@ static void pushSpritePixels(GB* gb) {
     gb->preservedFetcherTileHigh = 0;
     gb->preservedFetcherTileLow = 0;
 
-    gb->renderingSprites = false;
+    gb->renderingSprites = false;	
+
     /* Continue BG/Window pushing */
     pushPixels(gb);
 }
@@ -670,7 +680,7 @@ static void advanceFetcher(GB* gb) {
         case FETCHER_GET_TILE: {
             uint16_t tileMapBaseAddress;
 
-            if (gb->renderingSprites) {
+            if (gb->renderingSprites) {	
                 /* Fetch Sprite */
                 gb->fetcherTileAttributes = gb->spriteData[3];
 
@@ -957,12 +967,14 @@ static void advancePPU(GB* gb) {
                 gb->pixelsToDiscard = gb->IO[R_SCX] & 0b00000111;
                 gb->pauseDotClock = 0;
 
+				if (gb->IO[R_LY] == 121) 
+
                 if (remainderPixels != 0) {
                     gb->pauseDotClock = remainderPixels - 1;
                     break;
                 }
-
             }
+
             /* Mode 3 has a variable duration */
             /* Because the renderer idles for 6 dots, we run mode 3 for 6 dots more
              * this also means that the fetcher has to idle (not push) for 6 dots while the renderer fully
@@ -1145,7 +1157,7 @@ void syncDisplay(GB* gb) {
     if (gb->ppuEnabled) {
         for (int i = 0; i < 4; i++) {
             gb->cyclesSinceLastFrame++;
-    #ifdef DEBUG_PRINT_PPU
+    #ifdef DEBUG_PRINT_PPU	
             printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->IO[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
     #endif
             advancePPU(gb);

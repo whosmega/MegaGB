@@ -442,8 +442,8 @@ void handleSDLEvents(GB* gb) {
                     CLEAR_BIT(gb->joypadActionBuffer, 2);
                     break;
                 case SDL_SCANCODE_SPACE:
-                    if (!gb->paused) pauseEmulator(gb);
-                    else unpauseEmulator(gb);
+                    if (!gb->paused) pauseGBEmulator(gb);
+                    else unpauseGBEmulator(gb);
                     break;
                 default: return;
             }
@@ -536,7 +536,7 @@ void updateJoypadRegBuffer(GB* gb, JOYPAD_SELECT mode) {
 
 /* ---------------------------------------- */
 
-void startEmulator(Cartridge* cartridge) {
+void startGBEmulator(Cartridge* cartridge) {
     GB gb;
     initGB(&gb);
     initGBCartridge(&gb, cartridge);
@@ -572,10 +572,10 @@ void startEmulator(Cartridge* cartridge) {
     gb.run = true;
 
     run(&gb);
-    stopEmulator(&gb);
+    stopGBEmulator(&gb);
 }
 
-void pauseEmulator(GB* gb) {
+void pauseGBEmulator(GB* gb) {
     if (gb->paused) return;
     gb->paused = true;
 
@@ -586,13 +586,13 @@ void pauseEmulator(GB* gb) {
     }
 }
 
-void unpauseEmulator(GB* gb) {
+void unpauseGBEmulator(GB* gb) {
     if (!gb->paused) return;
 
     gb->paused = false;
 }
 
-void stopEmulator(GB* gb) {
+void stopGBEmulator(GB* gb) {
 #ifdef DEBUG_LOGGING
     double totalElapsed = (clock_u() - gb->ticksAtStartup) / 1e6;
     unsigned long long ticksPerSec = round(gb->clock / totalElapsed);
