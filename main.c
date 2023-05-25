@@ -1,11 +1,12 @@
-#include <gb/gb.h>
 #include <gb/cartridge.h>
-
-#include <gba/gba.h>
 #include <gba/gamepak.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+extern void startGBEmulator(Cartridge*);
+extern void startGBAEmulator(GamePak*);
 
 static void runGB(uint8_t* allocation, size_t size) {
 	Cartridge c;

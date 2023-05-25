@@ -1,10 +1,16 @@
 #ifndef gba_include_h
 #define gba_include_h
 
+#include <SDL2/SDL.h>
 #include <stdint.h>
 #include <stddef.h> 
 #include <gba/arm7tdmi.h>
 #include <gba/gamepak.h>
+
+#define HEIGHT_PX 160
+#define WIDTH_PX 240
+#define DISPLAY_SCALING 4
+
 
 enum {
 	BIOS_ROM_16KB 		= 0x00000000,
@@ -49,6 +55,17 @@ enum {
 	WIDTH_32
 };
 
+typedef enum {
+	DISPCNT 	= 0x00000000,
+	GREENSWP 	= 0x00000002,
+	DISPSTAT 	= 0x00000004,
+	VCOUNT 		= 0x00000006,
+	BG0CNT 		= 0x00000008,
+	BG1CNT 		= 0x0000000A,
+	BG2CNT 		= 0x0000000C,
+	BG3CNT 		= 0x0000000E
+} IO_REG;
+
 struct GBA {
 	/* ------------------ CPU -------------------- */
 	CPU_STATE cpu_state; 		/* THUMB/ARM state */
@@ -82,6 +99,8 @@ struct GBA {
 																   for ARM instructions */
 
 	/* ----------------- Emulator ---------------- */
+	SDL_Window* SDL_Window; 			/* SDL Window struct pointer */
+	SDL_Renderer* SDL_Renderer; 		/* SDL Renderer struct pointer */
 	GamePak* gamepak; 					/* Cartridge containing allocated code and important info
 										   about the game */
 	bool run; 							/* Flag used to stop the emulator and check if its running */

@@ -2,13 +2,48 @@
 #include <gba/arm7tdmi.h>
 #include <gba/gamepak.h>
 #include <gba/debugGBA.h>
+#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+
+
+bool initialiseSDL(GBA* gba) {
+    SDL_Init(SDL_INIT_EVERYTHING);
+    SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING, SDL_WINDOW_SHOWN,
+            &gba->SDL_Window, &gba->SDL_Renderer);
+
+    if (!gba->SDL_Window) return false;          /* Failed to create screen */
+
+    SDL_SetWindowTitle(gba->SDL_Window, "MegaGBA");
+    SDL_RenderSetScale(gba->SDL_Renderer, DISPLAY_SCALING, DISPLAY_SCALING);
+    return true;
+}
+
+void SDLEvents(GBA* gba) {
+    /* We listen for events like keystrokes and window closing */
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            gba->run = false;
+        }
+	}
+}
+
+void cleanSDL(GBA* gba) {
+	SDL_DestroyRenderer(gba->SDL_Renderer);
+    SDL_DestroyWindow(gba->SDL_Window);
+    SDL_Quit();
+}
+
+/* ----------------------------------------------------- */
 
 void initialiseGBA(GBA* gba, GamePak* gamepak) {
 	gba->gamepak = gamepak;
 	gba->run = false;
+	gba->SDL_Renderer = NULL;
+	gba->SDL_Window = NULL;
 
 	/* Allocate memory for components */
 	uint8_t* IWRAM 		= (uint8_t*)malloc(0x8000);			// 32 KB
@@ -30,8 +65,17 @@ void initialiseGBA(GBA* gba, GamePak* gamepak) {
 	gba->VRAM 		= VRAM;
 	gba->OAM 		= OAM;	
 
+	/* Initialise all IO memory to 0 */
+	memset(gba->IO, 0, 0x3FF);
+
 	/* Initialising functions */
 	initialiseCPU(gba);
+	bool initSDL = initialiseSDL(gba);
+
+	if (!initSDL) {
+		printf("[FATAL] GBA cannot start without SDL2\n");
+		exit(120);
+	}
 
 #ifdef DEBUG_ENABLED
 	initDissembler();
@@ -39,6 +83,8 @@ void initialiseGBA(GBA* gba, GamePak* gamepak) {
 }
 
 void freeGBA(GBA* gba) {
+	cleanSDL(gba);
+
 	free(gba->IWRAM);
 	free(gba->EWRAM);
 	free(gba->IO);
@@ -59,10 +105,15 @@ void startGBAEmulator(GamePak* gamepak) {
 	initialiseGBA(&gba, gamepak);
 
 	gba.run = true;
-	
-	for (;gba.run;) {
-		stepCPU(&gba);
-		usleep(50000);
+
+	while (gba.run) {
+		for (int i = 0; (i < 250000) && gba.run; i++) {
+			stepCPU(&gba);
+		}
+		SDL_SetRenderDrawColor(gba.SDL_Renderer, 255, 255, 255, 255);
+		SDL_RenderClear(gba.SDL_Renderer);
+		SDL_RenderPresent(gba.SDL_Renderer);
+		SDLEvents(&gba);
 	}
 
 	freeGBA(&gba);
@@ -128,6 +179,42 @@ uint32_t busRead(GBA* gba, uint32_t address, uint8_t size) {
 			case WIDTH_16: return littleEndian16Decode(ptr);
 			case WIDTH_8:  return *ptr;
 		}
+	} else if (address >= EXT_WRAM_256KB && address <= EXT_WRAM_256KB_END) {
+		/* Read from external work RAM - waitstates apply */
+		uint8_t* ptr = &gba->EWRAM[address - EXT_WRAM_256KB];
+
+		switch (size) {
+			case WIDTH_32: return littleEndian32Decode(ptr);
+			case WIDTH_16: return littleEndian16Decode(ptr);
+			case WIDTH_8:  return *ptr;
+		}
+	} else if (address >= VRAM_96KB && address <= VRAM_96KB_END) {
+		/* Read from Video RAM */
+		uint8_t* ptr = &gba->VRAM[address - VRAM_96KB];
+
+		switch (size) {
+			case WIDTH_32: return littleEndian32Decode(ptr);
+			case WIDTH_16: return littleEndian16Decode(ptr);
+			case WIDTH_8:  return *ptr;
+		}
+	} else if (address >= IO_REG_1KB && address <= IO_REG_1KB_END) {
+		/* Read from IO register */
+		uint8_t* ptr = &gba->IO[address - IO_REG_1KB];
+
+		switch (size) {
+			case WIDTH_32: return littleEndian32Decode(ptr);
+			case WIDTH_16: return littleEndian16Decode(ptr);
+			case WIDTH_8: return *ptr;
+		}
+	} else if (address >= PALETTE_RAM_1KB && address <= PALETTE_RAM_1KB_END) {
+		/* Read from Palette RAM */
+		uint8_t* ptr = &gba->VRAM[address - PALETTE_RAM_1KB];
+
+		switch (size) {
+			case WIDTH_32: return littleEndian32Decode(ptr);
+			case WIDTH_16: return littleEndian16Decode(ptr);
+			case WIDTH_8:  return *ptr;
+		}
 	}
 
 	return 0;
@@ -142,6 +229,59 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 			case WIDTH_32: littleEndian32Encode(ptr, data); return;
 			case WIDTH_16: littleEndian16Encode(ptr, data); return;
 			case WIDTH_8:  *ptr = (uint8_t)data; return;
+		}
+	} else if (address >= EXT_WRAM_256KB && address <= EXT_WRAM_256KB_END) {
+		uint8_t* ptr = &gba->EWRAM[address - EXT_WRAM_256KB];
+
+		switch (size) {
+			case WIDTH_32: littleEndian32Encode(ptr, data); return;
+			case WIDTH_16: littleEndian16Encode(ptr, data); return;
+			case WIDTH_8:  *ptr = (uint8_t)data; return;
+		}
+	} else if (address >= VRAM_96KB && address <= VRAM_96KB_END) {
+		uint8_t* ptr = &gba->VRAM[address - VRAM_96KB];
+		
+		/* VRAM only supports 16 and 32 bit writes, writing a byte to the addressed
+		 * halfword is going to mirror it to both upper and lower byte */
+		switch (size) {
+			case WIDTH_32: littleEndian32Encode(ptr, data); return;
+			case WIDTH_16: littleEndian16Encode(ptr, data); return;
+			case WIDTH_8:  {
+				/* Halfword aligned */
+				ptr = &gba->VRAM[(address & ~1) - VRAM_96KB];
+				ptr[0] = (uint8_t)data;
+				ptr[1] = (uint8_t)data;
+				return;
+			}
+		}
+	} else if (address >= IO_REG_1KB && address <= IO_REG_1KB_END) {
+		uint8_t* ptr = &gba->IO[address - IO_REG_1KB];
+
+		/* Check for read-only registers, and prevent a write */
+		switch (address - IO_REG_1KB) {
+			case VCOUNT: return;
+		}
+
+		switch (size) {
+			case WIDTH_32: littleEndian32Encode(ptr, data);
+			case WIDTH_16: littleEndian16Encode(ptr, data);
+			case WIDTH_8: *ptr = data;
+		} 
+	} else if (address >= PALETTE_RAM_1KB && address <= PALETTE_RAM_1KB_END) {
+		uint8_t* ptr = &gba->EWRAM[address - PALETTE_RAM_1KB];
+		
+		/* Palette RAM only supports 16 and 32 bit writes, writing a byte to the addressed
+		 * halfword is going to mirror it to both upper and lower byte */
+		switch (size) {
+			case WIDTH_32: littleEndian32Encode(ptr, data); return;
+			case WIDTH_16: littleEndian16Encode(ptr, data); return;
+			case WIDTH_8:  {
+				/* Halfword aligned */
+				ptr = &gba->PaletteRAM[(address & ~1) - PALETTE_RAM_1KB];
+				ptr[0] = (uint8_t)data;
+				ptr[1] = (uint8_t)data;
+				return;
+			}
 		}
 	}
 }
