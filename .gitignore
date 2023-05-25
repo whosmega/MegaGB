@@ -1,5 +1,6 @@
 debug/mts
 debug/blargg
+debug/gbatest
 games
 *.o
 bin

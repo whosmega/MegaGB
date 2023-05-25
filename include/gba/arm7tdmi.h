@@ -9,13 +9,13 @@
 typedef struct GBA GBA;
 
 typedef enum {
-	CPU_MODE_USER, 				/* User - normal execution mode */
-	CPU_MODE_FIQ, 				/* FIQ Exception */
-	CPU_MODE_IRQ, 				/* IRQ Exception */
-	CPU_MODE_SVC,				/* Supervisor Exception */
-	CPU_MODE_ABT, 				/* Abort Exception */
-	CPU_MODE_UND,				/* Undefined Exception */
-	CPU_MODE_SYSTEM 			/* System mode */
+	CPU_MODE_USER = 0b10000, 				/* User - normal execution mode */
+	CPU_MODE_FIQ  = 0b10001, 				/* FIQ Exception */
+	CPU_MODE_IRQ  = 0b10010, 				/* IRQ Exception */
+	CPU_MODE_SVC  = 0b10011,				/* Supervisor Exception */
+	CPU_MODE_ABT  = 0b10111, 				/* Abort Exception */
+	CPU_MODE_UND  = 0b11011,				/* Undefined Exception */
+	CPU_MODE_SYSTEM = 0b11111 				/* System mode */
 } CPU_MODE;
 
 typedef enum {

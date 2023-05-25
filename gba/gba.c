@@ -28,14 +28,7 @@ void initialiseGBA(GBA* gba, GamePak* gamepak) {
 	gba->IO    		= IO;
 	gba->PaletteRAM = PaletteRAM;
 	gba->VRAM 		= VRAM;
-	gba->OAM 		= OAM;
-
-
-	/* Waitstates - Default Timings on GBA startup (WAITCNT is initialised to 0000/Int.Mem Control) */
-	gba->WS0_N = 4; 	gba->WS1_N = 4; 	gba->WS2_N = 4; 	gba->WSRAM = 4;
-	gba->WS0_S = 2;		gba->WS1_S = 4;		gba->WS2_N = 8; 	gba->WEWRAM = 2;
-	
-	gba->lastAccessAddress = 0;
+	gba->OAM 		= OAM;	
 
 	/* Initialising functions */
 	initialiseCPU(gba);
@@ -77,63 +70,82 @@ void startGBAEmulator(GamePak* gamepak) {
 
 /* -------- Bus Functions --------- */
 
-static inline uint32_t littleEndian32(uint8_t* ptr) {
+static inline uint32_t littleEndian32Decode(uint8_t* ptr) {
 	return (uint32_t)((ptr[3] << 24) | (ptr[2] << 16) | (ptr[1] << 8) | ptr[0]);
 }
 
-uint32_t busRead32(GBA* gba, uint32_t address) {
-	/* We're reading a 32 bit value from the given address, appropriate clock cycles are 
-	 * consumed based on the bus width of the region */
+static inline uint16_t littleEndian16Decode(uint8_t* ptr) {
+	return (uint16_t)((ptr[1] << 8) | ptr[0]);
+}
 
-	bool isSequential = gba->lastAccessAddress + sizeof(uint32_t) == address;
+static inline void littleEndian32Encode(uint8_t* ptr, uint32_t value) {
+	ptr[0] = value & 0xFF;
+	ptr[1] = (value >> 8) & 0xFF;
+	ptr[2] = (value >> 16) & 0xFF;
+	ptr[3] = (value >> 24) & 0xFF;
+}
 
+static inline void littleEndian16Encode(uint8_t* ptr, uint16_t value) {
+	ptr[0] = value & 0xFF;
+	ptr[1] = (value >> 8) & 0xFF;
+}
+
+uint32_t busRead(GBA* gba, uint32_t address, uint8_t size) {
+	/* We're reading a 32/16/8 bit value from the given address */	
 	if (address >= EXT_ROM0_32MB && address <= EXT_ROM2_32MB_END) {
 		uint32_t relativeAddress;
-		uint8_t WS_S, WS_N;
 
 		switch ((address >> 24) & 0xF) {
 			case 0x8: 
 				relativeAddress = address - EXT_ROM0_32MB;
-				WS_S = gba->WS0_S;
-				WS_N = gba->WS0_N;
 				break;
 			case 0xA:
 				relativeAddress = address - EXT_ROM1_32MB;
-				WS_S = gba->WS1_S;
-				WS_N = gba->WS1_N;
 				break;
 			case 0xC:
 				relativeAddress = address - EXT_ROM2_32MB;
-				WS_S = gba->WS2_S;
-				WS_N = gba->WS2_N;
 				break;
 		}
 
 		if (relativeAddress > (gba->gamepak->size - 1)) {
 			printf("[WARNING] Read attempt from gamepak to an invalid address\n");
-			return 0xFFFFFFFF;
+			return 0;
 		}
 
-		/* GamePak ROM has a 16 bit bus, this means a 32 bit read = 1S/N + 1S */
-		ACCESS_CYCLE(gba, isSequential, WS_S, WS_N);
-		S_CYCLE(gba, WS_S);
-		gba->lastAccessAddress = address;
+		uint8_t* ptr = &gba->gamepak->allocated[relativeAddress];
 
-		return littleEndian32(&gba->gamepak->allocated[relativeAddress]);
+		switch (size) {
+			case WIDTH_32: return littleEndian32Decode(ptr);
+			case WIDTH_16: return littleEndian16Decode(ptr);
+			case WIDTH_8 : return *ptr;
+		}
+	} else if (address >= INT_WRAM_32KB && address <= INT_WRAM_32KB_END) {
+		/* Read from internal work RAM */
+		uint8_t* ptr = &gba->IWRAM[address - INT_WRAM_32KB];
+
+		switch (size) {
+			case WIDTH_32: return littleEndian32Decode(ptr);
+			case WIDTH_16: return littleEndian16Decode(ptr);
+			case WIDTH_8:  return *ptr;
+		}
 	}
-	return 0xFFFFFFFF;
-}
 
-void busWrite32(GBA* gba, uint32_t address, uint32_t data) {
-
-}
-
-uint16_t busRead16(GBA* gba, uint32_t address) {
 	return 0;
 }
 
-void busWrite16(GBA* gba, uint32_t address, uint16_t data) {
+void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
+	if (address >= INT_WRAM_32KB && address <= INT_WRAM_32KB_END) {
+		/* Write to internal workram with current size and little endian formatting */
+		uint8_t* ptr = &gba->IWRAM[address - INT_WRAM_32KB];
 
+		switch (size) {
+			case WIDTH_32: littleEndian32Encode(ptr, data); return;
+			case WIDTH_16: littleEndian16Encode(ptr, data); return;
+			case WIDTH_8:  *ptr = (uint8_t)data; return;
+		}
+	}
 }
+
+
 
 /* -------------------------------- */

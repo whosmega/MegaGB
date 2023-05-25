@@ -8,8 +8,8 @@ SRC_GBA=gba
 DEBUG=debug
 
 CC = gcc
-CFLAGS = -O2 `sdl2-config --cflags` -I$(INCLUDE)
-LFLAGS = -O2 `sdl2-config --libs` -lm
+CFLAGS = -O3 `sdl2-config --cflags` -I$(INCLUDE)
+LFLAGS = -O3 `sdl2-config --libs` -lm
 EXE = megagb
 
 BIN_GB = cartridge.o gb.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o mbc3.o

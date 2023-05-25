@@ -6,11 +6,6 @@
 #include <gba/arm7tdmi.h>
 #include <gba/gamepak.h>
 
-#define N_CYCLE(gba, ws) gba->cycles += 1 + ws 				// Non Sequential Access Cycle
-#define S_CYCLE(gba, ws) gba->cycles += 1 + ws 				// Sequential Access Cycle
-#define I_CYCLE(gba) 	 gba->cycles += 1 					// CPU Internal Cycle
-#define ACCESS_CYCLE(gba, isSequential, wsS, wsN) gba->cycles += 1 + (isSequential ? wsS : wsN)
-
 enum {
 	BIOS_ROM_16KB 		= 0x00000000,
 	BIOS_ROM_16KB_END 	= 0x00003FFF,
@@ -46,6 +41,12 @@ enum {
 	EXT_SRAM_64KB_END 	= 0x0E00FFFF
 
 	/* 0x10000000-0xFFFFFFFF unused (upper 4 bits of address bus) */
+};
+
+enum {
+	WIDTH_8,
+	WIDTH_16,
+	WIDTH_32
 };
 
 struct GBA {
@@ -94,20 +95,6 @@ struct GBA {
 	uint8_t* VRAM;
 	uint8_t* OAM;
 
-	/* Wait States for ROM and EWRAM */
-	uint8_t WS0_N; 						/* These are waitstates which can be modified using the
-										   WAITCNT registers. These are sequential/non sequential
-										   access times which are consumed when doing reads */
-	uint8_t WS0_S;
-	uint8_t WS1_N;
-	uint8_t WS1_S;
-	uint8_t WS2_N;
-	uint8_t WS2_S;
-	uint8_t WSRAM;
-
-	uint8_t WEWRAM;
-	uint32_t lastAccessAddress; 		/* Every access address is stored to calculate sequential/
-										   non sequential read/writes */
 	/* ------------------------------------------- */
 
 };
@@ -116,8 +103,8 @@ typedef struct GBA GBA;
 
 /* Bus functions */
 
-uint32_t busRead32(GBA* gba, uint32_t address);
-void busWrite32(GBA* gba, uint32_t address, uint32_t data);
+uint32_t busRead(GBA* gba, uint32_t address, uint8_t size);
+void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size);
 
 /* --------------- */
 

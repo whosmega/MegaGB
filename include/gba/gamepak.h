@@ -13,7 +13,7 @@ typedef struct {
 	bool inserted;
 } GamePak;
 
-bool initGamePak(GamePak* gamepak, uint8_t* allocated, long size);
+bool initGamePak(GamePak* gamepak, uint8_t* allocated, size_t size);
 void freeGamePak(GamePak* gamepak);
 
 #endif

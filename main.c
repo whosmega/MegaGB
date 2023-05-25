@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void runGB(uint8_t* allocation, long size) {
+static void runGB(uint8_t* allocation, size_t size) {
 	Cartridge c;
     bool result = initCartridge(&c, allocation, size);
 
@@ -18,7 +18,7 @@ static void runGB(uint8_t* allocation, long size) {
 	freeCartridge(&c);
 }
 
-static void runGBA(uint8_t* allocation, long size) {
+static void runGBA(uint8_t* allocation, size_t size) {
 	GamePak gamepak;
 	bool result = initGamePak(&gamepak, allocation, size);
 
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
     }
 
     fseek(file, 0, SEEK_END);
-    long size = ftell(file);
+    size_t size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
     /* Allocate enough space for the bytes */
