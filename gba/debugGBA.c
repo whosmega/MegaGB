@@ -34,7 +34,7 @@ static void BX(struct GBA* gba, uint32_t ins) {
 }
 
 static void B(struct GBA* gba, uint32_t ins) {
-	printf("%-9s %xh", "B", (int32_t)((ins & 0xFFFFFF) << 2));
+	printf("%-9s %xh", "B", (int32_t)(ins & 0xFFFFFF) << 2);
 }
 
 static void BL(struct GBA* gba, uint32_t ins) {
@@ -329,11 +329,12 @@ void printStateARM(GBA* gba, uint32_t opcode) {
 
 	uint32_t R[16];
 	memcpy(&R, &gba->REG, sizeof(uint32_t)*16);
-	
+#ifdef DEBUG_TRACE_REGS	
 #ifdef DEBUG_LIMIT_REGS
 	printf("[R0:%08x|R1:%08x|R2:%08x|R13:%08x]\n", R[0],R[1],R[2],R[13]);
 #else
 	printf("[R0:%08x|R1:%08x|R2:%08x|R3:%08x|R4:%08x|R5:%08x|R6:%08x|R7:%08x|R8:%08x|R9:%08x|R10:%08x|R11:%08x|R12:%08x|R13:%08x|R14:%08x|R15:%08x]\n", R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],R[9],R[10],R[11],R[12],R[13],R[14],R[15]);
+#endif
 #endif
 }
 

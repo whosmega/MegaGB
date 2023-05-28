@@ -60,18 +60,28 @@ static void BX(struct GBA* gba, uint32_t ins) {
 	flushRefillPipeline(gba);
 }
 
-static void B(struct GBA* gba, uint32_t ins) {
-	int32_t offset = (int32_t)((ins & 0xFFFFFF) << 2); 			// shift by 2 is done to preserve
-																// 4 byte alignment
-	gba->REG[R15] += offset;
-	flushRefillPipeline(gba);
-}
+static void B_BL(struct GBA* gba, uint32_t ins) {
+	/* Branch and Branch with link implementation */
+	if (ins >> 24 & 1) {
+		/* Load R14 with return instruction address if L bit is set
+		 * Note: We adjust for prefetch */
+		gba->REG[R14] = gba->REG[R15] - 4;
+	}
+	/* 24 bit 2s complement becomes 26 bit when shifted by 2, this means sign bit is bit 25 */
+	uint32_t offset = (ins & 0xFFFFFF) << 2;
+	uint8_t sign = offset >> 25 & 1;
 
-static void BL(struct GBA* gba, uint32_t ins) {
-	int32_t offset = (int32_t)((ins & 0xFFFFFF) << 2);
-	gba->REG[R14] = gba->REG[R15] - 4; 							// Adjust LR value as PC is 8 bytes
-																// ahead and we need to point to the
-																// next instruction
+	if (sign) {
+		/* Convert 2s complement to an absolute positive integer (since we already know sign) */
+		offset = (UINT32_MAX - (offset | 0xFE000000)) + 1;
+		/* Subtract absolute value */
+		gba->REG[R15] -= offset;
+	} else {
+		/* If sign is positive, we can directly add */
+		gba->REG[R15] += offset;
+	}
+
+	
 	flushRefillPipeline(gba);
 }
 
@@ -1056,8 +1066,7 @@ static void initialiseLUT_ARM(GBA* gba) {
 			gba->ARM_LUT[index] = &Undefined_ARM;
 		} else if ((index & 0b111000000000) == 0b101000000000) {
 			/* Checking for Branch and Branch with Link */
-			uint8_t Link = (index >> 8) & 1;
-			gba->ARM_LUT[index] = Link ? &BL : &B;
+			gba->ARM_LUT[index] = &B_BL;
 		} else if ((index & 0b111000000000) == 0b100000000000) {
 			/* Block Data Transfer - LDM/STM 
 			 * All options are interpreted at runtime */

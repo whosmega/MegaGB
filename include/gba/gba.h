@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stddef.h> 
 #include <gba/arm7tdmi.h>
+#include <gba/renderer.h>
 #include <gba/gamepak.h>
 
 #define HEIGHT_PX 160
@@ -97,6 +98,16 @@ struct GBA {
 
 	void (*ARM_LUT[4096])(struct GBA* gba, uint32_t ins);		/* Lookup table with 12 bit indices
 																   for ARM instructions */
+	/* ----------------- Renderer ---------------- */
+	PPU_VideoMode videoMode; 				// }
+	uint8_t BG0_Flag;						// }
+	uint8_t BG1_Flag;						// } Latched Values of DISPCNT at start of the scanline
+	uint8_t BG2_Flag; 						// }
+	uint8_t BG3_Flag; 						// }
+	uint8_t forcedBlank; 					// }
+	
+	uint8_t ppuVState; 					// Current Vertical State of PPU
+	uint8_t ppuHState; 					// Current Horizontal State of PPU
 
 	/* ----------------- Emulator ---------------- */
 	SDL_Window* SDL_Window; 			/* SDL Window struct pointer */
@@ -120,6 +131,11 @@ struct GBA {
 
 typedef struct GBA GBA;
 
+/* Read/Write IO registers - Mainly for internal hardware emulation to access/write registers */
+
+uint32_t readIO(GBA* gba, uint32_t address, uint8_t size);
+void writeIO(GBA* gba, uint32_t address, uint32_t data, uint8_t size);
+
 /* Bus functions */
 
 uint32_t busRead(GBA* gba, uint32_t address, uint8_t size);
@@ -127,6 +143,7 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size);
 
 /* --------------- */
 
+void SDLEvents(GBA* gba);
 void startGBAEmulator(GamePak* gamepak);
 
 void initialiseGBA(GBA* gba, GamePak* gamepak);

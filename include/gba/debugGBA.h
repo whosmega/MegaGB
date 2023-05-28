@@ -3,7 +3,7 @@
 #include <gba/gba.h>
 
 /* -------- Options -------- */
-#define DEBUG_ENABLED
+// #define DEBUG_ENABLED
 #define DEBUG_TRACE_STATE
 	#define DEBUG_TRACE_REGS
 		#define DEBUG_LIMIT_REGS

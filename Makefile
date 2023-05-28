@@ -13,7 +13,7 @@ LFLAGS = -O3 `sdl2-config --libs` -lm
 EXE = megagb
 
 BIN_GB = cartridge.o gb.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o mbc3.o
-BIN_GBA = gamepak.o arm7tdmi.o gba.o debugGBA.o
+BIN_GBA = gamepak.o arm7tdmi.o gba.o debugGBA.o renderer.o
 
 # test suite
 
@@ -80,6 +80,10 @@ gba.o: $(INCLUDE_GBA)/gba.h \
 debugGBA.o: $(INCLUDE_GBA)/debugGBA.h \
 		  $(SRC_GBA)/debugGBA.c
 	$(CC) -c $(SRC_GBA)/debugGBA.c $(CFLAGS)
+
+renderer.o: $(INCLUDE_GBA)/renderer.h \
+		  $(SRC_GBA)/renderer.c
+	$(CC) -c $(SRC_GBA)/renderer.c $(CFLAGS)
 
 # --------------------------------------------------------------------
 tests: edge_sprite.o sound.o

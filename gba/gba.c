@@ -35,6 +35,9 @@ void cleanSDL(GBA* gba) {
 	SDL_DestroyRenderer(gba->SDL_Renderer);
     SDL_DestroyWindow(gba->SDL_Window);
     SDL_Quit();
+
+	gba->SDL_Renderer = NULL;
+	gba->SDL_Window = NULL;
 }
 
 /* ----------------------------------------------------- */
@@ -44,6 +47,16 @@ void initialiseGBA(GBA* gba, GamePak* gamepak) {
 	gba->run = false;
 	gba->SDL_Renderer = NULL;
 	gba->SDL_Window = NULL;
+
+	/* Initial Latched DISPCNT values */
+	gba->BG0_Flag = 0;
+	gba->BG1_Flag = 0;
+	gba->BG2_Flag = 0;
+	gba->BG3_Flag = 0;
+	gba->forcedBlank = 0;
+	gba->ppuHState = PPU_HDRAW;
+	gba->ppuVState = PPU_VDRAW;
+	gba->videoMode = VMODE_0;
 
 	/* Allocate memory for components */
 	uint8_t* IWRAM 		= (uint8_t*)malloc(0x8000);			// 32 KB
@@ -64,6 +77,8 @@ void initialiseGBA(GBA* gba, GamePak* gamepak) {
 	gba->PaletteRAM = PaletteRAM;
 	gba->VRAM 		= VRAM;
 	gba->OAM 		= OAM;	
+
+
 
 	/* Initialise all IO memory to 0 */
 	memset(gba->IO, 0, 0x3FF);
@@ -106,14 +121,19 @@ void startGBAEmulator(GamePak* gamepak) {
 
 	gba.run = true;
 
+	latchDISPCNT(&gba);
+	/* For now, we take each instruction as 1 cycle consumed */
 	while (gba.run) {
-		for (int i = 0; (i < 250000) && gba.run; i++) {
-			stepCPU(&gba);
-		}
-		SDL_SetRenderDrawColor(gba.SDL_Renderer, 255, 255, 255, 255);
-		SDL_RenderClear(gba.SDL_Renderer);
-		SDL_RenderPresent(gba.SDL_Renderer);
-		SDLEvents(&gba);
+		for (int i = 0; i < 960; i++) stepCPU(&gba);
+	
+		/* HDRAW is over, run the PPU to catch up 
+		 * without ticking the clock */
+		stepPPU(&gba);
+
+		for (int i = 0; i < 272; i++) stepCPU(&gba);
+
+		/* HBLANK is over, run the PPU to catch up */
+		stepPPU(&gba);
 	}
 
 	freeGBA(&gba);
@@ -142,7 +162,7 @@ static inline void littleEndian16Encode(uint8_t* ptr, uint16_t value) {
 }
 
 uint32_t busRead(GBA* gba, uint32_t address, uint8_t size) {
-	/* We're reading a 32/16/8 bit value from the given address */	
+	/* We're reading a 32/16/8 bit value from the given address */
 	if (address >= EXT_ROM0_32MB && address <= EXT_ROM2_32MB_END) {
 		uint32_t relativeAddress;
 
@@ -159,7 +179,7 @@ uint32_t busRead(GBA* gba, uint32_t address, uint8_t size) {
 		}
 
 		if (relativeAddress > (gba->gamepak->size - 1)) {
-			printf("[WARNING] Read attempt from gamepak to an invalid address\n");
+			// printf("[WARNING] Read attempt from gamepak to an invalid address %08x\n", address);
 			return 0;
 		}
 
@@ -208,7 +228,7 @@ uint32_t busRead(GBA* gba, uint32_t address, uint8_t size) {
 		}
 	} else if (address >= PALETTE_RAM_1KB && address <= PALETTE_RAM_1KB_END) {
 		/* Read from Palette RAM */
-		uint8_t* ptr = &gba->VRAM[address - PALETTE_RAM_1KB];
+		uint8_t* ptr = &gba->PaletteRAM[address - PALETTE_RAM_1KB];
 
 		switch (size) {
 			case WIDTH_32: return littleEndian32Decode(ptr);
@@ -238,7 +258,7 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 			case WIDTH_16: littleEndian16Encode(ptr, data); return;
 			case WIDTH_8:  *ptr = (uint8_t)data; return;
 		}
-	} else if (address >= VRAM_96KB && address <= VRAM_96KB_END) {
+	} else if (address >= VRAM_96KB && address <= VRAM_96KB_END) {	
 		uint8_t* ptr = &gba->VRAM[address - VRAM_96KB];
 		
 		/* VRAM only supports 16 and 32 bit writes, writing a byte to the addressed
@@ -260,6 +280,14 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 		/* Check for read-only registers, and prevent a write */
 		switch (address - IO_REG_1KB) {
 			case VCOUNT: return;
+			case DISPSTAT: {
+				/* Handle read only bits */
+				uint8_t current = *ptr;
+				/* V-Blank, H-Blank and V-Counter flags are read only */
+				data &= ~0b111;
+				data |= current & 0b111;
+				break;
+			}
 		}
 
 		switch (size) {
@@ -268,7 +296,7 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 			case WIDTH_8: *ptr = data;
 		} 
 	} else if (address >= PALETTE_RAM_1KB && address <= PALETTE_RAM_1KB_END) {
-		uint8_t* ptr = &gba->EWRAM[address - PALETTE_RAM_1KB];
+		uint8_t* ptr = &gba->PaletteRAM[address - PALETTE_RAM_1KB];
 		
 		/* Palette RAM only supports 16 and 32 bit writes, writing a byte to the addressed
 		 * halfword is going to mirror it to both upper and lower byte */
@@ -286,6 +314,24 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 	}
 }
 
+/* ------------- IO Read/Write -------------- */
 
+uint32_t readIO(GBA* gba, uint32_t address, uint8_t size) {
+	switch (size) {
+		case WIDTH_32: return littleEndian32Decode(&gba->IO[address]);
+		case WIDTH_16: return littleEndian16Decode(&gba->IO[address]);
+		case WIDTH_8:  return gba->IO[address];
+
+		default: return 0;
+	}
+}
+
+void writeIO(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
+	switch (size) {
+		case WIDTH_32: littleEndian32Encode(&gba->IO[address], data); return;
+		case WIDTH_16: littleEndian16Encode(&gba->IO[address], data); return;
+		case WIDTH_8:  gba->IO[address] = (uint8_t)data; return;
+	}
+}
 
 /* -------------------------------- */
