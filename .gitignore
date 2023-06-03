@@ -2,6 +2,7 @@ debug/mts
 debug/blargg
 debug/gbatest
 debug/*.gba
+debug/*.bin
 games
 *.o
 bin

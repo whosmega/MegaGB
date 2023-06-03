@@ -747,7 +747,9 @@ static void LDM_STM(struct GBA* gba, uint32_t ins) {
 				base += 4;
 			} else {
 				/* Subtract offset */
-				uint32_t address = P ? (base-4) - (REG_COUNT-1)*4 + i*4 : base - (REG_COUNT-1)*4 + i*4;
+				uint32_t reference = P ? ((base-4)+i*4)-(REG_COUNT-1)*4 : (base+i*4)-(REG_COUNT-1)*4;
+				uint32_t address = reference + i*4;
+
 				address &= ~3;		// Pre/Post
 	
 				*readIn = busRead(gba, address, WIDTH_32);
@@ -812,7 +814,8 @@ static void LDM_STM(struct GBA* gba, uint32_t ins) {
 				base += 4;
 			} else {
 				/* Subtract offset */
-				uint32_t address = P ? (base-4) - (REG_COUNT-1)*4 + i*4 : base - (REG_COUNT-1)*4 + i*4;
+				uint32_t reference = P ? ((base-4)+i*4)-(REG_COUNT-1)*4 : (base+i*4)-(REG_COUNT-1)*4;
+				uint32_t address = reference + i*4;
 				address &= ~3;		// Pre/Post
 
 				if (!transferringBanked && REG == Rn && i != 0) data = address;
@@ -862,6 +865,8 @@ static void SWP(struct GBA* gba, uint32_t ins) {
 
 static void SWI(struct GBA* gba, uint32_t ins) {
 	/* To be implemented after impementing traps and mode switches */
+	printf("SUIII\n");
+	exit(0);
 }
 
 static void Undefined_ARM(struct GBA* gba, uint32_t ins) {	
@@ -1111,11 +1116,15 @@ void initialiseCPU(GBA* gba) {
 	memset(&gba->REG, 	  	0,16*sizeof(uint32_t));
 	memset(&gba->REG_SWAP,  0, 7*sizeof(uint32_t));
 
+	/* Loading R0, R1, R13, R15 and CPSR with BIOS initialised values */
+
+	gba->REG[R0]		   = 0x08000000;
+	gba->REG[R1] 		   = 0x000000EA;
 	gba->BANK_SVC[R13_SVC] = 0x03007FE0;
 	gba->BANK_IRQ[R13_IRQ] = 0x03007FA0;
 	gba->REG[R13] 		   = 0x03007F00;
 	gba->REG[R15] 		   = 0x08000000;
-	gba->CPSR 			   = 0x0000001F; 	// ARM State, System Mode
+	gba->CPSR 			   = 0x6000001F; 	// ARM State, System Mode
 	gba->SPSR    		   = 0xFFFFFFFF;    // SPSR cannot be read in USER/SYSTEM mode */
 
 	/* Setup Lookup Tables */

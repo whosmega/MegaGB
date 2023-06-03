@@ -123,6 +123,7 @@ void startGBAEmulator(GamePak* gamepak) {
 
 	latchDISPCNT(&gba);
 	/* For now, we take each instruction as 1 cycle consumed */
+
 	while (gba.run) {
 		for (int i = 0; i < 960; i++) stepCPU(&gba);
 	

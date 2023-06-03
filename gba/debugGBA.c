@@ -321,7 +321,9 @@ void initDissembler() {
 	}
 }
 
+
 void printStateARM(GBA* gba, uint32_t opcode) {
+#ifdef DEBUG_TRACE_STATE
 	printf("[A][%08x][N%dS%dC%dV%d] ", gba->REG[R15] - 8, 
 				gba->CPSR>>31, (gba->CPSR>>30)&1, (gba->CPSR>>29)&1, (gba->CPSR>>28)&1);
 	Dissembler_ARM_LUT[((opcode & 0x0FF00000) >> 16) | ((opcode >> 4) & 0xF)](gba, opcode);
@@ -329,11 +331,15 @@ void printStateARM(GBA* gba, uint32_t opcode) {
 
 	uint32_t R[16];
 	memcpy(&R, &gba->REG, sizeof(uint32_t)*16);
-#ifdef DEBUG_TRACE_REGS	
-#ifdef DEBUG_LIMIT_REGS
+#ifdef DEBUG_LIMIT_REGS	
 	printf("[R0:%08x|R1:%08x|R2:%08x|R13:%08x]\n", R[0],R[1],R[2],R[13]);
 #else
-	printf("[R0:%08x|R1:%08x|R2:%08x|R3:%08x|R4:%08x|R5:%08x|R6:%08x|R7:%08x|R8:%08x|R9:%08x|R10:%08x|R11:%08x|R12:%08x|R13:%08x|R14:%08x|R15:%08x]\n", R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],R[9],R[10],R[11],R[12],R[13],R[14],R[15]);
+	uint32_t R[16];
+	memcpy(&R, &gba->REG, sizeof(uint32_t)*16);
+
+	printf("%08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X cpsr: %08X | %08X: ", R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],R[9],R[10],R[11],R[12],R[13],R[14],R[15]-4,gba->CPSR, opcode);
+	Dissembler_ARM_LUT[((opcode & 0x0FF00000) >> 16) | ((opcode >> 4) & 0xF)](gba, opcode);
+	printf("\n");
 #endif
 #endif
 }

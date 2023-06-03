@@ -6,7 +6,7 @@ void latchDISPCNT(GBA* gba) {
 	uint16_t DISPCNT = readIO(gba, DISPCNT, WIDTH_16);
 
 	/* Note: Values 6 and 7 are prohibited and dont mean anything */
-	gba->videoMode = DISPCNT & 3;
+	gba->videoMode = DISPCNT & 0b111;
 	gba->forcedBlank = DISPCNT >> 7 & 1;
 	gba->BG0_Flag = DISPCNT >> 8 & 1;
 	gba->BG1_Flag = DISPCNT >> 9 & 1;
@@ -34,6 +34,34 @@ static void renderMode3Scanline(GBA* gba) {
 	for (int x = 0; x < 240; x++) { 			/* 240 Pixels */
 		uint32_t address = 480*y+2*x;
 		uint16_t rgb = gba->VRAM[address] | (gba->VRAM[address+1] << 8);
+		uint8_t r = rgb & 0x1F;
+		uint8_t g = rgb >> 5 & 0x1F;
+		uint8_t b = rgb >> 10 & 0x1F;
+
+		SDL_SetRenderDrawColor(gba->SDL_Renderer, toRGB888(r), toRGB888(g), toRGB888(b), 255);
+		SDL_RenderDrawPoint(gba->SDL_Renderer, x, y);
+	}
+}
+
+static void renderMode4Scanline(GBA* gba) {
+	/* Mode 4 is a bitmap mode similar to mode 3, with the exception of having 2 frames
+	 * 
+	 * Display frame is selected using bit 4 of DISPCNT
+	 * frame 0 -> 0x06000000-0x060095FF 
+	 * frame 1 -> 0x0600A000-0x060135FF 
+	 * Each pixel is 1 byte, first scanline is 0-240, and so on
+	 * The byte represents the BG Palette RAM index, color 0 being transparent 
+	 * Note: Transparent color is the color 0 of BG Palette, currently sprites are not supported */
+
+	uint8_t frame = gba->IO[DISPCNT] >> 4 & 1;
+	uint32_t base = frame ? 0xA000 : 0x0000;
+	uint8_t y = gba->IO[VCOUNT];
+
+	// printf("rendering line %d, frame %d\n", y, frame);
+	for (int x = 0; x < 240; x++) {
+		/* BG Palette RAM */
+		uint8_t index = gba->VRAM[base + 240*y + x];
+		uint16_t rgb = gba->PaletteRAM[index] | (gba->PaletteRAM[index+1] << 8);
 		uint8_t r = rgb & 0x1F;
 		uint8_t g = rgb >> 5 & 0x1F;
 		uint8_t b = rgb >> 10 & 0x1F;
@@ -77,6 +105,12 @@ void stepPPU(GBA* gba) {
 								/* BG2 not enabled, render white scanline */
 								renderWhiteScanline(gba);
 							}
+							break;
+						}
+
+						case VMODE_4: {
+							if (gba->BG2_Flag) renderMode4Scanline(gba);
+							else renderWhiteScanline(gba);
 							break;
 						}
 
