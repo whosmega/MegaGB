@@ -3,7 +3,7 @@
 #include <gba/gba.h>
 
 /* -------- Options -------- */
-// #define DEBUG_ENABLED
+#define DEBUG_ENABLED
  #define DEBUG_TRACE_STATE
 	#define DEBUG_LIMIT_REGS
 
@@ -11,6 +11,7 @@
 
 #ifdef DEBUG_ENABLED
 void printStateARM(GBA* gba, uint32_t opcode);
+void printStateTHUMB(GBA* gba, uint16_t opcode);
 void initDissembler();
 #endif
 #endif

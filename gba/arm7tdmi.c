@@ -36,9 +36,96 @@ static inline void CPSR_ModifyBit(GBA* gba, uint8_t bit, uint8_t value) {
 	else gba->CPSR &= ~(1 << bit);
 }
 
-/* --------------- Register Functions ----------------- */
+/* ------------------------------------------------------- */
+static uint32_t barrelShifter(GBA* gba, uint8_t shiftType, uint32_t operand, uint8_t amount, uint8_t* carry) {
+	/* Responsible for all barrel shifter operations for Data Processing and THUMB 
+	 * Calculates operand shifted by amount, with shift types LSL, LSR, ASR and ROR/RRX
+	 * and also calculates carry flag 
+	 *
+	 * 0 -> Logical Left Shift  	(LSL) 
+	 * 1 -> Logical Right Shift 	(LSR)
+	 * 2 -> Arithmetic Right Shift 	(ASR) 
+	 * 3 -> Rotate Right            (ROR) 
+	 * 
+	 * Carry should be set to a default value before calling this function
+	 * When no shift operation occurs, carry is unchanged. This is normally for LSL and LSR.
+	 * For ASR and ROR, amount=0 is treated specially
+	 *
+	 * Shift Amount can be anything between 0-255
+	 * */
 
-/* ----------------- Instruction Handlers ------------- */ 
+	switch (shiftType) {
+		/* Type of shift */
+		case 0: {	// Logical Left
+			if (amount == 0) return operand; 				// No shift yields unchanged carry?
+			if (amount > 32) {
+				*carry = 0;
+				operand = 0;
+			} else {
+				*carry = (operand >> (32 - amount)) & 1;
+				operand <<= amount;
+			}
+			break;
+		}
+		case 1: {	// Logical Right
+			if (amount == 0) return operand; 				// ??
+			if (amount > 32) {
+				*carry = 0;
+				operand = 0;
+			} else {
+				*carry = (operand >> (amount - 1)) & 1;
+				operand >>= amount;
+			}
+			break;
+		}
+		case 2: { 	// Arithmetic Right
+			if (amount == 0 || amount > 32) amount = 32; 			// 0 is treated as 32
+			uint8_t bit31 = operand >> 31;
+			*carry = (operand >> (amount - 1)) & 1;
+			operand >>= amount;
+
+			/* Set shifted in bits at left to 1, if bit 31 is set, otherwise they're 0 */
+			if (bit31) operand |= (uint32_t)(0xFFFFFFFF << (32 - amount));
+			break;
+		}
+		case 3: {	// Rotate Right 
+			if (amount == 0) {
+				// RRX
+				*carry = operand & 1;
+				operand >>= 1;
+				operand |= CPSR_GetBit(gba, FLG_C) << 31;
+			} else {
+				// Normal
+				if (amount > 32) {
+					amount %= 32;
+					if (amount == 0) amount = 32;
+				}
+				*carry = (operand >> (amount - 1)) & 1;
+				uint32_t shiftedOut = operand & (0xFFFFFFFF >> (32 - amount));
+				operand >>= amount;
+				operand |= shiftedOut << (32 - amount);
+			}
+			break;
+		}
+	}
+
+	return operand;
+}
+
+static uint8_t getVFlag(GBA* gba, uint32_t OP1, uint32_t OP2, uint32_t result) {
+	/* Tests V flag for Data Processing and THUMB addition and subtraction */
+
+	/* V flag test */
+	if ((OP1 >> 31) == (OP2 >> 31)) {
+		/* Change in sign means overflow into bit 31 */
+		uint8_t sign = OP1 >> 31;
+		if (sign != (result >> 31)) return 1;
+	}
+
+	return 0;
+}
+
+/* ----------------- ARM Instruction Handlers ------------- */ 
 
 static void BX(struct GBA* gba, uint32_t ins) {
 	/* Branch and exchange */
@@ -46,12 +133,12 @@ static void BX(struct GBA* gba, uint32_t ins) {
 
 	if (content & 1) {
 		/* Switch to THUMB */
-		content &= ~1; 					// Clear lower bit to HW align 
+		content &= ~((uint32_t)1); 					// Clear lower bit to HW align 
 		CPSR_SetBit(gba, CPSR_THUMB);
 		gba->cpu_state = CPU_STATE_THUMB;
 	} else {
 		/* Switch to ARM */
-		content &= ~3; 					// Clear lower 2 bits to W align
+		content &= ~((uint32_t)3); 					// Clear lower 2 bits to W align
 		CPSR_ClearBit(gba, CPSR_THUMB);
 		gba->cpu_state = CPU_STATE_ARM;
 	}
@@ -110,62 +197,8 @@ static uint32_t getDataProcessing_RxOP2(GBA* gba, uint16_t OP2, uint8_t* carry) 
 		amount = OP2 >> 7;
 	}
 
-	if (amount == 0) return data; 			// no shift
-
-	switch ((OP2 >> 5) & 0b11) {
-		/* Type of shift */
-		case 0: {	// Logical Left
-			if (amount > 32) {
-				*carry = 0;
-				data = 0;
-			} else {
-				*carry = (data >> (32 - amount)) & 1;
-				data <<= amount;
-			}
-			break;
-		}
-		case 1: {	// Logical Right
-			if (amount > 32) {
-				*carry = 0;
-				data = 0;
-			} else {
-				*carry = (data >> (amount - 1)) & 1;
-				data >>= amount;
-			}
-			break;
-		}
-		case 2: { 	// Arithmetic Right
-			if (amount == 0 || amount > 32) amount = 32; 			// 0 is treated as 32
-			uint8_t bit31 = data >> 31;
-			*carry = (data >> (amount - 1)) & 1;
-			data >>= amount;
-
-			/* Set shifted in bits at left to 1, if bit 31 is set, otherwise they're 0 */
-			if (bit31) data |= (uint32_t)(0xFFFFFFFF << (32 - amount));
-			break;
-		}
-		case 3: {	// Rotate Right 
-			if (amount == 0) {
-				// RRX
-				*carry = data & 1;
-				data >>= 1;
-				data |= CPSR_GetBit(gba, FLG_C) << 31;
-			} else {
-				// Normal
-				if (amount > 32) {
-					amount %= 32;
-					if (amount == 0) amount = 32;
-				}
-				*carry = (data >> (amount - 1)) & 1;
-				uint32_t shiftedOut = data & (0xFFFFFFFF >> (32 - amount));
-				data >>= amount;
-				data |= shiftedOut << (32 - amount);
-			}
-			break;
-		}
-	}
-
-	return data;
+	uint32_t shifted = barrelShifter(gba, (OP2 >> 5) & 0b11, data, amount, carry);
+	return shifted;
 }
 
 static uint32_t getDataProcessing_ImmOP2(GBA* gba, uint16_t OP2) {
@@ -287,7 +320,6 @@ static void dataProcessingArithmetic(struct GBA* gba, uint32_t ins) {
 	uint32_t result = 0;
 	bool testInstruction = false;
 
-	uint8_t V = 0;
 	uint8_t C = 0;
 
 	switch (opcode) {
@@ -370,16 +402,8 @@ static void dataProcessingArithmetic(struct GBA* gba, uint32_t ins) {
 	else {
 		if (S) {
 			/* C flag is handled differently by accounting carry input for ADC/SBC/RSC 
-			 * V flag is handled the same for all operations (carry input is not accounted for) */
-
-			/* V flag test */
-			if ((OP1 >> 31) == (OP2 >> 31)) {
-				/* Change in sign means overflow into bit 31 */
-				uint8_t sign = OP1 >> 31;
-				if (sign != (result >> 31)) V = 1;
-			}
-
-			CPSR_ModifyBit(gba, FLG_V, V);
+			 * V flag is handled the same for all operations (carry input is not accounted for) */	
+			CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, OP2, result));
 			CPSR_ModifyBit(gba, FLG_C, C);
 			CPSR_ModifyBit(gba, FLG_Z, result == 0);
 			CPSR_ModifyBit(gba, FLG_N, result >> 31);
@@ -865,15 +889,281 @@ static void SWP(struct GBA* gba, uint32_t ins) {
 
 static void SWI(struct GBA* gba, uint32_t ins) {
 	/* To be implemented after impementing traps and mode switches */
-	printf("SUIII\n");
-	exit(0);
 }
 
 static void Undefined_ARM(struct GBA* gba, uint32_t ins) {	
 }
 
 static void Unimplemented_ARM(struct GBA* gba, uint32_t ins) {
-	printf("Instruction: %08x is unimplemented or an unsupported co-processor instruction\n", ins);
+	printf("Instruction: %08x is unimplemented or an unsupported co-processor ARM instruction\n", ins);
+}
+
+/* -------------- THUMB Instruction Handlers -------------- */
+
+static void LSL_LSR_ASR(struct GBA* gba, uint16_t ins) {
+	/* Move shifted lo-register (Logical Left/Right Shift and Arithmetic Right Shift) */
+
+	uint8_t opcode = ins >> 11 & 0b11;
+	uint8_t offset = ins >> 6 & 0b11111;
+	uint8_t Rs = ins >> 3 & 0b111;
+	uint8_t Rd = ins & 0b111;
+
+	uint8_t carry = CPSR_GetBit(gba, FLG_C);
+	uint32_t data = gba->REG[Rs];
+
+	if (opcode == 3) return; 				// Invalid Encoding
+
+	uint32_t shifted = barrelShifter(gba, opcode, data, offset, &carry);
+	gba->REG[Rd] = shifted;
+
+	/* Set CPSR */
+	CPSR_ModifyBit(gba, FLG_C, carry);
+	CPSR_ModifyBit(gba, FLG_N, data >> 31);
+	CPSR_ModifyBit(gba, FLG_Z, data == 0);
+}
+
+static void ADD_SUB(struct GBA* gba, uint16_t ins) {
+	uint8_t I = ins >> 10 & 1;
+	uint8_t SUB = ins >> 9 & 1;
+	uint8_t Rs = ins >> 3 & 0b111;
+	uint8_t Rd = ins & 0b111;
+
+	uint32_t OP1 = gba->REG[Rs];
+	uint32_t OP2 = I ? ins >> 6 & 0b111 : gba->REG[ins >> 6 & 0b111];
+
+	uint8_t C = 0;
+	uint32_t result = 0;
+
+	if (SUB) {
+		/* SUB */
+		/* SUB can be treated as ADD with OP2 inverted with 1 added to it (in other words ADC
+		 * with carry in forced to 1) */
+		OP2 = ~OP2;
+		result = OP1 + OP2 + 1;
+
+		C = ((uint64_t)OP1 + (uint64_t)OP2 + 1) >> 32;
+	} else {
+		/* ADD */
+		result = OP1 + OP2;
+
+		C = ((uint64_t)OP1 + (uint64_t)OP2) >> 32;
+	}
+
+	gba->REG[Rd] = result;	
+
+	CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, OP2, result));
+	CPSR_ModifyBit(gba, FLG_C, C);
+	CPSR_ModifyBit(gba, FLG_Z, result == 0);
+	CPSR_ModifyBit(gba, FLG_N, result >> 31);
+}
+
+static void MOV_CMP_ADD_SUB_Imm(struct GBA* gba, uint16_t ins) {
+	uint8_t opcode = ins >> 11 & 0b11;
+	uint8_t Rd = ins >> 8 & 0b111;
+	uint8_t offset = ins & 0xFF;
+
+	uint32_t result = 0;
+	uint32_t OP1 = gba->REG[Rd];
+	uint8_t C = CPSR_GetBit(gba, FLG_C);
+
+	switch (opcode) {
+		case 0: {
+			/* MOV */
+			result = offset;
+			gba->REG[Rd] = result;
+			break;
+		}
+		case 1: {
+			/* CMP - compare same as SUB without result stored */
+			offset = ~offset;
+			result = OP1 + offset + 1;
+
+			C = ((uint64_t)OP1 + (uint64_t)offset + 1) >> 32;
+			break;
+		}
+		case 2: {
+			/* ADD */
+			result = OP1 + offset;
+
+			C = ((uint64_t)OP1 + (uint64_t)offset) >> 32;
+			gba->REG[Rd] = result;
+			break;
+		}
+		case 3: {
+			/* SUB */
+			offset = ~offset;
+			result = OP1 + offset + 1;
+
+			C = ((uint64_t)OP1 + (uint64_t)offset + 1) >> 32;
+			gba->REG[Rd] = result;
+			break;
+		}
+	}
+
+	if (opcode != 0) {
+		/* Set flags for Data Processing Arithmetic specifically
+		 * (these flags dont get set for data processing logical) */	
+
+		CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, offset, result));
+		CPSR_ModifyBit(gba, FLG_C, C);
+	}
+
+	CPSR_ModifyBit(gba, FLG_Z, result == 0);
+	CPSR_ModifyBit(gba, FLG_N, result >> 31);
+}
+
+static void ALU(struct GBA* gba, uint16_t ins) {
+	/* Performs basic Logical/Arithmetic ALU operations on Lo register pairs 
+	 *
+	 * AND, EOR, LSL, LSR, ASR, ROR, TST, ORR, BIC, MVN 
+	 * ADC, SBC, NEG, CMP, CMN, MUL */
+	uint8_t opcode = ins >> 6 & 0xF;
+	uint8_t Rs = ins >> 3 & 0b111;
+	uint8_t Rd = ins & 0b111;
+
+	uint32_t OP1 = gba->REG[Rd];
+	uint32_t OP2 = gba->REG[Rs];
+	uint32_t result = 0;
+	uint8_t carry = CPSR_GetBit(gba, FLG_C);
+	bool testInstruction = false;
+	bool setV = false;
+
+	/* In normal cases when operand 2 is a register, the barrel shifter can cause a carry
+	 * to occur and thus the C flag gets set. However in the THUMB subset, the barrel shifter
+	 * is only used for LSL, LSR, ASR and ROR. So in all other logical cases the carry flag is 
+	 * unchanged.
+	 *
+	 * For arithmetic cases, the carry flag is always manually set and is never left unchanged */
+	switch (opcode) {
+		case 0: {
+			/* AND */
+			result = OP1 & OP2;
+			break;
+		}
+		case 1: {
+			/* EOR */
+			result = OP1 ^ OP2;
+			break;
+		}
+		case 2: {
+			/* MOV Rd, LSL Rs 
+			 * Logical Left or LSL 
+			 *
+			 * Since lower byte of register is being used as shift count, 
+			 * the number can be greater than 32 */
+			result = barrelShifter(gba, 0, OP1, OP2 & 0xFF, &carry);
+			break;
+		}
+		case 3: {
+			/* MOV Rd, LSR Rs
+			 * Logical Right or LSR */
+			result = barrelShifter(gba, 1, OP1, OP2 & 0xFF, &carry);
+			break;
+		}
+		case 4: {
+			/* MOV Rd, ASR Rs
+			 * Arithmetic Right or ASR */
+			result = barrelShifter(gba, 2, OP1, OP2 & 0xFF, &carry);
+			break;
+		}
+		case 7: {
+			/* MOV Rd, ROR Rs
+			 * Rotate Right or ROR */
+			result = barrelShifter(gba, 3, OP1, OP2 & 0xFF, &carry);
+			break;
+		}
+		case 8: {
+			/* TST - AND but no result set */
+			result = OP1 & OP2;
+			testInstruction = true;
+			break;
+		}
+		case 12: {
+			/* ORR */
+			result = OP1 | OP2;
+			break;
+		}
+		case 14: {
+			/* BIC */
+			result = OP1 & ~OP2;
+			break;
+		}
+		case 15: {
+			/* MVN */
+			result = ~OP2;
+			break;
+		}
+
+		case 5: {
+			/* ADC */
+			uint8_t carryInput = CPSR_GetBit(gba, FLG_C);
+
+			result = OP1 + OP2 + carryInput;
+			/* We dont account for carry Input when calculating signed overflow */
+
+			carry = ((uint64_t)OP1 + (uint64_t)OP2 + carryInput) >> 32;
+			setV = true;
+			break;
+		}
+		case 6: {
+			/* SBC */
+			uint8_t carryInput = CPSR_GetBit(gba, FLG_C);
+
+			OP2 = ~OP2;
+			result = OP1 + OP2 + carryInput;
+
+			carry = ((uint64_t)OP1 + (uint64_t)OP2 + carryInput) >> 32;
+			setV = true;
+			break;
+		}
+		case 9: {
+			/* NEG - Same as RSB Rd, Rs, #0 or Rd = -Rs */
+			OP2 = 0;
+			OP1 = ~OP1;
+			result = OP2 + OP1 + 1;
+
+			carry = ((uint64_t)OP1 + (uint64_t)OP2 + 1) >> 32;
+			setV = true;
+			break;
+		}
+		case 10: {
+			/* CMP -> SUB test for Lo Registers */
+			OP2 = ~OP2;
+			result = OP1 + OP2 + 1;
+
+			carry = ((uint64_t)OP1 + (uint64_t)OP2 + 1) >> 32;
+			testInstruction = true;
+			setV = true;
+			break;
+		}
+		case 11: {
+			/* CMN -> ADD test for Hi Registers */
+			result = OP1 + OP2;
+
+			carry = ((uint64_t)OP1 + (uint64_t)OP2) >> 32;
+			testInstruction = true;
+			setV = true;
+			break;
+		}
+		case 13: {
+			/* MUL - Technically not part of ALU but is part of this encoding and suits this
+			 * category best 
+			 * Note: Also, operand restrictions should apply but we arent checking for now */
+			result = OP1 * OP2;
+			break;
+		}
+	}
+
+	if (!testInstruction) gba->REG[Rd] = result;
+
+	if (setV) CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, OP2, result));
+	CPSR_ModifyBit(gba, FLG_C, carry);
+	CPSR_ModifyBit(gba, FLG_Z, result == 0);
+	CPSR_ModifyBit(gba, FLG_N, result >> 31);
+}
+
+static void Unimplemented_THUMB(struct GBA* gba, uint16_t ins) {
+	printf("Instruction: %04x is an unimplemented THUMB Instruction\n", ins);
 }
 
 /* ---------------------------------------------------- */
@@ -999,7 +1289,10 @@ static inline uint32_t readARMOpcode(GBA* gba) {
 }
 
 static inline uint16_t readTHUMBOpcode(GBA* gba) {
-	return 0;
+	uint16_t opcode = busRead(gba, gba->REG[R15], WIDTH_16);
+	gba->REG[R15] += 2;
+
+	return opcode;
 }
 
 static void dispatchARM(GBA* gba, uint32_t opcode) {
@@ -1011,7 +1304,8 @@ static void dispatchARM(GBA* gba, uint32_t opcode) {
 }
 
 static void dispatchTHUMB(GBA* gba, uint16_t opcode) {
-
+	/* No conditional checking here, we directly execute */
+	gba->THUMB_LUT[opcode >> 8]((struct GBA*)gba, opcode);
 }
 
 /* ----------------------------------------------------------------- */
@@ -1101,6 +1395,34 @@ static void initialiseLUT_ARM(GBA* gba) {
 	}
 }
 
+void initialiseLUT_THUMB(GBA* gba) {
+	/* For THUMB LUT, we only use the upper byte to decode instructions
+	 * so we need 2^8 = 256 entries */
+
+	for (int index = 0; index < 256; index++) {
+		/* Bit masking and checking is done the same way as ARM LUT, i.e
+		 * we mask the bits we dont need and compare the rest to check for an encoding
+		 * The ordering is also important as we prioritise encodings which are the most
+		 * deterministic (most bits matching) and leave the unpredictable ones at the bottom */
+
+		if ((index & 0b11111100) == 0b01000000) {
+			/* ALU Operations */
+			gba->THUMB_LUT[index] = &ALU;
+		} else if ((index & 0b11111000) == 0b00011000) {
+			/* Add/Sub with immediate or register operand */
+			gba->THUMB_LUT[index] = &ADD_SUB;
+		} else if ((index & 0b11100000) == 0b00100000) {
+			/* MOV/CMP/ADD/SUB Immediate */
+			gba->THUMB_LUT[index] = &MOV_CMP_ADD_SUB_Imm;
+		} else if ((index & 0b11100000) == 0b00000000) {
+			/* Move Shifted Register */
+			gba->THUMB_LUT[index] = &LSL_LSR_ASR;
+		} else {
+			gba->THUMB_LUT[index] = &Unimplemented_THUMB;
+		}
+	}
+}
+
 void initialiseCPU(GBA* gba) {
 	gba->cpu_state = CPU_STATE_ARM;
 	gba->cpu_mode = CPU_MODE_SYSTEM;
@@ -1129,6 +1451,7 @@ void initialiseCPU(GBA* gba) {
 
 	/* Setup Lookup Tables */
 	initialiseLUT_ARM(gba);
+	initialiseLUT_THUMB(gba);
 
 	/* Other values */
 	memset(&gba->pipeline, 0, 3*sizeof(uint32_t));
@@ -1227,7 +1550,13 @@ void stepCPU(GBA* gba) {
 	
 		insertPipeline(gba, readARMOpcode(gba));
 	} else {
+#if defined(DEBUG_ENABLED) && defined(DEBUG_TRACE_STATE)
+		uint16_t opcode = (uint16_t)readPipeline(gba);
+		printStateTHUMB(gba, opcode);
+		dispatchTHUMB(gba, opcode);
+#else
 		dispatchTHUMB(gba, readPipeline(gba));
+#endif
 		if (gba->skipFetch) {gba->skipFetch = false; return;}
 
 		insertPipeline(gba, readTHUMBOpcode(gba));

@@ -98,6 +98,8 @@ struct GBA {
 
 	void (*ARM_LUT[4096])(struct GBA* gba, uint32_t ins);		/* Lookup table with 12 bit indices
 																   for ARM instructions */
+	void (*THUMB_LUT[256])(struct GBA* gba, uint16_t ins);		/* Lookup table with 8 bit indices
+																   for THUMB instructions */
 	/* ----------------- Renderer ---------------- */
 	PPU_VideoMode videoMode; 				// }
 	uint8_t BG0_Flag;						// }

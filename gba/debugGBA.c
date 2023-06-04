@@ -6,6 +6,10 @@
 #ifdef DEBUG_ENABLED
 
 void (*Dissembler_ARM_LUT[4096])(GBA* gba, uint32_t opcode);
+void (*Dissembler_THUMB_LUT[256])(GBA* gba, uint16_t opcode);
+
+
+/* -------------- ARM Handlers ------------------- */
 
 static char* condition(struct GBA* gba, uint8_t condCode) {
 	switch (condCode) {
@@ -210,11 +214,88 @@ static void Undefined(struct GBA* gba, uint32_t ins) {
 	printf("Undefined");
 }
 
-static void Unimplemented(struct GBA* gba, uint32_t ins) {
+static void Unimplemented_ARM(struct GBA* gba, uint32_t ins) {
 	printf("Unimplemented");
 }
 
+/* ------------- THUMB Handlers ----------------- */
+
+static void LSL_LSR_ASR(struct GBA* gba, uint16_t ins) {
+	char name[4];
+
+	switch (ins >> 11 & 0b11) {
+		case 0: strcpy((char*)&name, "LSL"); break;
+		case 1: strcpy((char*)&name, "LSR"); break;
+		case 2: strcpy((char*)&name, "ASR"); break;
+	}
+
+	name[3] = '\0';
+
+	printf("%-9s R%d, R%d, #%d", name, ins & 0b111, ins >> 3 & 0b111, ins >> 6 & 0b11111);
+}
+
+static void ADD_SUB(struct GBA* gba, uint16_t ins) {
+	uint8_t I = ins >> 10 & 1;
+	uint8_t SUB = ins >> 9 & 1;
+	uint8_t Rs = ins >> 3 & 0b111;
+	uint8_t Rd = ins & 0b111;
+
+	printf("%-9s R%d, R%d, ", SUB ? "SUB" : "ADD", Rd, Rs);
+	if (I) printf("#%d", ins >> 6 & 0b111);
+	else printf("R%d", ins >> 6 & 0b111);
+}
+
+static void MOV_CMP_ADD_SUB_Imm(struct GBA* gba, uint16_t ins) {
+	uint8_t opcode = ins >> 11 & 0b11;
+	uint8_t Rd = ins >> 8 & 0b111;
+	uint8_t offset = ins & 0xFF;
+
+	switch (opcode) {
+		case 0: printf("%-9s ", "MOV"); break;
+		case 1: printf("%-9s ", "CMP"); break;
+		case 2: printf("%-9s ", "ADD"); break;
+		case 3: printf("%-9s ", "SUB"); break;
+	}
+
+	printf("R%d, #%d", Rd, offset);
+}
+
+static void ALU(struct GBA* gba, uint16_t ins) {
+	uint8_t opcode = ins >> 6 & 0xF;
+	uint8_t Rs = ins >> 3 & 0b111;
+	uint8_t Rd = ins & 0b111;
+
+	switch (opcode) {
+		case 0x0: printf("%-9s ", "AND"); break;
+		case 0x1: printf("%-9s ", "EOR"); break;
+		case 0x2: printf("%-9s ", "LSL"); break;
+		case 0x3: printf("%-9s ", "LSR"); break;
+		case 0x4: printf("%-9s ", "ASR"); break;
+		case 0x5: printf("%-9s ", "ADC"); break;
+		case 0x6: printf("%-9s ", "SBC"); break;
+		case 0x7: printf("%-9s ", "ROR"); break;
+		case 0x8: printf("%-9s ", "TST"); break;
+		case 0x9: printf("%-9s ", "NEG"); break;
+		case 0xA: printf("%-9s ", "CMP"); break;
+		case 0xB: printf("%-9s ", "CMN"); break;
+		case 0xC: printf("%-9s ", "ORR"); break;
+		case 0xD: printf("%-9s ", "MUL"); break;
+		case 0xE: printf("%-9s ", "BIC"); break;
+		case 0xF: printf("%-9s ", "MVN"); break;
+	}
+
+	printf("R%d, R%d", Rd, Rs);
+}
+
+static void Unimplemented_THUMB(struct GBA* gba, uint16_t ins) {
+	printf("Unimplemented");
+}
+
+
+/* -------------------------------------------- */
+
 void initDissembler() {
+	/* Initialising ARM Opcodes */
 	for (int index = 0; index < 4096; index++) {
 		/* index corresponds to 12 bit index formed by combining bits 27-20 and 7-4 of OPCODE
 		 *
@@ -316,7 +397,27 @@ void initDissembler() {
 
 			Dissembler_ARM_LUT[index] = &decodeDataProcessing;
 		} else {
-			Dissembler_ARM_LUT[index] = &Unimplemented;
+			Dissembler_ARM_LUT[index] = &Unimplemented_ARM;
+		}
+	}
+
+	/* Initialising THUMB Opcode */
+	for (int index = 0; index < 256; index++) {
+
+		if ((index & 0b11111100) == 0b010000) {
+			/* ALU Operations */
+			Dissembler_THUMB_LUT[index] = &ALU;
+		} else if ((index & 0b11111000) == 0b00011000) {
+			/* ADD/SUB with immediate or register operand */
+			Dissembler_THUMB_LUT[index] = &ADD_SUB;
+		} else if ((index & 0b11100000) == 0b00100000) {
+			/* MOV/CMP/ADD/SUB Immediate */
+			Dissembler_THUMB_LUT[index] = &MOV_CMP_ADD_SUB_Imm;
+		} else if ((index & 0b11100000) == 0b00000000) {
+			/* Move Shifted Register */
+			Dissembler_THUMB_LUT[index] = &LSL_LSR_ASR;
+		} else {
+			Dissembler_THUMB_LUT[index] = &Unimplemented_THUMB;
 		}
 	}
 }
@@ -338,9 +439,33 @@ void printStateARM(GBA* gba, uint32_t opcode) {
 	memcpy(&R, &gba->REG, sizeof(uint32_t)*16);
 
 	printf("%08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X cpsr: %08X | %08X: ", R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],R[9],R[10],R[11],R[12],R[13],R[14],R[15]-4,gba->CPSR, opcode);
+
 	Dissembler_ARM_LUT[((opcode & 0x0FF00000) >> 16) | ((opcode >> 4) & 0xF)](gba, opcode);
 	printf("\n");
 #endif
+#endif
+}
+
+void printStateTHUMB(GBA* gba, uint16_t opcode) {
+#ifdef DEBUG_TRACE_STATE
+printf("[T][%08x][N%dS%dC%dV%d] ", gba->REG[R15] - 4, 
+				gba->CPSR>>31, (gba->CPSR>>30)&1, (gba->CPSR>>29)&1, (gba->CPSR>>28)&1);
+	Dissembler_THUMB_LUT[opcode >> 8](gba, opcode);
+	printf("\n");
+
+	uint32_t R[16];
+	memcpy(&R, &gba->REG, sizeof(uint32_t)*16);
+#ifdef DEBUG_LIMIT_REGS	
+	printf("[R0:%08x|R1:%08x|R2:%08x|R13:%08x]\n", R[0],R[1],R[2],R[13]);
+#else
+	uint32_t R[16];
+	memcpy(&R, &gba->REG, sizeof(uint32_t)*16);
+
+	printf("%08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X cpsr: %08X | %08X: ", R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],R[9],R[10],R[11],R[12],R[13],R[14],R[15]-2,gba->CPSR, opcode);
+
+	Dissembler_THUMB_LUT[opcode >> 8](gba, opcode);
+	printf("\n");
+#endif	
 #endif
 }
 

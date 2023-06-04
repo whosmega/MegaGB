@@ -125,13 +125,19 @@ void startGBAEmulator(GamePak* gamepak) {
 	/* For now, we take each instruction as 1 cycle consumed */
 
 	while (gba.run) {
-		for (int i = 0; i < 960; i++) stepCPU(&gba);
+		for (int i = 0; i < 960; i++) {
+			stepCPU(&gba);
+			usleep(50000);
+		}
 	
 		/* HDRAW is over, run the PPU to catch up 
 		 * without ticking the clock */
 		stepPPU(&gba);
 
-		for (int i = 0; i < 272; i++) stepCPU(&gba);
+		for (int i = 0; i < 272; i++) {
+			stepCPU(&gba);
+			usleep(50000);
+		}
 
 		/* HBLANK is over, run the PPU to catch up */
 		stepPPU(&gba);

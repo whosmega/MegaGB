@@ -241,42 +241,42 @@ static void getPixelColor_DMG(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
     switch (shadeId) {
         case 0: {
                     /* White */
-                    shade = 0xFF;
+                    //shade = 0xFF;
 
-					// *r = 0xb6;
-					// *g = 0xbe;
-					//*b = 0xd3;
+					*r = 0xb6;
+					*g = 0xbe;
+					*b = 0xd3;
                     break;
                 }
         case 1: {
                     /* Light Gray */
-                    shade = 0xAA;
-					// *r = 0x11;
-					// *g = 0xa3;
-					// *b = 0x96;
+                    // shade = 0xAA;
+					*r = 0x11;
+					*g = 0xa3;
+					*b = 0x96;
                     break;
                 }
         case 2: {
                     /* Dark Gray */
-                    shade = 0x55;
-					// *r = 0xcf;
-					// *g = 0x41;
-					// *b = 0x51;
+                    // shade = 0x55;
+					*r = 0xcf;
+					*g = 0x41;
+					*b = 0x51;
                     break;
                 }
         case 3: {
                     /* Black */
-                    shade = 0x00;
-					// *r = 0x3e;
-					// *g = 0x13;
-					// *b = 0x18;
+                    // shade = 0x00;
+					*r = 0x3e;
+					*g = 0x13;
+					*b = 0x18;
                     break;
                 }
     }
 
-    *r = shade;
-    *g = shade;
-    *b = shade;
+//    *r = shade;
+//    *g = shade;
+//    *b = shade;
 }
 
 static void renderPixel(GB* gb) {
