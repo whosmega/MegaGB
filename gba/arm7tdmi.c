@@ -125,26 +125,30 @@ static uint8_t getVFlag(GBA* gba, uint32_t OP1, uint32_t OP2, uint32_t result) {
 	return 0;
 }
 
+static void branchAndExchange(GBA* gba, uint32_t address) {
+	/* Utility function to perform branch exchange */
+	if (address & 1) {
+		/* Switch to THUMB */
+		address &= ~((uint32_t)1); 					// Clear lower bit to HW align 
+		CPSR_SetBit(gba, CPSR_THUMB);
+		gba->cpu_state = CPU_STATE_THUMB;
+	} else {
+		/* Switch to ARM */
+		address &= ~((uint32_t)3); 					// Clear lower 2 bits to W align
+		CPSR_ClearBit(gba, CPSR_THUMB);
+		gba->cpu_state = CPU_STATE_ARM;
+	}
+
+	gba->REG[R15] = address;
+	flushRefillPipeline(gba);
+}
+
 /* ----------------- ARM Instruction Handlers ------------- */ 
 
 static void BX(struct GBA* gba, uint32_t ins) {
 	/* Branch and exchange */
 	uint32_t content = gba->REG[ins & 0xF];
-
-	if (content & 1) {
-		/* Switch to THUMB */
-		content &= ~((uint32_t)1); 					// Clear lower bit to HW align 
-		CPSR_SetBit(gba, CPSR_THUMB);
-		gba->cpu_state = CPU_STATE_THUMB;
-	} else {
-		/* Switch to ARM */
-		content &= ~((uint32_t)3); 					// Clear lower 2 bits to W align
-		CPSR_ClearBit(gba, CPSR_THUMB);
-		gba->cpu_state = CPU_STATE_ARM;
-	}
-
-	gba->REG[R15] = content;
-	flushRefillPipeline(gba);
+	branchAndExchange(gba, content);
 }
 
 static void B_BL(struct GBA* gba, uint32_t ins) {
@@ -211,24 +215,6 @@ static uint32_t getDataProcessing_ImmOP2(GBA* gba, uint16_t OP2) {
 	return Imm;
 }
 
-static void dataProcessing_R15Dest(GBA* gba, uint8_t S, uint32_t result) {
-	/* Used for all data processing instructions when destination register is R15
-	 * If S flag is set, SPSR is copied to CPSR. Writing to R15 also flushes the pipeline */
-	if (S && (gba->cpu_mode != CPU_MODE_USER && gba->cpu_mode != CPU_MODE_SYSTEM)) {
-		gba->CPSR = gba->SPSR;
-	}
-
-	gba->REG[R15] = result;
-	flushRefillPipeline(gba);
-}
-
-static void dataProcessing_R15Test(GBA* gba, uint8_t S) {
-	/* Used for Test Instructions which dont set results */
-	if (S && (gba->cpu_mode != CPU_MODE_USER && gba->cpu_mode != CPU_MODE_SYSTEM)) {
-		gba->CPSR = gba->SPSR;
-	}
-}
-
 static void dataProcessingLogical(struct GBA* gba, uint32_t ins) {
 	/* Handles all logical instructions of data processing */
 
@@ -292,8 +278,20 @@ static void dataProcessingLogical(struct GBA* gba, uint32_t ins) {
 	}
 
 	/* ---------------------------------------------------------- */
-	if (DestReg == R15) dataProcessing_R15Dest(gba, S, result);
-	else {
+	if (DestReg == R15) {
+	 	/* If S flag is set, SPSR is copied to CPSR.
+		 * If S flag is not set, result is written normally but CPSR is not changed
+		 * Writing to R15 also flushes the pipeline */
+
+		if (S && (gba->cpu_mode != CPU_MODE_USER && gba->cpu_mode != CPU_MODE_SYSTEM)) {
+			gba->CPSR = gba->SPSR;
+		}
+
+		if (!testInstruction) {
+			gba->REG[R15] = result;
+			flushRefillPipeline(gba);
+		}
+	} else {
 		if (S) {
 			if (!I) CPSR_ModifyBit(gba, FLG_C, carry);
 			CPSR_ModifyBit(gba, FLG_Z, result == 0);
@@ -398,8 +396,19 @@ static void dataProcessingArithmetic(struct GBA* gba, uint32_t ins) {
 	}
 
 	/* ---------------------------------------------------------- */
-	if (DestReg == R15) dataProcessing_R15Dest(gba, S, result);
-	else {
+	if (DestReg == R15) {
+		/* If S flag is set, SPSR is copied to CPSR.
+		 * If S flag is not set, result is written normally but CPSR is not changed
+		 * Writing to R15 also flushes the pipeline */
+		if (S && (gba->cpu_mode != CPU_MODE_USER && gba->cpu_mode != CPU_MODE_SYSTEM)) {
+			gba->CPSR = gba->SPSR;
+		}
+
+		if (!testInstruction) {
+			gba->REG[R15] = result;
+			flushRefillPipeline(gba);
+		}
+	} else {
 		if (S) {
 			/* C flag is handled differently by accounting carry input for ADC/SBC/RSC 
 			 * V flag is handled the same for all operations (carry input is not accounted for) */	
@@ -1162,6 +1171,65 @@ static void ALU(struct GBA* gba, uint16_t ins) {
 	CPSR_ModifyBit(gba, FLG_N, result >> 31);
 }
 
+static void HIREG_OPS_BX(struct GBA* gba, uint16_t ins) {
+	/* This encoding is used to perform operations on the Hi registers in thumb mode
+	 * Possible configurations are Hi-Lo and Hi-Hi source and destination. Lo-Lo is undefined
+	 * for 3 of the 4 opcodes. 
+	 *
+	 * The H1 and H2 bits are just used to extend the destination and source respectively
+	 * to support Hi Indexing */
+
+	uint8_t opcode = ins >> 8 & 0b11;
+	uint8_t H1 = ins >> 7 & 1;
+	uint8_t H2 = ins >> 6 & 1;
+	uint8_t Rs = (H2 << 3) | (ins >> 3 & 0b111);
+	uint8_t Rd = (H1 << 3) | (ins & 0b111);
+
+	/* Undefined behaviour for H1 = H2 = 0 when using with opcodes CMP, ADD and MOV */
+	if ((H1 + H2 == 0) && opcode != 3) return;
+
+	uint32_t OP1 = gba->REG[Rd];
+	uint32_t OP2 = gba->REG[Rs];
+	bool testInstruction = false;
+
+	switch (opcode) {
+		case 0: {
+			/* ADD */
+			gba->REG[Rd] = OP1 + OP2;
+			break;
+		}
+		case 1: {
+			/* CMP - Sets CPSR */
+			OP2 = ~OP2;
+			uint32_t result = OP1 + OP2 + 1;
+			uint8_t C = ((uint64_t)OP1 + (uint64_t)OP2 + 1) >> 32;
+
+			CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, OP2, result));
+			CPSR_ModifyBit(gba, FLG_C, C);
+			CPSR_ModifyBit(gba, FLG_Z, result == 0);
+			CPSR_ModifyBit(gba, FLG_N, result >> 31);
+
+			testInstruction = true;
+			break;
+		}
+		case 2: {
+			/* MOV */
+			gba->REG[Rd] = OP2;
+			break;
+		}
+		case 3: {
+			/* Branch And Exchange 
+			 * H2 = 0 for Lo Register Branch 
+			 * H2 = 1 for Hi Register Branch
+			 * H1 does not affect the result */
+			branchAndExchange(gba, OP2);
+			return; 									/* No need for another flush */
+		}
+	}
+
+	if (Rd == R15 && !testInstruction) flushRefillPipeline(gba);
+}
+
 static void Unimplemented_THUMB(struct GBA* gba, uint16_t ins) {
 	printf("Instruction: %04x is an unimplemented THUMB Instruction\n", ins);
 }
@@ -1405,7 +1473,10 @@ void initialiseLUT_THUMB(GBA* gba) {
 		 * The ordering is also important as we prioritise encodings which are the most
 		 * deterministic (most bits matching) and leave the unpredictable ones at the bottom */
 
-		if ((index & 0b11111100) == 0b01000000) {
+		if ((index & 0b11111100) == 0b01000100) {
+			/* Hi Register Operations / BX */
+			gba->THUMB_LUT[index] = &HIREG_OPS_BX;
+		} else if ((index & 0b11111100) == 0b01000000) {
 			/* ALU Operations */
 			gba->THUMB_LUT[index] = &ALU;
 		} else if ((index & 0b11111000) == 0b00011000) {
