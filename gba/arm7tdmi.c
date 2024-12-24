@@ -5,6 +5,7 @@
 #include <gba/arm7tdmi.h>
 #include <gba/debugGBA.h>
 
+
 static void flushRefillPipeline(GBA*);
 static inline void doInternalPrefetchARM(GBA* gba);
 static void switchMode(GBA* gba, CPU_MODE newMode);
@@ -38,15 +39,15 @@ static inline void CPSR_ModifyBit(GBA* gba, uint8_t bit, uint8_t value) {
 
 /* ------------------------------------------------------- */
 static uint32_t barrelShifter(GBA* gba, uint8_t shiftType, uint32_t operand, uint8_t amount, uint8_t* carry) {
-	/* Responsible for all barrel shifter operations for Data Processing and THUMB 
+	/* Responsible for all barrel shifter operations for Data Processing and THUMB
 	 * Calculates operand shifted by amount, with shift types LSL, LSR, ASR and ROR/RRX
-	 * and also calculates carry flag 
+	 * and also calculates carry flag
 	 *
-	 * 0 -> Logical Left Shift  	(LSL) 
+	 * 0 -> Logical Left Shift  	(LSL)
 	 * 1 -> Logical Right Shift 	(LSR)
-	 * 2 -> Arithmetic Right Shift 	(ASR) 
-	 * 3 -> Rotate Right            (ROR) 
-	 * 
+	 * 2 -> Arithmetic Right Shift 	(ASR)
+	 * 3 -> Rotate Right            (ROR)
+	 *
 	 * Carry should be set to a default value before calling this function
 	 * When no shift operation occurs, carry is unchanged. This is normally for LSL and LSR.
 	 * For ASR and ROR, amount=0 is treated specially
@@ -88,7 +89,7 @@ static uint32_t barrelShifter(GBA* gba, uint8_t shiftType, uint32_t operand, uin
 			if (bit31) operand |= (uint32_t)(0xFFFFFFFF << (32 - amount));
 			break;
 		}
-		case 3: {	// Rotate Right 
+		case 3: {	// Rotate Right
 			if (amount == 0) {
 				// RRX
 				*carry = operand & 1;
@@ -129,7 +130,7 @@ static void branchAndExchange(GBA* gba, uint32_t address) {
 	/* Utility function to perform branch exchange */
 	if (address & 1) {
 		/* Switch to THUMB */
-		address &= ~((uint32_t)1); 					// Clear lower bit to HW align 
+		address &= ~((uint32_t)1); 					// Clear lower bit to HW align
 		CPSR_SetBit(gba, CPSR_THUMB);
 		gba->cpu_state = CPU_STATE_THUMB;
 	} else {
@@ -143,7 +144,7 @@ static void branchAndExchange(GBA* gba, uint32_t address) {
 	flushRefillPipeline(gba);
 }
 
-/* ----------------- ARM Instruction Handlers ------------- */ 
+/* ----------------- ARM Instruction Handlers ------------- */
 
 static void BX(struct GBA* gba, uint32_t ins) {
 	/* Branch and exchange */
@@ -172,17 +173,17 @@ static void B_BL(struct GBA* gba, uint32_t ins) {
 		gba->REG[R15] += offset;
 	}
 
-	
+
 	flushRefillPipeline(gba);
 }
 
 static uint32_t getDataProcessing_RxOP2(GBA* gba, uint16_t OP2, uint8_t* carry) {
-	/* Decodes Operand 2 for register operand data processing functions 
+	/* Decodes Operand 2 for register operand data processing functions
 	 * We calculate the shift */
 
 	uint16_t reg = OP2 & 0xF;
-	uint32_t data = gba->REG[reg];	
-	
+	uint32_t data = gba->REG[reg];
+
 	// Default carry - Unchanged
 
 	uint8_t amount; 								// Amount to be shifted by
@@ -192,8 +193,8 @@ static uint32_t getDataProcessing_RxOP2(GBA* gba, uint16_t OP2, uint8_t* carry) 
 		amount = gba->REG[OP2 >> 8] & 0xFF;
 		if (reg == R15) {
 			/* If we're dealing with PC as operand 2, with shift stored in a register
-			 * since an extra internal cycle is consumed by the CPU, so we read PC+12*/ 
-		
+			 * since an extra internal cycle is consumed by the CPU, so we read PC+12*/
+
 			data += 4;
 		}
 	} else {
@@ -297,7 +298,7 @@ static void dataProcessingLogical(struct GBA* gba, uint32_t ins) {
 			CPSR_ModifyBit(gba, FLG_Z, result == 0);
 			CPSR_ModifyBit(gba, FLG_N, result >> 31);
 		}
-		
+
 		if (!testInstruction) gba->REG[DestReg] = result;
 	}
 }
@@ -410,14 +411,14 @@ static void dataProcessingArithmetic(struct GBA* gba, uint32_t ins) {
 		}
 	} else {
 		if (S) {
-			/* C flag is handled differently by accounting carry input for ADC/SBC/RSC 
-			 * V flag is handled the same for all operations (carry input is not accounted for) */	
+			/* C flag is handled differently by accounting carry input for ADC/SBC/RSC
+			 * V flag is handled the same for all operations (carry input is not accounted for) */
 			CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, OP2, result));
 			CPSR_ModifyBit(gba, FLG_C, C);
 			CPSR_ModifyBit(gba, FLG_Z, result == 0);
 			CPSR_ModifyBit(gba, FLG_N, result >> 31);
 		}
-		
+
 		if (!testInstruction) gba->REG[DestReg] = result;
 	}
 }
@@ -433,7 +434,7 @@ static void MRS(struct GBA* gba, uint32_t ins) {
 		/* CPSR to Register */
 		gba->REG[Rd] = gba->CPSR;
 	} else {
-		/* SPSR <mode> to Register 
+		/* SPSR <mode> to Register
 		 * If SPSR doesnt exist for current mode then ignore */
 		if (gba->cpu_mode == CPU_MODE_USER || gba->cpu_mode == CPU_MODE_SYSTEM) return;
 		gba->REG[Rd] = gba->SPSR;
@@ -451,7 +452,7 @@ static void MSR(struct GBA* gba, uint32_t ins) {
 		uint8_t Rm = ins & 0xF;
 		uint32_t content = gba->REG[Rm];
 
-		// R15 as destination not allowed 
+		// R15 as destination not allowed
 		if (Rm == R15) return;
 
 		if (destination == 0) {
@@ -612,7 +613,7 @@ static void LDR_STR(struct GBA* gba, uint32_t ins) {
 			/* LDR BYTE */
 			gba->REG[Rd] = busRead(gba, base, WIDTH_8);
 		} else {
-			/* LDR WORD 
+			/* LDR WORD
 			 * If address is not word aligned, the data is rotated such that
 			 * the addressed byte always occupies first byte on the register */
 			uint8_t alignOffset = base & 0x3; 			/* Can be 0-3 */
@@ -631,7 +632,7 @@ static void LDR_STR(struct GBA* gba, uint32_t ins) {
 			/* STR BYTE */
 			busWrite(gba, base, source & 0xFF, WIDTH_8);
 		} else {
-			/* STR WORD 
+			/* STR WORD
 			 * Address is always treated as word aligned */
 			busWrite(gba, base & ~0x3, source, WIDTH_32);
 		}
@@ -675,7 +676,7 @@ static void LDR_STR_H_SB_SH(struct GBA* gba, uint32_t ins) {
 	switch (ins >> 5 & 0x3)	{
 		/* 0 will never occur as its decoded as an SWP */
 		case 1: {
-			/* Operate with unsigned halfwords (LDRH/STRH) 
+			/* Operate with unsigned halfwords (LDRH/STRH)
 			 * The addresses should always be halfword aligned or otherwise it causes
 			 * unpredictable reads/writes on the GBA, we tackle that issue by force clearing b0 */
 			if (L) {
@@ -690,7 +691,7 @@ static void LDR_STR_H_SB_SH(struct GBA* gba, uint32_t ins) {
 			break;
 		}
 		case 2: {
-			/* Operate with signed bytes (LDRSB) 
+			/* Operate with signed bytes (LDRSB)
 			 * Bit 7 is repeated across bits 31-8 of register to preserve sign */
 			uint32_t value = busRead(gba, base, WIDTH_8);
 			if (value >> 7 & 1) value |= 0xFFFFFF00;
@@ -698,7 +699,7 @@ static void LDR_STR_H_SB_SH(struct GBA* gba, uint32_t ins) {
 			break;
 		}
 		case 3: {
-			/* Signed Halfwords (LDRSH) 
+			/* Signed Halfwords (LDRSH)
 			 * Bit 15 is repeated across bits 31-16 of register to preserve sign */
 			uint32_t value = busRead(gba, base & ~1, WIDTH_16);
 			if (value >> 15 & 1) value |= 0xFFFF0000;
@@ -756,7 +757,7 @@ static void LDM_STM(struct GBA* gba, uint32_t ins) {
 		for (int i = 0; i < REG_COUNT; i++) {
 			uint8_t REG = REGS[i];
 			uint32_t* readIn = &gba->REG[REG];
-			
+
 			if (UBT) {
 				/* User bank transfer with LDM */
 				if (gba->cpu_mode == CPU_MODE_FIQ && (REG >= 8 || REG <= 14)) {
@@ -784,7 +785,7 @@ static void LDM_STM(struct GBA* gba, uint32_t ins) {
 				uint32_t address = reference + i*4;
 
 				address &= ~3;		// Pre/Post
-	
+
 				*readIn = busRead(gba, address, WIDTH_32);
 				base -= 4;
 			}
@@ -802,11 +803,11 @@ static void LDM_STM(struct GBA* gba, uint32_t ins) {
 			}
 		}
 
-		/* Write back - In the end, do write back to Rn if it was not overwritten by LDR 
-		 * and W bit is set, and only if User Bankk Transfer is not taking place 
+		/* Write back - In the end, do write back to Rn if it was not overwritten by LDR
+		 * and W bit is set, and only if User Bankk Transfer is not taking place
 		 * Note: Lower 2 bits of base are preserved, they arent interpreted by cpu differently
 		 * but dont get cleared either */
-		if (!UBT && W && !abortWriteBack) gba->REG[Rn] = base;	
+		if (!UBT && W && !abortWriteBack) gba->REG[Rn] = base;
 
 	} else {
 		/* STM */
@@ -837,10 +838,10 @@ static void LDM_STM(struct GBA* gba, uint32_t ins) {
 				uint32_t address = P ? base + 4 : base; 			// Pre/Post
 				address &= ~3;
 
-				/* If Rn is being transferred in STM and is not a banked register, and 
-				 * is the first in order, the value stored will be the initial Rn value, 
+				/* If Rn is being transferred in STM and is not a banked register, and
+				 * is the first in order, the value stored will be the initial Rn value,
 				 * otherwise the value stored becomes the updated address */
-				
+
 				if (!transferringBanked && REG == Rn && i != 0) data = address;
 
 				busWrite(gba, address, data, WIDTH_32);
@@ -900,7 +901,7 @@ static void SWI(struct GBA* gba, uint32_t ins) {
 	/* To be implemented after impementing traps and mode switches */
 }
 
-static void Undefined_ARM(struct GBA* gba, uint32_t ins) {	
+static void Undefined_ARM(struct GBA* gba, uint32_t ins) {
 }
 
 static void Unimplemented_ARM(struct GBA* gba, uint32_t ins) {
@@ -958,7 +959,7 @@ static void ADD_SUB(struct GBA* gba, uint16_t ins) {
 		C = ((uint64_t)OP1 + (uint64_t)OP2) >> 32;
 	}
 
-	gba->REG[Rd] = result;	
+	gba->REG[Rd] = result;
 
 	CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, OP2, result));
 	CPSR_ModifyBit(gba, FLG_C, C);
@@ -1011,7 +1012,7 @@ static void MOV_CMP_ADD_SUB_Imm(struct GBA* gba, uint16_t ins) {
 
 	if (opcode != 0) {
 		/* Set flags for Data Processing Arithmetic specifically
-		 * (these flags dont get set for data processing logical) */	
+		 * (these flags dont get set for data processing logical) */
 
 		CPSR_ModifyBit(gba, FLG_V, getVFlag(gba, OP1, offset, result));
 		CPSR_ModifyBit(gba, FLG_C, C);
@@ -1022,9 +1023,9 @@ static void MOV_CMP_ADD_SUB_Imm(struct GBA* gba, uint16_t ins) {
 }
 
 static void ALU(struct GBA* gba, uint16_t ins) {
-	/* Performs basic Logical/Arithmetic ALU operations on Lo register pairs 
+	/* Performs basic Logical/Arithmetic ALU operations on Lo register pairs
 	 *
-	 * AND, EOR, LSL, LSR, ASR, ROR, TST, ORR, BIC, MVN 
+	 * AND, EOR, LSL, LSR, ASR, ROR, TST, ORR, BIC, MVN
 	 * ADC, SBC, NEG, CMP, CMN, MUL */
 	uint8_t opcode = ins >> 6 & 0xF;
 	uint8_t Rs = ins >> 3 & 0b111;
@@ -1039,7 +1040,7 @@ static void ALU(struct GBA* gba, uint16_t ins) {
 
 	/* In normal cases when operand 2 is a register, the barrel shifter can cause a carry
 	 * to occur and thus the C flag gets set. However in the THUMB subset, the barrel shifter
-	 * is only used for LSL, LSR, ASR and ROR. So in all other logical cases the carry flag is 
+	 * is only used for LSL, LSR, ASR and ROR. So in all other logical cases the carry flag is
 	 * unchanged.
 	 *
 	 * For arithmetic cases, the carry flag is always manually set and is never left unchanged */
@@ -1055,10 +1056,10 @@ static void ALU(struct GBA* gba, uint16_t ins) {
 			break;
 		}
 		case 2: {
-			/* MOV Rd, LSL Rs 
-			 * Logical Left or LSL 
+			/* MOV Rd, LSL Rs
+			 * Logical Left or LSL
 			 *
-			 * Since lower byte of register is being used as shift count, 
+			 * Since lower byte of register is being used as shift count,
 			 * the number can be greater than 32 */
 			result = barrelShifter(gba, 0, OP1, OP2 & 0xFF, &carry);
 			break;
@@ -1156,7 +1157,7 @@ static void ALU(struct GBA* gba, uint16_t ins) {
 		}
 		case 13: {
 			/* MUL - Technically not part of ALU but is part of this encoding and suits this
-			 * category best 
+			 * category best
 			 * Note: Also, operand restrictions should apply but we arent checking for now */
 			result = OP1 * OP2;
 			break;
@@ -1174,7 +1175,7 @@ static void ALU(struct GBA* gba, uint16_t ins) {
 static void HIREG_OPS_BX(struct GBA* gba, uint16_t ins) {
 	/* This encoding is used to perform operations on the Hi registers in thumb mode
 	 * Possible configurations are Hi-Lo and Hi-Hi source and destination. Lo-Lo is undefined
-	 * for 3 of the 4 opcodes. 
+	 * for 3 of the 4 opcodes.
 	 *
 	 * The H1 and H2 bits are just used to extend the destination and source respectively
 	 * to support Hi Indexing */
@@ -1218,8 +1219,8 @@ static void HIREG_OPS_BX(struct GBA* gba, uint16_t ins) {
 			break;
 		}
 		case 3: {
-			/* Branch And Exchange 
-			 * H2 = 0 for Lo Register Branch 
+			/* Branch And Exchange
+			 * H2 = 0 for Lo Register Branch
 			 * H2 = 1 for Hi Register Branch
 			 * H1 does not affect the result */
 			branchAndExchange(gba, OP2);
@@ -1230,15 +1231,20 @@ static void HIREG_OPS_BX(struct GBA* gba, uint16_t ins) {
 	if (Rd == R15 && !testInstruction) flushRefillPipeline(gba);
 }
 
+static void PC_Relative_Load(struct GBA* gba, uint16_t ins) {
+
+}
+
 static void Unimplemented_THUMB(struct GBA* gba, uint16_t ins) {
 	printf("Instruction: %04x is an unimplemented THUMB Instruction\n", ins);
+	DEBUG_SET_BREAKPOINT("");
 }
 
 /* ---------------------------------------------------- */
 
 static void switchMode(GBA* gba, CPU_MODE newMode) {
-	/* Switches CPU to given mode, sets up banked registers 
-	 * also updates CPSR */	
+	/* Switches CPU to given mode, sets up banked registers
+	 * also updates CPSR */
 
 	CPU_MODE currentMode = gba->cpu_mode;
 
@@ -1260,7 +1266,7 @@ static void switchMode(GBA* gba, CPU_MODE newMode) {
 			break;
 		case CPU_MODE_FIQ:
 			memcpy(&gba->BANK_FIQ, &gba->REG[R8], 7*sizeof(uint32_t));
-			
+
 			/* Load in R8-R12 normal registers as we're about to leave FIQ */
 			memcpy(&gba->REG[R8], &gba->REG_SWAP, 5*sizeof(uint32_t));
 			break;
@@ -1268,7 +1274,7 @@ static void switchMode(GBA* gba, CPU_MODE newMode) {
 			memcpy(&gba->BANK_IRQ, &gba->REG[R13], 2*sizeof(uint32_t));
 			break;
 		case CPU_MODE_SVC:
-			memcpy(&gba->BANK_SVC, &gba->REG[R13], 2*sizeof(uint32_t));		
+			memcpy(&gba->BANK_SVC, &gba->REG[R13], 2*sizeof(uint32_t));
 			break;
 		case CPU_MODE_ABT:
 			memcpy(&gba->BANK_ABT, &gba->REG[R13], 2*sizeof(uint32_t));
@@ -1291,7 +1297,7 @@ static void switchMode(GBA* gba, CPU_MODE newMode) {
 			memcpy(&gba->REG[R13], &gba->REG_SWAP[5], 2*sizeof(uint32_t));
 			break;
 		case CPU_MODE_FIQ:
-			/* Save R8-R12 in REG_SWAP as we're entering FIQ 
+			/* Save R8-R12 in REG_SWAP as we're entering FIQ
 			 * R13-R14 should be saved by whichever mode was present before this */
 			memcpy(&gba->REG_SWAP, &gba->REG[R8], 5*sizeof(uint32_t));
 			/* Swap in R8-R14 */
@@ -1302,7 +1308,7 @@ static void switchMode(GBA* gba, CPU_MODE newMode) {
 			memcpy(&gba->REG[R13], &gba->BANK_IRQ, 2*sizeof(uint32_t));
 			break;
 		case CPU_MODE_SVC:
-			memcpy(&gba->REG[R13], &gba->BANK_SVC, 2*sizeof(uint32_t));		
+			memcpy(&gba->REG[R13], &gba->BANK_SVC, 2*sizeof(uint32_t));
 			break;
 		case CPU_MODE_ABT:
 			memcpy(&gba->REG[R13], &gba->BANK_ABT, 2*sizeof(uint32_t));
@@ -1340,7 +1346,7 @@ static bool checkCondition(GBA* gba, uint8_t condCode) {
 		case 0b1001: return !CPSR_GetBit(gba, FLG_C) || CPSR_GetBit(gba, FLG_Z);
 		case 0b1010: return CPSR_GetBit(gba, FLG_N) == CPSR_GetBit(gba, FLG_V);
 		case 0b1011: return CPSR_GetBit(gba, FLG_N) != CPSR_GetBit(gba, FLG_V);
-		case 0b1100: return !CPSR_GetBit(gba, FLG_Z) && (CPSR_GetBit(gba, FLG_N) 
+		case 0b1100: return !CPSR_GetBit(gba, FLG_Z) && (CPSR_GetBit(gba, FLG_N)
 							 									== CPSR_GetBit(gba, FLG_V));
 		case 0b1101: return CPSR_GetBit(gba, FLG_Z) || (CPSR_GetBit(gba, FLG_N)
 							 									!= CPSR_GetBit(gba, FLG_V));
@@ -1385,11 +1391,11 @@ static void initialiseLUT_ARM(GBA* gba) {
 	for (int index = 0; index < 4096; index++) {
 		/* index corresponds to 12 bit index formed by combining bits 27-20 and 7-4 of OPCODE
 		 *
-		 * The order in which we check matters as there are encoding collisions, however 
-		 * a simple way to understand it is to check which encoding has the most hardcoded 
-		 * bits in 27-20 and 7-4, as these guarantee some instructions. So we check using 
-		 * bit masks which are full of 1s (as we need to check more hardcoded bits) and slowly 
-		 * reduce to more zeroes as bits become less significant 
+		 * The order in which we check matters as there are encoding collisions, however
+		 * a simple way to understand it is to check which encoding has the most hardcoded
+		 * bits in 27-20 and 7-4, as these guarantee some instructions. So we check using
+		 * bit masks which are full of 1s (as we need to check more hardcoded bits) and slowly
+		 * reduce to more zeroes as bits become less significant
 		 *
 		 * Basically we're extracting bits which are useful then comparing it to see if they match
 		 * for the particular encoding */
@@ -1416,7 +1422,7 @@ static void initialiseLUT_ARM(GBA* gba) {
 		} else if ((index & 0b110110110000) == 0b000100100000) {
 			/* Checking for MSR (transfer Reg/Imm->PSR)
 			 * This instruction has 2 encodings, one for flag only transfer which can be Imm/Reg
-			 * or full register transfer which is only Reg. This however introduces complicated 
+			 * or full register transfer which is only Reg. This however introduces complicated
 			 * bit collisions which we can avoid by doing runtime checks instead */
 			gba->ARM_LUT[index] = &MSR;
 		} else if ((index & 0b111000001001) == 0b000000001001) {
@@ -1435,7 +1441,7 @@ static void initialiseLUT_ARM(GBA* gba) {
 			/* Checking for Branch and Branch with Link */
 			gba->ARM_LUT[index] = &B_BL;
 		} else if ((index & 0b111000000000) == 0b100000000000) {
-			/* Block Data Transfer - LDM/STM 
+			/* Block Data Transfer - LDM/STM
 			 * All options are interpreted at runtime */
 			gba->ARM_LUT[index] = &LDM_STM;
 		} else if ((index & 0b110000000000) == 0b010000000000) {
@@ -1444,8 +1450,8 @@ static void initialiseLUT_ARM(GBA* gba) {
 			gba->ARM_LUT[index] = &LDR_STR;
 		} else if ((index & 0b110000000000) == 0) {
 			/* Checking for Data Processing Instructions
-		 	 * Only bit 27-26 are fixed, rest are variable showing various opcodes and other info 
-			 * We setup separate functions for arithmetic and logic, the instructions themselves 
+		 	 * Only bit 27-26 are fixed, rest are variable showing various opcodes and other info
+			 * We setup separate functions for arithmetic and logic, the instructions themselves
 			 * share fairly common behaviour */
 
 			switch ((index >> 5) & 0xF) {
@@ -1455,7 +1461,7 @@ static void initialiseLUT_ARM(GBA* gba) {
 					break;
 				case 0x2: case 0x3: case 0x4: case 0x5: case 0x6: case 0x7: case 0xA: case 0xB:
 					gba->ARM_LUT[index] = &dataProcessingArithmetic;
-					break;	
+					break;
 			}
 		} else {
 			gba->ARM_LUT[index] = &Unimplemented_ARM;
@@ -1498,7 +1504,7 @@ void initialiseCPU(GBA* gba) {
 	gba->cpu_state = CPU_STATE_ARM;
 	gba->cpu_mode = CPU_MODE_SYSTEM;
 
-	/* Preset register values as set by BIOS (we dont use a BIOS file, just emulate 
+	/* Preset register values as set by BIOS (we dont use a BIOS file, just emulate
 	 * its behaviour, including BIOS functions) */
 	memset(&gba->BANK_FIQ, 	0, 7*sizeof(uint32_t));
 	memset(&gba->BANK_SVC, 	0, 2*sizeof(uint32_t));
@@ -1537,7 +1543,7 @@ void initialiseCPU(GBA* gba) {
 static inline void insertPipeline(GBA* gba, uint32_t opcode) {
 	gba->pipeline[gba->pipelineInsertPoint++] = opcode;
 	gba->pipelineInsertPoint %= 3;
-	
+
 }
 
 static inline uint32_t readPipeline(GBA* gba) {
@@ -1560,8 +1566,8 @@ static void flushRefillPipeline(GBA* gba) {
 		insertPipeline(gba, readTHUMBOpcode(gba));
 		insertPipeline(gba, readTHUMBOpcode(gba));
 	}
-	gba->skipFetch = true; 							/* Set flag in emulator so pipeline operations 
-														   after the current execution stage are 
+	gba->skipFetch = true; 							/* Set flag in emulator so pipeline operations
+														   after the current execution stage are
 														   discarded */
 }
 
@@ -1570,14 +1576,14 @@ static inline void doInternalPrefetchARM(GBA* gba) {
 	 * fetches the next instruction in the pipeline and hence we read PC as PC+12 instead
 	 * of normally reading PC+8.
 	 *
-	 * This kind of system is more natural than just blatantly returning PC+12 and it also doesnt 
+	 * This kind of system is more natural than just blatantly returning PC+12 and it also doesnt
 	 * create any weird edge cases regarding the prefetcher in terms of self modifying code.
 	 * And, this method also doesnt have any performance downsides either
 	 *
-	 * Though im unsure if there are any possible edge cases in any instructions that really require 
-	 * the use of this over just simply returning PC+12 so ill not use this for now 
+	 * Though im unsure if there are any possible edge cases in any instructions that really require
+	 * the use of this over just simply returning PC+12 so ill not use this for now
 	 *
-	 * We emulate this by prefetching the instruction right here and scheduling a skip after dispatch 
+	 * We emulate this by prefetching the instruction right here and scheduling a skip after dispatch
 	 * returns */
 	insertPipeline(gba, readARMOpcode(gba));
 	gba->skipFetch = true;
@@ -1601,14 +1607,13 @@ void stepCPU(GBA* gba) {
 	 *
 	 * Any instruction that modifies R15 causes a pipeline flush, causing it clear up
 	 * and start fetching again. However, we can optimize by not emulating the first 2 cpu steps where
-	 * no execution takes place and keeping the pipeline always in executable state. This is done by 
-	 * flushRefillPipeline() which is called during initialization and at every R15 modification 
+	 * no execution takes place and keeping the pipeline always in executable state. This is done by
+	 * flushRefillPipeline() which is called during initialization and at every R15 modification
 	 *
 	 * The pipeline is managed by a queue, which is responsible for storing prefetched instructions
 	 * The instructions flow in the queue once they are loaded in, independent of what happens at
-	 * the actual address. This means if the address of the next instruction is modified, 
+	 * the actual address. This means if the address of the next instruction is modified,
 	 * the instruction will still execute as it was prefetched in the queue */
-
 	if (gba->cpu_state == CPU_STATE_ARM) {
 #if defined(DEBUG_ENABLED) && defined(DEBUG_TRACE_STATE)
 		uint32_t opcode = readPipeline(gba);
@@ -1618,7 +1623,7 @@ void stepCPU(GBA* gba) {
 		dispatchARM(gba, readPipeline(gba));
 #endif
 		if (gba->skipFetch) {gba->skipFetch = false; return;}
-	
+
 		insertPipeline(gba, readARMOpcode(gba));
 	} else {
 #if defined(DEBUG_ENABLED) && defined(DEBUG_TRACE_STATE)

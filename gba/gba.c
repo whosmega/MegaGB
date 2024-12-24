@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <string.h>
 
-
 bool initialiseSDL(GBA* gba) {
     SDL_Init(SDL_INIT_EVERYTHING);
     SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING, SDL_WINDOW_SHOWN,
@@ -28,7 +27,7 @@ void SDLEvents(GBA* gba) {
         if (event.type == SDL_QUIT) {
             gba->run = false;
         }
-	}
+    }
 }
 
 void cleanSDL(GBA* gba) {
@@ -76,7 +75,7 @@ void initialiseGBA(GBA* gba, GamePak* gamepak) {
 	gba->IO    		= IO;
 	gba->PaletteRAM = PaletteRAM;
 	gba->VRAM 		= VRAM;
-	gba->OAM 		= OAM;	
+	gba->OAM 		= OAM;
 
 
 
@@ -127,16 +126,14 @@ void startGBAEmulator(GamePak* gamepak) {
 	while (gba.run) {
 		for (int i = 0; i < 960; i++) {
 			stepCPU(&gba);
-			usleep(50000);
 		}
-	
-		/* HDRAW is over, run the PPU to catch up 
+
+		/* HDRAW is over, run the PPU to catch up
 		 * without ticking the clock */
 		stepPPU(&gba);
 
 		for (int i = 0; i < 272; i++) {
 			stepCPU(&gba);
-			usleep(50000);
 		}
 
 		/* HBLANK is over, run the PPU to catch up */
@@ -174,7 +171,7 @@ uint32_t busRead(GBA* gba, uint32_t address, uint8_t size) {
 		uint32_t relativeAddress;
 
 		switch ((address >> 24) & 0xF) {
-			case 0x8: 
+			case 0x8:
 				relativeAddress = address - EXT_ROM0_32MB;
 				break;
 			case 0xA:
@@ -265,9 +262,9 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 			case WIDTH_16: littleEndian16Encode(ptr, data); return;
 			case WIDTH_8:  *ptr = (uint8_t)data; return;
 		}
-	} else if (address >= VRAM_96KB && address <= VRAM_96KB_END) {	
+	} else if (address >= VRAM_96KB && address <= VRAM_96KB_END) {
 		uint8_t* ptr = &gba->VRAM[address - VRAM_96KB];
-		
+
 		/* VRAM only supports 16 and 32 bit writes, writing a byte to the addressed
 		 * halfword is going to mirror it to both upper and lower byte */
 		switch (size) {
@@ -301,10 +298,10 @@ void busWrite(GBA* gba, uint32_t address, uint32_t data, uint8_t size) {
 			case WIDTH_32: littleEndian32Encode(ptr, data);
 			case WIDTH_16: littleEndian16Encode(ptr, data);
 			case WIDTH_8: *ptr = data;
-		} 
+		}
 	} else if (address >= PALETTE_RAM_1KB && address <= PALETTE_RAM_1KB_END) {
 		uint8_t* ptr = &gba->PaletteRAM[address - PALETTE_RAM_1KB];
-		
+
 		/* Palette RAM only supports 16 and 32 bit writes, writing a byte to the addressed
 		 * halfword is going to mirror it to both upper and lower byte */
 		switch (size) {

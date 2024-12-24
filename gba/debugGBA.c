@@ -35,6 +35,7 @@ static char* condition(struct GBA* gba, uint8_t condCode) {
 
 static void BX(struct GBA* gba, uint32_t ins) {
 	printf("BX");
+	DEBUG_SET_BREAKPOINT("");
 }
 
 static void B(struct GBA* gba, uint32_t ins) {
@@ -215,7 +216,7 @@ static void Undefined(struct GBA* gba, uint32_t ins) {
 }
 
 static void Unimplemented_ARM(struct GBA* gba, uint32_t ins) {
-	printf("Unimplemented");
+	printf("Unimplemented %x", ins);
 }
 
 /* ------------- THUMB Handlers ----------------- */
@@ -287,8 +288,28 @@ static void ALU(struct GBA* gba, uint16_t ins) {
 	printf("R%d, R%d", Rd, Rs);
 }
 
+static void HIREG_OPS_BX(struct GBA* gba, uint16_t ins) {
+	uint8_t opcode = ins >> 8 & 0b11;
+	uint8_t H1 = ins >> 7 & 1;
+	uint8_t H2 = ins >> 6 & 1;
+	uint8_t Rs = (H2 << 3) | (ins >> 3 & 0b111);
+	uint8_t Rd = (H1 << 3) | (ins & 0b111);
+
+	switch (opcode) {
+		case 0b00: printf("%-9s ", "ADD"); break;
+		case 0b01: printf("%-9s ", "CMP"); break;
+		case 0b10: printf("%-9s ", "MOV"); break;
+		case 0b11: {
+			printf("%-9s R%d", "BX", Rs);
+			return;
+		}
+	}
+
+	printf("R%d, R%d", Rd, Rs);
+}
+
 static void Unimplemented_THUMB(struct GBA* gba, uint16_t ins) {
-	printf("Unimplemented");
+	printf("Unimplemented %x", ins);
 }
 
 
@@ -404,7 +425,10 @@ void initDissembler() {
 	/* Initialising THUMB Opcode */
 	for (int index = 0; index < 256; index++) {
 
-		if ((index & 0b11111100) == 0b010000) {
+		if ((index & 0b11111100) == 0b01000100) {
+			/* Hi Register Operations / BX */
+			Dissembler_THUMB_LUT[index] = &HIREG_OPS_BX; 
+		} else if ((index & 0b11111100) == 0b01000000) {
 			/* ALU Operations */
 			Dissembler_THUMB_LUT[index] = &ALU;
 		} else if ((index & 0b11111000) == 0b00011000) {
