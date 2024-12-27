@@ -12,7 +12,7 @@ CFLAGS = -O3 `sdl2-config --cflags` -I$(INCLUDE)
 LFLAGS = -O3 `sdl2-config --libs` -lm
 EXE = megagb
 
-BIN_GB = cartridge.o gb.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o mbc3.o
+BIN_GB = cartridge.o gb.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o mbc3.o mbc5.o
 BIN_GBA = gamepak.o arm7tdmi.o gba.o debugGBA.o renderer.o
 
 # test suite
@@ -55,6 +55,10 @@ mbc2.o : $(INCLUDE_GB)/mbc2.h \
 mbc3.o : $(INCLUDE_GB)/mbc3.h \
 		$(SRC_GB)/mbc3.c
 	$(CC) -c $(SRC_GB)/mbc3.c $(CFLAGS)
+
+mbc5.o : $(INCLUDE_GB)/mbc5.h \
+		$(SRC_GB)/mbc5.c
+	$(CC) -c $(SRC_GB)/mbc5.c $(CFLAGS)
 
 display.o : $(INCLUDE_GB)/display.h \
 			$(SRC_GB)/display.c

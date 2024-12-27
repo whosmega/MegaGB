@@ -70,7 +70,9 @@ void printCBInstruction(GB* gb, uint8_t byte) {
     printf("[%x|%x|%x|%x]", gb->IO[R_DIV], gb->IO[R_TIMA], gb->IO[R_TMA], gb->IO[R_TAC]);
 #endif
     printf(" %5s", "");
-
+#ifdef DEBUG_PRINT_OPCODE
+	printf("0x%02x ", byte);
+#endif
     switch (byte) {
         case 0x00: return simpleInstruction(gb, "RLC B");
         case 0x01: return simpleInstruction(gb, "RLC C");
@@ -350,7 +352,9 @@ void printInstruction(GB* gb) {
     printf("[%x|%x|%x|%x]", gb->IO[R_DIV], gb->IO[R_TIMA], gb->IO[R_TMA], gb->IO[R_TAC]);
 #endif
     printf(" %5s", "");
-
+#ifdef DEBUG_PRINT_OPCODE
+	printf("0x%02x ", readAddr(gb, gb->PC));
+#endif
     switch (readAddr(gb, gb->PC)) {
         case 0x00: return simpleInstruction(gb, "NOP");
         case 0x01: return d16(gb, "LD BC, d16");

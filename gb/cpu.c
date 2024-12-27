@@ -184,7 +184,7 @@ void resetGBC(GB* gb) {
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF30 - 0xFF37
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF38 - 0xFF3F
         0x91, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC,                 // 0xFF40 - 0xFF47
-        0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
+        0xFF, 0xFF, 0x00, 0x00, 0x7E, 0xFF, 0xFF, 0xFF,                 // 0xFF48 - 0xFF4F,
     };
 
     for (int i = 0x00; i < 0x50; i++) {
@@ -196,6 +196,10 @@ void resetGBC(GB* gb) {
     memset(gb->spriteColorRAM, 0xFF, 64);
     /* 0xFF50 to 0xFFFE = 0xFF */
     memset(&gb->IO[0x50], 0xFF, 0xAF);
+	gb->IO[R_SVBK] = 0xF9; 					// Default bank
+	gb->IO[R_VBK] = 0xFE;
+	gb->IO[R_OPRI] = 0x01; 					// CGB Obj priority
+	gb->IO[R_KEY0] = 0x00; 					// CGB Mode
     INTERRUPT_MASTER_DISABLE(gb);
 }
 
@@ -1241,7 +1245,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                              if (bankNumber == 0) bankNumber = 1;
                              gb->selectedWRAMBank = bankNumber;
                              /* Ignore bits 7-3 */
-                             gb->IO[R_SVBK] = byte | 0b11111000;
+                             gb->IO[R_SVBK] |= bankNumber;
                              return;
                          }
             case R_VBK: {
@@ -1253,7 +1257,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
 
                             gb->selectedVRAMBank = bankNumber;
                             /* Ignore all bits other than bit 0 */
-                            gb->IO[R_VBK] = byte | ~1;
+                            gb->IO[R_VBK] |= bankNumber;
                             return;
                         }
             case R_BCPD: {
@@ -1274,7 +1278,6 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                                  return;
                              }
 
-                             // printf("Writing %02x to color ram address %02x\n", byte, gb->currentCRAMIndex);
                              gb->bgColorRAM[gb->currentBackgroundCRAMIndex] = byte;
                              if (GET_BIT(gb->IO[R_BCPS], 7)) {
                                  gb->currentBackgroundCRAMIndex++;
@@ -1312,7 +1315,6 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                                  return;
                              }
 
-                             // printf("Writing %02x to color ram address %02x\n", byte, gb->currentCRAMIndex);
                              gb->spriteColorRAM[gb->currentSpriteCRAMIndex] = byte;
                              if (GET_BIT(gb->IO[R_OCPS], 7)) {
                                  gb->currentSpriteCRAMIndex++;
@@ -1321,6 +1323,7 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                                      gb->currentSpriteCRAMIndex = 0;
                                  }
                              }
+							 
                              break;
                          }
             case R_OCPS: {
@@ -1333,12 +1336,12 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                              break;
                          }
             case R_BGP: {
-                            if (gb->emuMode != EMU_DMG) return;
                             break;
                         }
             case R_OBP0:
             case R_OBP1:
-                        if (gb->emuMode != EMU_DMG) return;
+						/* NOTE: BGP, OBP0 and OBP1 are still R/W in CGB mode as some games seem to use it*/
+                        // if (gb->emuMode != EMU_DMG) return;
                         break;
             case R_STAT:
                         /* Bit 7 in STAT is unused so it has to always be 1.
@@ -1370,6 +1373,34 @@ void writeAddr(GB* gb, uint16_t addr, uint8_t byte) {
                          }
             case R_DMA: scheduleDMATransfer(gb, byte); break;
             case R_LY: return;
+			case R_KEY1: {
+				if (gb->emuMode != EMU_CGB) return;
+				byte = (gb->IO[R_KEY1] & ~1) | (byte & 1);
+				break;
+			}
+			case R_HDMA5: {
+				if (gb->emuMode != EMU_CGB) return;
+
+				if (gb->doingHDMA && (byte >> 7) == 0) {
+					/* Cancel of ongoing HDMA transfer requested */
+					cancelHDMATransfer(gb);
+					return;
+				}
+				uint8_t type = byte >> 7;
+				uint8_t length = (byte & 0x7F) + 1; 		// In blocks of 0x10 bytes
+				uint16_t source = (gb->IO[R_HDMA1] << 8) | (gb->IO[R_HDMA2] & ~0xF);
+				uint16_t dest = (gb->IO[R_HDMA3] << 8) | gb->IO[R_HDMA4];
+				dest = (dest & 0x1FF0) | (1 << 15);
+
+				if (type == 0) {
+					/* General Purpose DMA (instant) */
+					scheduleGDMATransfer(gb, source, dest, length);
+				} else {
+					/* HBlank DMA (concurrent) */
+					scheduleHDMATransfer(gb, source, dest, length);
+				}
+				break;
+			}
         }
 
         gb->IO[addr - IO_REG] = byte;
@@ -1605,6 +1636,36 @@ static void halt(GB* gb) {
             gb->scheduleHaltBug = true;
         }
     }
+}
+
+static void stop(GB* gb) {
+	readByte_4C(gb); 				// Discard (stop is 2 byte long)
+	/* STOP Instruction and speed switch mechanism 
+	 * Not implemented for DMG, and for CGB we only implement speed switching */
+	/* Reset DIV */
+	gb->IO[R_DIV] = 0;
+
+	if (gb->emuMode != EMU_CGB) return;
+	gb->doingSpeedSwitch = true;
+
+	/* CPU Idles for 2050 M-Cycles, TIMA keeps ticking, DIV doesnt tick,
+	 * Interrupts are not handled as CPU is stopped */
+#ifdef DEBUG_LOGGING
+	printf("Speed Switch Invoked Via STOP\n");
+#endif
+	for (int i = 0; i < 2050; i++) {
+		cyclesSync_4(gb);
+		syncTimer(gb);
+	}
+
+	gb->doingSpeedSwitch = false;
+	gb->isDoubleSpeedMode = !gb->isDoubleSpeedMode;
+	gb->IO[R_KEY1] &= 0x7E;
+	gb->IO[R_KEY1] |= (int)gb->isDoubleSpeedMode << 7;
+	/* CPU has switched speed */
+#ifdef DEBUG_LOGGING
+	printf("Speed Switch Finished, Now: %s\n", gb->isDoubleSpeedMode?"Double":"Single");
+#endif
 }
 
 /* Main CPU instruction dispatchers */
@@ -1948,8 +2009,7 @@ void dispatch(GB* gb) {
         case 0x0D: decrementR8(gb, R8_C); break;
         case 0x0E: LOAD_R_D8(gb, R8_C); break;
         case 0x0F: rotateRightR8(gb, R8_A, false); break;
-                   /* OPCODE 10 TODO - STOP, it stops the CPU from running */
-        case 0x10: break;
+        case 0x10: stop(gb); return;
         case 0x11: LOAD_RR_D16(gb, R16_DE); break;
         case 0x12: LOAD_ARR_R(gb, R16_DE, R8_A); break;
         case 0x13: INC_RR(gb, R16_DE); break;

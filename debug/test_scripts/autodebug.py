@@ -4,20 +4,20 @@
 import subprocess 
 import sys
 
-binjgbOutput = open("binjgbLog.txt", "w")
-megagbcOutput = open("megagbcLog.txt", "w")
+binjgbOutput = open("log2.txt", "w")
+megagbcOutput = open("log1.txt", "w")
 
 timeout = 5
-MaxCharPerLine = 25
+MaxCharPerLine = 20
 
 try:
-    subprocess.call(["./binjgb-debugger", sys.argv[1]], 
+    subprocess.call(["./../binjgb/bin/binjgb", sys.argv[1]], 
                     stdout = binjgbOutput, stderr = binjgbOutput, timeout = timeout)
 except subprocess.TimeoutExpired:
     print("Logged binjgb trace")
 
 try:
-    subprocess.call(["../megagbc", sys.argv[1]],
+    subprocess.call(["./megagb", sys.argv[1]],
                     stdout = megagbcOutput, stderr = megagbcOutput, timeout = timeout)
 except subprocess.TimeoutExpired:
     print("Logged megagbc trace")
@@ -25,8 +25,8 @@ except subprocess.TimeoutExpired:
 binjgbOutput.close()
 megagbcOutput.close()
 
-binjgbOutput = open("binjgbLog.txt", "r")
-megagbcOutput = open("megagbcLog.txt", "r")
+binjgbOutput = open("log2.txt", "r")
+megagbcOutput = open("log1.txt", "r")
 
 bLines = binjgbOutput.readlines()
 mLines = megagbcOutput.readlines()
@@ -67,7 +67,8 @@ for i in range(0, bLinesLen):
         print("===== MegaGBC Log =====")
         printAround(mLines, i, mLinesLen)
         print("======================")
-        break 
+        if input("Continue? (y/n)") == "n":
+            break
 
 print("Finished")
     

@@ -1,5 +1,5 @@
-outputOld = open("realemu.txt", "r")
-outputNew = open("myemu.txt", "r")
+outputOld = open("log2.txt", "r")
+outputNew = open("log1.txt", "r")
 
 s1 = outputOld.read()
 s2 = outputNew.read()

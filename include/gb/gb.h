@@ -79,6 +79,8 @@ typedef enum {
     R_OBP1    = 0x49,
     R_WY      = 0x4A,
     R_WX      = 0x4B,
+	R_KEY0    = 0x4C,
+	R_KEY1    = 0x4D,
     R_VBK     = 0x4F,
     R_HDMA1   = 0x51,
     R_HDMA2   = 0x52,
@@ -89,6 +91,7 @@ typedef enum {
     R_BCPD    = 0x69,
     R_OCPS    = 0x6A,
     R_OCPD    = 0x6B,
+	R_OPRI    = 0x6C,
     R_SVBK    = 0x70
 } HREG;
 
@@ -121,6 +124,19 @@ struct GB {
     uint8_t scheduled_dmaTimer;             /* Timer that counts no. of tcycles till the DMA begins
                                                when the DMA is scheduled */
     uint16_t dmaSource;                     /* DMA Source Address */
+
+	bool doingSpeedSwitch; 					/* Doing speed switch (CGB Only) */
+	bool isDoubleSpeedMode; 				/* Is the emulator in double speed mode? (CGB Only) */
+	bool scheduleGDMA; 						/* Start GDMA/HDMA at next cycle*/
+	bool scheduleHDMA;
+	bool doingGDMA; 						/* General DMA (CGB Only) */
+	bool doingHDMA; 						/* HBlank DMA (CGB Only) */
+	bool stepHDMA; 							/* We can proceed to step HDMA by 1 block */
+	uint16_t ghdmaSource; 					/* GDMA/HDMA Source, Destination, Length & Block Index */
+	uint16_t ghdmaDestination;
+	uint8_t ghdmaLength;
+	uint8_t ghdmaIndex;
+
     /* ---------------- CPU ---------------- */
     uint8_t GPR[GP_COUNT];
     uint16_t PC;                        /* Program Counter */
@@ -233,9 +249,11 @@ void handleSDLEvents(GB* gb);
 void syncTimer(GB* gb);
 void incrementTIMA(GB* gb);
 
-/* DMA */
+/* DMA/GDMA/HDMA */
 void scheduleDMATransfer(GB* gb, uint8_t byte);
-
+void scheduleGDMATransfer(GB* gb, uint16_t source, uint16_t dest, uint8_t length);
+void scheduleHDMATransfer(GB* gb, uint16_t source, uint16_t dest, uint8_t length);
+void cancelHDMATransfer(GB* gb);
 /* Utility */
 unsigned long clock_u();
 #endif

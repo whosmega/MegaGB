@@ -10,7 +10,6 @@ typedef struct {
 
     /* Registers */
     bool ram_rtcEnabled;         /* RAM/RTC Enable */
-    uint8_t romBankNumber;       /* Used to store 7 bits of rom bank number */
     uint8_t ram_rtcBankNumber;   /* Used to store bits of ram bank number or RTC Register mapping 
                                     This can also be read to determine whether RTC r/w is selected 
                                     or RAM bank as a value of 0x00-0x03 maps to ram banks and 

@@ -37,6 +37,18 @@ static void initGB(GB* gb) {
     gb->lastTIMASync = 0;
     gb->lastDIVSync = 0;
 
+	gb->doingSpeedSwitch = false;
+	gb->isDoubleSpeedMode = false;
+	gb->scheduleGDMA = false;
+	gb->scheduleHDMA = false;
+	gb->doingGDMA = false;
+	gb->doingHDMA = false;
+	gb->stepHDMA = false;
+	gb->ghdmaSource = 0;
+	gb->ghdmaDestination = 0;
+	gb->ghdmaLength = 0;
+	gb->ghdmaIndex = 0;
+
     gb->sdl_window = NULL;
     gb->sdl_renderer = NULL;
     gb->ticksAtLastRender = 0;
@@ -139,11 +151,11 @@ static void initGBCartridge(GB* gb, Cartridge* cartridge) {
         resetGBC(gb);
 
         /* Set WRAM/VRAM banks if in CGB mode
-         * Because the default value of SVBK is 0xFF, which means bank 7 is selected
+         * Because the default value of SVBK is 0xF9, which means bank 1 is selected
          * by default
-         * Same goes for VBK, bank 1 will be selected by default*/
-        gb->selectedVRAMBank = 1;
-        gb->selectedWRAMBank = 7;
+         * Same goes for VBK, bank 0 will be selected by default*/
+        gb->selectedVRAMBank = 0;
+        gb->selectedWRAMBank = 1;
     } else if (gb->emuMode == EMU_DMG) {
         gb->wram = (uint8_t*)malloc(0x1000 * 2);        /* 2 WRAM banks */
         gb->vram = (uint8_t*)malloc(0x2000 * 1);        /* 1 VRAM bank */
@@ -252,8 +264,8 @@ void syncTimer(GB* gb) {
     unsigned int cyclesElapsedDIV = cycles - gb->lastDIVSync;
 
 
-    /* Sync DIV */
-    if (cyclesElapsedDIV >= T_CYCLES_PER_DIV) {
+    /* Sync DIV (DIV does not tick during speed switch)*/
+    if (!gb->doingSpeedSwitch && cyclesElapsedDIV >= T_CYCLES_PER_DIV) {
         /* 'Rewind' the last timer sync in case the timer should have been
          * incremented on an earlier cycle */
         gb->lastDIVSync = cycles - (cyclesElapsedDIV - T_CYCLES_PER_DIV);
@@ -267,7 +279,8 @@ void syncTimer(GB* gb) {
     uint8_t timerFrequency  =  timerControl & 0b00000011;
 
     if (timerEnabled) {
-        /* Cycle table contains number of cycles per increment for its corresponding freq */
+        /* Cycle table contains number of cycles per increment for its corresponding freq
+		 * (as per single speed mode) */
         int cycleTable[] = {
             1024,		// 4096 Hz
             16,			// 262144 Hz
@@ -354,6 +367,144 @@ static void syncDMA(GB* gb) {
     }
 }
 
+/* GDMA/HDMA */
+
+void scheduleGDMATransfer(GB *gb, uint16_t source, uint16_t dest, uint8_t length) {
+	if (gb->doingHDMA) {
+		printf("[WARNING] Doing GDMA and HDMA together\n");
+	}
+	/* Carry out scheduling for general purpose dma which will start at next cycle */
+	gb->ghdmaDestination = dest;
+	gb->ghdmaSource = source;
+	gb->ghdmaLength = length;
+	gb->ghdmaIndex = 0;
+	gb->scheduleGDMA = true;
+#ifdef DEBUG_GHDMA_LOGGING
+	printf("Scheduled GDMA Transfer: S:0x%04x D:0x%04x L:%x\n", source, dest, length);
+#endif
+}
+
+static void startGDMATransfer(GB* gb) {
+	/* During GDMA Transfer, CPU is stopped, interrupts are stopped,
+	 * timer, PPU and others continue as usual */
+	gb->scheduleGDMA = false;
+	gb->doingGDMA = true;
+	if (gb->isDoubleSpeedMode) {
+		int cycles = gb->ghdmaLength * 0x10;
+		for (int i = 0; i < cycles; i++) {
+			/* Fixed rate of 1 byte per cycle for 16 mcycles */
+			uint8_t byte = readAddr(gb, gb->ghdmaSource+i);
+			writeAddr(gb, gb->ghdmaDestination+i, byte);
+			cyclesSync_4(gb);
+			syncTimer(gb);
+		}
+	} else {
+		int cycles = gb->ghdmaLength * 0x8;
+		for (int i = 0; i < cycles; i++) {
+			/* Fixed rate of 2 bytes per cycle for 8 mcycles */
+			uint8_t byte = readAddr(gb, gb->ghdmaSource+i*2);
+			writeAddr(gb, gb->ghdmaDestination+i*2, byte);
+			byte = readAddr(gb, gb->ghdmaSource+i*2+1);
+			writeAddr(gb, gb->ghdmaDestination+i*2+1, byte);
+
+			cyclesSync_4(gb);
+			syncTimer(gb);
+		}
+	}
+
+	/* GDMA complete */
+	gb->doingGDMA = false;
+	gb->IO[R_HDMA5] = 0xFF;
+#ifdef DEBUG_GHDMA_LOGGING
+	printf("Successfully completed GDMA Transfer\n");
+#endif
+}
+
+void scheduleHDMATransfer(GB *gb, uint16_t source, uint16_t dest, uint8_t length) {
+	if (gb->doingHDMA) return;
+	/* Carry out scheduling for HBlank dma which will be allowed to run from next cycle */
+	gb->ghdmaDestination = dest;
+	gb->ghdmaSource = source;
+	gb->ghdmaLength = length;
+	gb->ghdmaIndex = 0;
+	gb->scheduleHDMA = true;
+#ifdef DEBUG_GHDMA_LOGGING
+	printf("Scheduled HDMA Transfer: S:0x%04x D:0x%04x L:%x\n", source, dest, length);
+#endif
+}
+
+static void startHDMATransfer(GB* gb) {
+	gb->scheduleHDMA = false;
+	gb->doingHDMA = true;
+}
+
+static void stepHDMATransfer(GB* gb) {
+	/* Should be called in HBlank when doing HDMA transfer, 
+	 * Steps the HDMA by 1 block, during the process CPU is stopped, interrupts are stopped,
+	 * PPU and Timer tick normally */
+
+	/* Step acknowledged */
+	gb->stepHDMA = false;
+
+	/* If halting then skip step, this means it steps in next HBlank
+	 * in which the CPU isnt halting */
+	if (gb->haltMode) return;
+
+	/* Step can be made, 1 block of 0x10 bytes is transferred, CPU & Interrupts are stopped
+	 * PPU and Timer ticks as usual */
+
+	const uint16_t offset = 0x10*gb->ghdmaIndex;
+	if (gb->isDoubleSpeedMode) {
+		int cycles = 0x10;
+		for (int i = 0; i < cycles; i++) {
+			/* 1 byte per 1 cycle for 16 cycles */
+			uint8_t byte = readAddr(gb, gb->ghdmaSource+offset+i);
+			writeAddr(gb, gb->ghdmaDestination+offset+i, byte);
+
+			cyclesSync_4(gb);
+			syncTimer(gb);
+		}
+	} else {
+		int cycles = 0x8;
+		for (int i = 0; i < cycles; i++) {
+			/* 2 bytes per 1 cycle for 8 cycles */
+			uint8_t byte = readAddr(gb, gb->ghdmaSource+offset+i*2);
+			writeAddr(gb, gb->ghdmaDestination+offset+i*2, byte);
+			byte = readAddr(gb, gb->ghdmaSource+offset+i*2+1);
+			writeAddr(gb, gb->ghdmaDestination+offset+i*2+1, byte);
+
+			cyclesSync_4(gb);
+			syncTimer(gb);
+		}
+	}
+
+	gb->ghdmaIndex += 1;
+
+	if (gb->ghdmaIndex >= gb->ghdmaLength) {
+		/* HDMA Transfer Complete */
+		gb->doingHDMA = false;
+		gb->IO[R_HDMA5] = 0xFF;
+#ifdef DEBUG_GHDMA_LOGGING
+		printf("Successfully completed hdma\n");
+#endif
+		return;
+	}
+
+#ifdef DEBUG_GHDMA_LOGGING
+	printf("Stepped HDMA: Index:%d Length:%d\n", gb->ghdmaIndex, gb->ghdmaLength);
+#endif
+	gb->IO[R_HDMA5] = 0x80 | (gb->ghdmaLength - gb->ghdmaIndex);
+}
+
+void cancelHDMATransfer(GB* gb) {
+	/* Cancel an ongoing HDMA transfer */
+	gb->doingHDMA = false;
+	gb->IO[R_HDMA5] = 0x80 | (gb->ghdmaLength - gb->ghdmaIndex);
+#ifdef DEBUG_GHDMA_LOGGING
+	printf("Cancelled HDMA\n");
+#endif
+}
+
 /* ------------------ */
 
 static void run(GB* gb) {
@@ -384,7 +535,16 @@ void cyclesSync_4(GB* gb) {
 
         /* The DMA has been scheduled to start 1 mcycle after the register write */
         if (gb->scheduled_dmaTimer == 0) startDMATransfer(gb);
-    }
+    } else if (gb->scheduleGDMA) {
+		/* GDMA can be started at the end of the register write cycle */
+		startGDMATransfer(gb);
+	} else if (gb->scheduleHDMA) {
+		startHDMATransfer(gb);
+	}
+
+	if (gb->doingHDMA && gb->stepHDMA) {
+		stepHDMATransfer(gb);
+	}
 }
 
 /* SDL */

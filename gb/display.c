@@ -218,15 +218,7 @@ static void getPixelColor_CGB(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
     *r = toRGB888((color & 0b0000000000011111));
     *g = toRGB888((color & 0b0000001111100000) >> 5);
     *b = toRGB888((color & 0b0111110000000000) >> 10);
-
-    /*
-       for (int i = 0; i < 64; i++) {
-       printf("%02x ", gb->colorRAM[i]);
-       }
-
-
-       printf("\n");
-       */
+		
 }
 
 static void getPixelColor_DMG(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, uint8_t* b,
@@ -1053,12 +1045,17 @@ static void advancePPU(GB* gb) {
                     requestInterrupt(gb, INTERRUPT_VBLANK);
                 } else switchModePPU(gb, PPU_MODE_2);
 
+				/* HDMA cannot be stepped now that HBLANK is over */
+				gb->stepHDMA = false;
             } else if (gb->cyclesSinceLastMode == gb->hblankDuration - 6) {
                 /* LY register gets incremented 6 dots before the *true* increment */
                 gb->IO[R_LY]++;
                 updateSTAT(gb, STAT_UPDATE_LY_LYC);
-            }
-
+            } else if (gb->cyclesSinceLastMode == 1 && gb->doingHDMA) {
+				/* Only when entering HBlank, stepping of HDMA will be allowed, if
+				 * it is in progress */
+				gb->stepHDMA = true;
+			}
             break;
         }
         case PPU_MODE_1: {
@@ -1173,9 +1170,16 @@ void insertFIFO(FIFO* fifo, FIFO_Pixel pixel, uint8_t index) {
 
 void syncDisplay(GB* gb) {
     /* We sync the display by running the PPU for the correct number of
-     * dots (1 dot = 1 tcycle in normal speed), we run for 4 dots every sync */ 
+     * dots (1 dot = 1 tcycle in normal speed), we run the equivalent of 4 tcycles every sync */
+
+	/* For double speed mode, emulator is synced with real time wrt display, so
+	 * to achieve double speed of CPU and other components, we would simply halve the
+	 * dots per T-Cycle, so 1 dot = 2 tcycle */
+
+	int dots = gb->isDoubleSpeedMode ? 2 : 4;
+
     if (gb->ppuEnabled) {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < dots; i++) {
             gb->cyclesSinceLastFrame++;
     #ifdef DEBUG_PRINT_PPU	
             printf("[m%d|ly%03d|fcy%05d|mcy%04d|fifoc%d|lastX%03d|type %s]\n", gb->ppuMode, gb->IO[R_LY], gb->cyclesSinceLastFrame, gb->cyclesSinceLastMode, gb->BackgroundFIFO.count, gb->nextRenderPixelX, gb->renderingWindow ? "win" : "bg");
@@ -1183,7 +1187,7 @@ void syncDisplay(GB* gb) {
             advancePPU(gb);
         }
     } else {
-        gb->cyclesSinceLastFrame += 4;
+        gb->cyclesSinceLastFrame += dots;
     }
 
     if (gb->cyclesSinceLastFrame == T_CYCLES_PER_FRAME) {

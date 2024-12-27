@@ -13,7 +13,6 @@ void mbc3_allocate(GB* gb, bool externalRam, bool rtc) {
 
     mbc->latchRegister = 0x1; 
     mbc->ram_rtcBankNumber = 0;
-    mbc->romBankNumber = 0;
     mbc->ram_rtcEnabled = false;
     
     mbc->selectedRTCRegister = 0;
@@ -64,7 +63,6 @@ void mbc3_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte) {
         if ((byte & 0xF) == 0xA) mbc->ram_rtcEnabled = true;
         else mbc->ram_rtcEnabled = false;
     } else if (addr >= 0x2000 && addr <= 0x3FFF) {
-		mbc->romBankNumber = byte & 0b01111111;
 		/* Mask unused bits depending on rom size -> Supported upto 2 MB */
 		uint8_t bankNumber = byte & ((1 << (gb->cartridge->romSize + 1)) - 1);
 		if (bankNumber == 0) bankNumber = 1;
