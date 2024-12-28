@@ -1,6 +1,7 @@
 #include <gb/gb.h>
 #include <gb/display.h>
 #include <gb/debug.h>
+#include <gb/gui.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_pixels.h>
@@ -336,7 +337,10 @@ static void renderPixel(GB* gb) {
     }
 
     SDL_SetRenderDrawColor(gb->sdl_renderer, r, g, b, 255);
-    SDL_RenderDrawPoint(gb->sdl_renderer, pixel.screenX, pixel.screenY);
+	/* Make sure to offset for menu */
+	/* Set scale before rendering PPU */
+	SDL_RenderSetScale(gb->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
+    SDL_RenderDrawPoint(gb->sdl_renderer, pixel.screenX, pixel.screenY+MENU_HEIGHT_PX/DISPLAY_SCALING);
 
     gb->nextRenderPixelX = pixel.screenX + 1;
     // printf("rendered pixel at x%d\n", pixel.screenX);
@@ -1108,11 +1112,7 @@ void disablePPU(GB* gb) {
         /* This is dangerous for any game/rom to do on real hardware
          * as it can damage hardware */
         printf("[WARNING] Turning off LCD when not in VBlank can damage a real gameboy\n");
-    }
-
-    /* On CGB and DMG, the screen goes blank or white when the PPU is disabled */
-    SDL_SetRenderDrawColor(gb->sdl_renderer, 255, 255, 255, 255);
-    SDL_RenderClear(gb->sdl_renderer);
+    } 
 
     gb->ppuEnabled = false;
     gb->IO[R_LY] = 0;
@@ -1194,9 +1194,17 @@ void syncDisplay(GB* gb) {
         /* End of frame */
         gb->cyclesSinceLastFrame = 0;
         /* Draw frame */
+		if (!gb->ppuEnabled) {
+			/* On CGB and DMG, the screen goes blank or white when the PPU is disabled */
+    		SDL_SetRenderDrawColor(gb->sdl_renderer, 255, 255, 255, 255);
+    		SDL_RenderClear(gb->sdl_renderer);
+		}
 
         handleSDLEvents(gb);
-        if (!gb->skipFrame) {
+		/* Render MENU and other GUI on top of PPU */
+		renderFrameIMGUI(gb);
+
+        if (!gb->skipFrame) {	
             SDL_RenderPresent(gb->sdl_renderer);
         } else gb->skipFrame = false; 
 #ifndef DEBUG_UNLOCK_FRAMERATE

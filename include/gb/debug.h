@@ -28,6 +28,8 @@
 #define DEBUG_SUPPORT_SLOW_EMULATION
 #endif
 
+void disassembleInstruction(GB* gb, uint8_t byte, char* output);
+void disassembleCBInstruction(GB* gb, uint8_t byte, char* output);
 void printInstruction(GB* gb);
 void printRegisters(GB* gb);
 void printCBInstruction(GB* gb, uint8_t byte);

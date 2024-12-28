@@ -4,6 +4,7 @@
 #include <gb/debug.h>
 #include <gb/display.h>
 #include <gb/mbc.h>
+#include <gb/gui.h>
 
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_pixels.h>
@@ -48,6 +49,12 @@ static void initGB(GB* gb) {
 	gb->ghdmaDestination = 0;
 	gb->ghdmaLength = 0;
 	gb->ghdmaIndex = 0;
+
+	gb->imgui_main_context = NULL;
+	gb->imgui_secondary_context = NULL;
+	gb->imgui_secondary_sdl_window = NULL;
+	gb->imgui_secondary_sdl_renderer = NULL;
+	gb->imgui_gui_state = NULL;
 
     gb->sdl_window = NULL;
     gb->sdl_renderer = NULL;
@@ -551,13 +558,13 @@ void cyclesSync_4(GB* gb) {
 
 int initSDL(GB* gb) {
     SDL_Init(SDL_INIT_EVERYTHING);
-    SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING, SDL_WINDOW_SHOWN,
+    SDL_CreateWindowAndRenderer(WIDTH_PX * DISPLAY_SCALING, HEIGHT_PX * DISPLAY_SCALING + MENU_HEIGHT_PX, SDL_WINDOW_SHOWN,
             &gb->sdl_window, &gb->sdl_renderer);
 
     if (!gb->sdl_window) return 1;          /* Failed to create screen */
+	SDL_SetWindowPosition(gb->sdl_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
     SDL_SetWindowTitle(gb->sdl_window, "MegaGB");
-    SDL_RenderSetScale(gb->sdl_renderer, DISPLAY_SCALING, DISPLAY_SCALING);
     return 0;
 }
 
@@ -565,6 +572,7 @@ void handleSDLEvents(GB* gb) {
     /* We listen for events like keystrokes and window closing */
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+		processEventsIMGUI(gb, &event);
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
             /* We reset the corresponding bit for every scancode
              * in the buffer for keydown and set for keyup */
@@ -654,7 +662,9 @@ void handleSDLEvents(GB* gb) {
 
         } else if (event.type == SDL_QUIT) {
             gb->run = false;
-        }
+        } else if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(gb->sdl_window)) {
+			gb->run = false;
+		}
     }
 }
 
@@ -711,6 +721,13 @@ void startGBEmulator(Cartridge* cartridge) {
         return;
     }
 
+	/* Start up IMGUI */
+	int status2 = initIMGUI(&gb);
+	if (status2 != 0) {
+		log_fatal(&gb, "Error starting IMGUI");
+		return;
+	}
+
 #ifdef DEBUG_PRINT_CARTRIDGE_INFO
     printCartridge(cartridge);
 #endif
@@ -741,7 +758,7 @@ void pauseGBEmulator(GB* gb) {
 
     while (true) {
         handleSDLEvents(gb);
-
+		renderFrameIMGUI(gb);
         if (!gb->paused) break;
     }
 }
@@ -763,6 +780,8 @@ void stopGBEmulator(GB* gb) {
     printf("Cleaning allocations\n");
 #endif
 
+	/* Free up IMGUI allocations */
+	freeIMGUI(gb);
     /* Free up all SDL allocations and stop it */
     freeSDL(gb);
     /* Free up MBC allocations */

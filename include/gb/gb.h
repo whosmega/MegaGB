@@ -96,6 +96,12 @@ typedef enum {
 } HREG;
 
 struct GB {
+	/* ---------------- IMGUI --------------- */
+	void* imgui_main_context; 				/* Main IMGUI Context for MENU */
+	void* imgui_secondary_context; 			/* Secondary IMGUI Context for second window */
+	SDL_Window* imgui_secondary_sdl_window; /* Secondary IMGUI SDL Window and Renderer */
+	SDL_Renderer* imgui_secondary_sdl_renderer;
+	void* imgui_gui_state; 					/* Gui State */
     /* ---------------- SDL ----------------- */
     SDL_Window* sdl_window;					/* The window */
     SDL_Renderer* sdl_renderer;             /* Renderer */
