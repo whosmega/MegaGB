@@ -4,8 +4,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <gb/gb.h>
-#include <gb/debug.h>
-#include <gb/display.h>
 #include <gb/cpu.h>
 
 #define PORT_ADDR 0xFF00

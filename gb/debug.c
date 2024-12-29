@@ -16,9 +16,9 @@ void log_warning(GB* gb, const char* string) {
     printf("\n");
 }
 
-static uint16_t read2Bytes(GB* gb) {
-    uint8_t b1 = readAddr(gb, gb->PC + 1);
-    uint8_t b2 = readAddr(gb, gb->PC + 2);
+static uint16_t read2Bytes(GB* gb, uint16_t addr) {
+    uint8_t b1 = readAddr(gb, addr + 1);
+    uint8_t b2 = readAddr(gb, addr + 2);
     uint16_t D16 = (b2 << 8) | b1;
     return D16;
 }
@@ -32,27 +32,34 @@ static void printFlags(GB* gb) {
     printf(" C%d]", (flagState >> 4) & 1);
 }
 
-static void simpleInstruction(GB* gb, char* ins, char* output) {
+static int simpleInstruction(GB* gb, char* ins, char* output) {
     sprintf(output, "%s", ins);
+	return 1;
 }
 
-static void d16(GB* gb, char* fins, char* output) {
-    sprintf(output, fins, read2Bytes(gb));
+static int d16(GB* gb, char* fins, uint16_t addr, char* output) {
+    sprintf(output, fins, read2Bytes(gb, addr));
+	return 2;
 }
 
-static void d8(GB* gb, char* fins, char* output) {
-    sprintf(output, fins, readAddr(gb, gb->PC + 1));
+static int d8(GB* gb, char* fins, uint16_t addr, char* output) {
+    sprintf(output, fins, readAddr(gb, addr + 1));
+	return 1;
 }
 
-static void a16(GB* gb, char* fins, char* output) {
-    sprintf(output, fins, read2Bytes(gb));
+static int a16(GB* gb, char* fins, uint16_t addr, char* output) {
+    sprintf(output, fins, read2Bytes(gb, addr));
+	return 2;
 }
 
-static void r8(GB* gb, char* fins, char* output) {
-    sprintf(output, fins, (int8_t)readAddr(gb, gb->PC + 1));
+static int r8(GB* gb, char* fins, uint16_t addr, char* output) {
+    sprintf(output, fins, (int8_t)readAddr(gb, addr + 1));
+	return 1;
 }
 
-void disassembleCBInstruction(GB* gb, uint8_t byte, char* output) {
+/* Disassembly instructions return instruction length in bytes */
+
+int disassembleCBInstruction(GB* gb, uint8_t byte, char* output) {
 	switch (byte) {
         case 0x00: return simpleInstruction(gb, "RLC B", output);
         case 0x01: return simpleInstruction(gb, "RLC C", output);
@@ -311,73 +318,76 @@ void disassembleCBInstruction(GB* gb, uint8_t byte, char* output) {
         case 0xFE: return simpleInstruction(gb, "SET 7, (HL)", output);
         case 0xFF: return simpleInstruction(gb, "SET 7, A", output);
     }
+	return 1;
 }
 
-void disassembleInstruction(GB* gb, uint8_t byte, char* output) {
+int disassembleInstruction(GB* gb, uint16_t addr, char* output) {
+	uint8_t byte = readAddr(gb, addr);
+
 	switch (byte) {
         case 0x00: return simpleInstruction(gb, "NOP", output);
-        case 0x01: return d16(gb, "LD BC, 0x%04x", output);
+        case 0x01: return d16(gb, "LD BC, 0x%04x", addr, output);
         case 0x02: return simpleInstruction(gb, "LD (BC), A", output);
         case 0x03: return simpleInstruction(gb, "INC BC", output);
         case 0x04: return simpleInstruction(gb, "INC B", output);
         case 0x05: return simpleInstruction(gb, "DEC B", output);
-        case 0x06: return d8(gb, "LD B, 0x%02x", output);
+        case 0x06: return d8(gb, "LD B, 0x%02x", addr, output);
         case 0x07: return simpleInstruction(gb, "RLCA", output);
-        case 0x08: return a16(gb, "LD 0x%04x, SP", output);
+        case 0x08: return a16(gb, "LD 0x%04x, SP", addr, output);
         case 0x09: return simpleInstruction(gb, "ADD HL, BC", output);
         case 0x0A: return simpleInstruction(gb, "LD A, (BC)", output);
         case 0x0B: return simpleInstruction(gb, "DEC BC", output);
         case 0x0C: return simpleInstruction(gb, "INC C", output);
         case 0x0D: return simpleInstruction(gb, "DEC C", output);
-        case 0x0E: return d8(gb, "LD C, 0x%02x", output);
+        case 0x0E: return d8(gb, "LD C, 0x%02x", addr, output);
         case 0x0F: return simpleInstruction(gb, "RRCA", output);
         case 0x10: return simpleInstruction(gb, "STOP", output);
-        case 0x11: return d16(gb, "LD DE, 0x%04x", output);
+        case 0x11: return d16(gb, "LD DE, 0x%04x", addr, output);
         case 0x12: return simpleInstruction(gb, "LD (DE), A", output);
         case 0x13: return simpleInstruction(gb, "INC DE", output);
         case 0x14: return simpleInstruction(gb, "INC D", output);
         case 0x15: return simpleInstruction(gb, "DEC D", output);
-        case 0x16: return d8(gb, "LD D, 0x%02x", output);
+        case 0x16: return d8(gb, "LD D, 0x%02x", addr, output);
         case 0x17: return simpleInstruction(gb, "RLA", output);
-        case 0x18: return r8(gb, "JR %d", output);
+        case 0x18: return r8(gb, "JR %d", addr, output);
         case 0x19: return simpleInstruction(gb, "ADD HL, DE", output);
         case 0x1A: return simpleInstruction(gb, "LD A, (DE)", output);
         case 0x1B: return simpleInstruction(gb, "DEC DE", output);
         case 0x1C: return simpleInstruction(gb, "INC E", output);
         case 0x1D: return simpleInstruction(gb, "DEC E", output);
-        case 0x1E: return d8(gb, "LD E, 0x%02x", output);
+        case 0x1E: return d8(gb, "LD E, 0x%02x", addr, output);
         case 0x1F: return simpleInstruction(gb, "RRA", output);
-        case 0x20: return r8(gb, "JR NZ, %d", output);
-        case 0x21: return d16(gb, "LD HL, 0x%04x", output);
+        case 0x20: return r8(gb, "JR NZ, %d", addr, output);
+        case 0x21: return d16(gb, "LD HL, 0x%04x", addr, output);
         case 0x22: return simpleInstruction(gb, "LD (HL+), A", output);
         case 0x23: return simpleInstruction(gb, "INC HL", output);
         case 0x24: return simpleInstruction(gb, "INC H", output);
         case 0x25: return simpleInstruction(gb, "DEC H", output);
-        case 0x26: return d8(gb, "LD H, 0x%02x", output);
+        case 0x26: return d8(gb, "LD H, 0x%02x", addr, output);
         case 0x27: return simpleInstruction(gb, "DAA", output);
-        case 0x28: return r8(gb, "JR Z, %d", output);
+        case 0x28: return r8(gb, "JR Z, %d", addr, output);
         case 0x29: return simpleInstruction(gb, "ADD HL, HL", output);
         case 0x2A: return simpleInstruction(gb, "LD A, (HL+)", output);
         case 0x2B: return simpleInstruction(gb, "DEC HL", output);
         case 0x2C: return simpleInstruction(gb, "INC L", output);
         case 0x2D: return simpleInstruction(gb, "DEC L", output);
-        case 0x2E: return d8(gb, "LD L, 0x%02x", output);
+        case 0x2E: return d8(gb, "LD L, 0x%02x", addr, output);
         case 0x2F: return simpleInstruction(gb, "CPL", output);
-        case 0x30: return r8(gb, "JR NC, %d", output);
-        case 0x31: return d16(gb, "LD SP, %0x%04x", output);
+        case 0x30: return r8(gb, "JR NC, %d", addr, output);
+        case 0x31: return d16(gb, "LD SP, %0x%04x", addr, output);
         case 0x32: return simpleInstruction(gb, "LD (HL-), A", output);
         case 0x33: return simpleInstruction(gb, "INC SP", output);
         case 0x34: return simpleInstruction(gb, "INC (HL)", output);
         case 0x35: return simpleInstruction(gb, "DEC (HL)", output);
-        case 0x36: return d8(gb, "LD (HL), 0x%02x", output);
+        case 0x36: return d8(gb, "LD (HL), 0x%02x", addr, output);
         case 0x37: return simpleInstruction(gb, "SCF", output);
-        case 0x38: return r8(gb, "JR C, %d", output);
+        case 0x38: return r8(gb, "JR C, %d", addr, output);
         case 0x39: return simpleInstruction(gb, "ADD HL, SP", output);
         case 0x3A: return simpleInstruction(gb, "LD A, (HL-)", output);
         case 0x3B: return simpleInstruction(gb, "DEC SP", output);
         case 0x3C: return simpleInstruction(gb, "INC A", output);
         case 0x3D: return simpleInstruction(gb, "DEC A", output);
-        case 0x3E: return d8(gb, "LD A, 0x%02x", output);
+        case 0x3E: return d8(gb, "LD A, 0x%02x", addr, output);
         case 0x3F: return simpleInstruction(gb, "CCF", output);
         case 0x40: return simpleInstruction(gb, "LD B, B", output);
         case 0x41: return simpleInstruction(gb, "LD B, C", output);
@@ -509,56 +519,56 @@ void disassembleInstruction(GB* gb, uint8_t byte, char* output) {
         case 0xBF: return simpleInstruction(gb, "CP A", output);
         case 0xC0: return simpleInstruction(gb, "RET NZ", output);
         case 0xC1: return simpleInstruction(gb, "POP BC", output);
-        case 0xC2: return a16(gb, "JP NZ, 0x%04x", output);
-        case 0xC3: return a16(gb, "JP 0x%04x", output);
-        case 0xC4: return a16(gb, "CALL NZ, 0x%04x", output);
+        case 0xC2: return a16(gb, "JP NZ, 0x%04x", addr, output);
+        case 0xC3: return a16(gb, "JP 0x%04x", addr, output);
+        case 0xC4: return a16(gb, "CALL NZ, 0x%04x", addr, output);
         case 0xC5: return simpleInstruction(gb, "PUSH BC", output);
-        case 0xC6: return d8(gb, "ADD A, 0x%02x", output);
+        case 0xC6: return d8(gb, "ADD A, 0x%02x", addr, output);
         case 0xC7: return simpleInstruction(gb, "RST 0x00", output);
         case 0xC8: return simpleInstruction(gb, "RET Z", output);
         case 0xC9: return simpleInstruction(gb, "RET", output);
-        case 0xCA: return a16(gb, "JP Z, 0x%04x", output);
+        case 0xCA: return a16(gb, "JP Z, 0x%04x", addr, output);
         case 0xCB: return simpleInstruction(gb, "PREFIX CB", output);
-        case 0xCC: return a16(gb, "CALL Z, 0x%04x", output);
-        case 0xCD: return a16(gb, "CALL 0x%04x", output);
-        case 0xCE: return d8(gb, "ADC A, 0x%02x", output);
+        case 0xCC: return a16(gb, "CALL Z, 0x%04x", addr, output);
+        case 0xCD: return a16(gb, "CALL 0x%04x", addr, output);
+        case 0xCE: return d8(gb, "ADC A, 0x%02x", addr, output);
         case 0xCF: return simpleInstruction(gb, "RST 0x08", output);
         case 0xD0: return simpleInstruction(gb, "RET NC", output);
         case 0xD1: return simpleInstruction(gb, "POP DE", output);
-        case 0xD2: return a16(gb, "JP NC, 0x%04x", output);
-        case 0xD4: return a16(gb, "CALL NC, 0x%04x", output);
+        case 0xD2: return a16(gb, "JP NC, 0x%04x", addr, output);
+        case 0xD4: return a16(gb, "CALL NC, 0x%04x", addr, output);
         case 0xD5: return simpleInstruction(gb, "PUSH DE", output);
-        case 0xD6: return d8(gb, "SUB 0x%02x", output);
+        case 0xD6: return d8(gb, "SUB 0x%02x", addr, output);
         case 0xD7: return simpleInstruction(gb, "RST 0x10", output);
         case 0xD8: return simpleInstruction(gb, "REC C", output);
         case 0xD9: return simpleInstruction(gb, "RETI", output);
-        case 0xDA: return a16(gb, "JP C, 0x%04x", output);
-        case 0xDC: return a16(gb, "CALL C, 0x%04x", output);
-        case 0xDE: return d8(gb, "SBC A, 0x%02x", output);
+        case 0xDA: return a16(gb, "JP C, 0x%04x", addr, output);
+        case 0xDC: return a16(gb, "CALL C, 0x%04x", addr, output);
+        case 0xDE: return d8(gb, "SBC A, 0x%02x", addr, output);
         case 0xDF: return simpleInstruction(gb, "RST 0x18", output);
-        case 0xE0: return d8(gb, "LD (0xFF%02x), A", output);
+        case 0xE0: return d8(gb, "LD (0xFF%02x), A", addr, output);
         case 0xE1: return simpleInstruction(gb, "POP HL", output);
         case 0xE2: return simpleInstruction(gb, "LD (0xFF00+C), A", output);
         case 0xE5: return simpleInstruction(gb, "PUSH HL", output);
-        case 0xE6: return d8(gb, "AND 0x%02x", output);
+        case 0xE6: return d8(gb, "AND 0x%02x", addr, output);
         case 0xE7: return simpleInstruction(gb, "RST 0x20", output);
-        case 0xE8: return r8(gb, "ADD SP, %d", output);
+        case 0xE8: return r8(gb, "ADD SP, %d", addr, output);
         case 0xE9: return simpleInstruction(gb, "JP (HL)", output);
-        case 0xEA: return a16(gb, "LD (0x%04x), A", output);
-        case 0xEE: return d8(gb, "XOR 0x%02x", output);
+        case 0xEA: return a16(gb, "LD (0x%04x), A", addr, output);
+        case 0xEE: return d8(gb, "XOR 0x%02x", addr, output);
         case 0xEF: return simpleInstruction(gb, "RST 0x28", output);
-        case 0xF0: return d8(gb, "LD A, (0xFF%02x)", output);
+        case 0xF0: return d8(gb, "LD A, (0xFF%02x)", addr, output);
         case 0xF1: return simpleInstruction(gb, "POP AF", output);
         case 0xF2: return simpleInstruction(gb, "LD A, (0xFF00 + C)", output);
         case 0xF3: return simpleInstruction(gb, "DI", output);
         case 0xF5: return simpleInstruction(gb, "PUSH AF", output);
-        case 0xF6: return d8(gb, "OR 0x%02x", output);
+        case 0xF6: return d8(gb, "OR 0x%02x", addr, output);
         case 0xF7: return simpleInstruction(gb, "RST 0x30", output);
-        case 0xF8: return r8(gb, "LD HL, SP+%d", output);
+        case 0xF8: return r8(gb, "LD HL, SP+%d", addr, output);
         case 0xF9: return simpleInstruction(gb, "LD SP, HL", output);
-        case 0xFA: return a16(gb, "LD A, (0x%04x)", output);
+        case 0xFA: return a16(gb, "LD A, (0x%04x)", addr, output);
         case 0xFB: return simpleInstruction(gb, "EI", output);
-        case 0xFE: return d8(gb, "CP 0x%02x", output);
+        case 0xFE: return d8(gb, "CP 0x%02x", addr, output);
         case 0xFF: return simpleInstruction(gb, "RST 0x38", output);
         default: return simpleInstruction(gb, "????", output);
     }
@@ -614,7 +624,7 @@ void printInstruction(GB* gb) {
 	printf("0x%02x ", readAddr(gb, gb->PC));
 #endif
     char disasm[30];
-	disassembleInstruction(gb, readAddr(gb, gb->PC), (char*)&disasm);
+	disassembleInstruction(gb, gb->PC, (char*)&disasm);
 	printf("%s\n", disasm);
 }
 

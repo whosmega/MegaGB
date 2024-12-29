@@ -50,8 +50,11 @@ int main(int argc, char* argv[]) {
 
     /* Allocate enough space for the bytes */
     uint8_t* allocation = (uint8_t*)malloc(size);
-    fread(allocation, size, 1, file);
-
+    int ret = fread(allocation, size, 1, file);
+	if (ret != 1) {
+		printf("Error : Could not read full file\n");
+		exit(3);
+	}
     fclose(file);
 
 	/* Figure out emulation type (gb/gbc or gba) */

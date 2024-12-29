@@ -4,14 +4,11 @@
 /* C Wrapper for Dear ImGui C++ Library, uses SDL_Renderer bindings */
 
 #include <SDL2/SDL.h>
+#include <gb/gb.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <gb/gb.h>
-#include <gb/cpu.h>
-#include <gb/debug.h>
 
 #define MENU_HEIGHT_PX 28
 

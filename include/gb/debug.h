@@ -1,6 +1,11 @@
 #ifndef MEGAGBC_DEBUG_H
 #define MEGAGBC_DEBUG_H
+
 #include <gb/gb.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define DEBUG_NO_CARTRIDGE_VERIFICATION
 // #define DEBUG_REALTIME_PRINTING
@@ -28,11 +33,16 @@
 #define DEBUG_SUPPORT_SLOW_EMULATION
 #endif
 
-void disassembleInstruction(GB* gb, uint8_t byte, char* output);
-void disassembleCBInstruction(GB* gb, uint8_t byte, char* output);
+int disassembleInstruction(GB* gb, uint16_t addr, char* output);
+int disassembleCBInstruction(GB* gb, uint8_t byte, char* output);
 void printInstruction(GB* gb);
 void printRegisters(GB* gb);
 void printCBInstruction(GB* gb, uint8_t byte);
 void log_fatal(GB* gb, const char* string);
 void log_warning(GB* gb, const char* string);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

@@ -2,6 +2,10 @@
 #define gb_mbc1_h
 #include <gb/gb.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     /* External RAM Bank Storage
      *
@@ -27,5 +31,9 @@ void mbc1_writeExternalRAM(GB* gb, uint16_t addr, uint8_t byte);
 uint8_t mbc1_readExternalRAM(GB* gb, uint16_t addr);
 void mbc1_free(GB* gb);
 void mbc1_interceptROMWrite(GB* gb, uint16_t addr, uint8_t byte);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

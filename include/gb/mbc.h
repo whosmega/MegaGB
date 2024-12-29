@@ -6,6 +6,10 @@
 #include <string.h>
 #include <gb/cartridge.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Forward Declare GB instead of including gb.h
  * to avoid a circular include */
 
@@ -36,5 +40,8 @@ void mbc_interceptROMWrite(struct GB* gb, uint16_t addr, uint8_t byte);
 void switchROMBank(struct GB* gb, int bankNumber);
 void switchRestrictedROMBank(struct GB* gb, int bankNumber);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

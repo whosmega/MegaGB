@@ -1,13 +1,17 @@
 #ifndef MGBC_VM_H
 #define MGBC_VM_H
+
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_render.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <gb/cartridge.h>
 #include <gb/mbc.h>
 #include <gb/cpu.h>
 #include <gb/display.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Utility macros */
 #define SET_BIT(byte, bit) byte |= 1 << bit
@@ -262,4 +266,8 @@ void scheduleHDMATransfer(GB* gb, uint16_t source, uint16_t dest, uint8_t length
 void cancelHDMATransfer(GB* gb);
 /* Utility */
 unsigned long clock_u();
+
+#ifdef __cplusplus
+}
+#endif
 #endif

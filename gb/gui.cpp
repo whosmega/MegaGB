@@ -5,6 +5,8 @@
 #include <backends/imgui_impl_sdl2.h>
 #include <backends/imgui_impl_sdlrenderer2.h>
 #include <gb/gui.h>
+#include <gb/cpu.h>
+#include <gb/debug.h>
 
 #include <iostream>
 
@@ -254,18 +256,19 @@ void renderFrameIMGUI(GB* gb) {
 		ImGui::Text("Disassambly");
 
 		bool cbcode = false;
+		int offset = 0; 						/* For multi byte instructions */
 
 		for (int i = -10; i < 10; i++) {
 			ImGui::TableNextRow();
 		
 			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("0x%04x", gb->PC+i);
+			ImGui::Text("0x%04x", gb->PC+i+offset);
 
 			ImGui::TableSetColumnIndex(1);
-			uint8_t opcode = readAddr(gb, gb->PC+i);
+			uint8_t opcode = readAddr(gb, gb->PC+i+offset);
 			char disasm[30];
 			if (cbcode) disassembleCBInstruction(gb, opcode, (char*)&disasm);
-			else disassembleInstruction(gb, opcode, (char*)&disasm);
+			else offset += disassembleInstruction(gb, gb->PC+i+offset, (char*)&disasm) - 1;
 
 			ImGui::Text("%s", disasm);
 

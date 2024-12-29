@@ -2,6 +2,10 @@
 #define gb_display_h
 #include <SDL2/SDL.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define DISPLAY_SCALING 4
 #define HEIGHT_PX 144
 #define WIDTH_PX  160
@@ -77,5 +81,9 @@ void clearFIFO(FIFO* fifo);
 void syncDisplay(struct GB* gb);
 void enablePPU(struct GB* gb);
 void disablePPU(struct GB* gb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

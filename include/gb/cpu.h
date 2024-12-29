@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct GB;
 
 typedef enum {
@@ -53,4 +57,9 @@ uint8_t readAddr(struct GB* gb, uint16_t addr);
 
 /* Function to request an interrupt when necessary */
 void requestInterrupt(struct GB* gb, INTERRUPT interrupt);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
