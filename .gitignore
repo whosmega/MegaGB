@@ -12,3 +12,7 @@ roms
 roms_bin
 compile_flags.txt
 imgui.ini
+.clangd
+.gcc-flags.json
+.gitignore
+imgui.ini
