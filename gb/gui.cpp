@@ -9,18 +9,116 @@
 #include <gb/debug.h>
 
 #include <iostream>
-
+#include <vector>
 /* Struct for storing GUI state */
 
 class GuiState {
 public:
 	bool showInternals;
 
+	/* Settings */
+	bool pause;
+	float shade0_rgb[3] = {1, 1, 1};
+	float shade1_rgb[3] = {0.666, 0.666, 0.666};
+	float shade2_rgb[3] = {0.333, 0.333, 0.333};
+	float shade3_rgb[3] = {0, 0, 0};
 	GuiState();
 };
 
 GuiState::GuiState() {
 	this->showInternals = false;
+	this->pause = false;
+}
+
+/* Define Colors */
+
+namespace Color {
+	unsigned WinTitleColor = IM_COL32(66, 61, 107, 255);
+	unsigned TraceHighlightColor = IM_COL32(153, 78, 89, 255);
+}
+
+static std::string disassemble(GB* gb, uint16_t address, int* insLength) {
+	char disasm[30];
+	uint8_t opcode = readAddr(gb, address);
+	if (opcode == 0xCB) {
+		disassembleCBInstruction(gb, address+1, (char*)&disasm);
+		*insLength = 2;
+	} else {
+		*insLength = disassembleInstruction(gb, address, (char*)&disasm);
+	}
+
+	return std::string(disasm);
+}
+
+static void renderInstructionTraceTable(GB* gb) {
+	if (ImGui::BeginTable(
+				"Instructions", 2, 
+				ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersV)) {
+
+		ImGui::TableSetupColumn("Address", 0, 1);
+		ImGui::TableSetupColumn("Disassembly", 0, 2);
+		ImGui::TableHeadersRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("Address");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("Disassambly");
+
+		std::vector<std::string> disassembly;
+		std::vector<uint16_t> disassemblyAddr;
+
+		/* Insert preceding instructions */
+		int currentIndex = gb->dispatchedAddressesStart;
+		for (int i=0; i<10; i++) {
+			int currentInsLength;
+			std::string currentDisasm = disassemble(gb, gb->dispatchedAddresses[currentIndex], &currentInsLength);
+			disassembly.push_back(std::string(currentDisasm));
+			disassemblyAddr.push_back(gb->dispatchedAddresses[currentIndex]);
+
+			currentIndex++;
+			if (currentIndex > 10) currentIndex = 0;
+		}
+
+		/* Insert current instruction */
+		int currentInsLength;
+		uint16_t currentDispatchAddress = gb->dispatchedAddresses[gb->dispatchedAddressesStart > 0 ? gb->dispatchedAddressesStart-1 : 10];
+		std::string currentDisasm = disassemble(gb, currentDispatchAddress, &currentInsLength);
+
+		disassembly.push_back(std::string(currentDisasm));
+		disassemblyAddr.push_back(currentDispatchAddress);
+
+		/* We are left with 11 instructions, and 2 vectors that give the corresponding disassembly 
+		 * and address, we can build forward 9 instructions from this point onwards */
+		int relativeIndex = currentInsLength;
+
+		for (int i = 0; i < 9; i++) {
+			uint16_t addr = currentDispatchAddress+relativeIndex;
+			int insLength = 1;
+			std::string disasm = disassemble(gb, addr, (int*)&insLength);
+
+			disassembly.push_back(disasm);
+			disassemblyAddr.push_back(addr);
+
+			relativeIndex += insLength;
+		}
+
+		/* Disassembly data gathering complete, we can output it now */
+
+		for (int i = 0; i < disassembly.size(); i++) {
+			ImGui::TableNextRow();
+		
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("0x%04x", disassemblyAddr[i]);
+
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%s", disassembly[i].c_str());
+
+			if (i==10) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Color::TraceHighlightColor);
+			}
+		}
+
+		ImGui::EndTable();
+	}
 }
 
 extern "C" {
@@ -120,8 +218,8 @@ void renderFrameIMGUI(GB* gb) {
 
 	if (ImGui::BeginMenuBar()) {
 		if (ImGui::BeginMenu("File")) {
-			if (ImGui::MenuItem("Load ROM (.gb/.gbc)")) {}
-			if (ImGui::MenuItem("Load Save (.gb/.gbc)")) {}
+			if (ImGui::MenuItem("Load ROM (.gb/.gbc) [TODO]")) {}
+			if (ImGui::MenuItem("Load Save (.gb/.gbc) [TODO]")) {}
 
 			ImGui::EndMenu();
 		}
@@ -159,8 +257,7 @@ void renderFrameIMGUI(GB* gb) {
 	ImGuiIO io = ImGui::GetIO();
 	ImGuiWindowFlags windowFlags2 = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoFocusOnAppearing;
 
-	unsigned WinTitleColor = IM_COL32(66, 61, 107, 255);
-	unsigned TraceHighlightColor = IM_COL32(153, 78, 89, 255);
+	
 
 	ImGui_ImplSDLRenderer2_NewFrame();
 	ImGui_ImplSDL2_NewFrame();
@@ -169,8 +266,8 @@ void renderFrameIMGUI(GB* gb) {
 #define REL_X(r) (r*(w/io.DisplayFramebufferScale.x))    // r=0->1
 #define REL_Y(r) (r*(h/io.DisplayFramebufferScale.y))   // r=0->1
 
-	ImGui::PushStyleColor(ImGuiCol_TitleBg, WinTitleColor);
-	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, WinTitleColor);
+	ImGui::PushStyleColor(ImGuiCol_TitleBg, Color::WinTitleColor);
+	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, Color::WinTitleColor);
 	ImGui::Begin("Registers", NULL, windowFlags2);
 	ImGui::PopStyleColor(2);
 
@@ -225,20 +322,52 @@ void renderFrameIMGUI(GB* gb) {
 
 	ImGui::End();
 
-	ImGui::PushStyleColor(ImGuiCol_TitleBg, WinTitleColor);
-	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, WinTitleColor);
-	ImGui::Begin("Window 2", NULL, windowFlags2);
+	ImGui::PushStyleColor(ImGuiCol_TitleBg, Color::WinTitleColor);
+	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, Color::WinTitleColor);
+	ImGui::Begin("Settings", NULL, windowFlags2);
 	ImGui::PopStyleColor(2);
 
 	ImGui::SetWindowSize(ImVec2(REL_X(0.5), REL_Y(0.5)));
 	ImGui::SetWindowPos(ImVec2(REL_X(0), REL_Y(0.5)));
-	ImGui::SetWindowFontScale(1.25);
-	ImGui::Text("Test Text");
+	ImGui::SetWindowFontScale(1.25);	
 
+	/* Color picking and setting for palettes */
+	if (ImGui::BeginMenu("DMG Palettes")) {
+		ImGui::EndMenu();
+	}
+
+	ImGui::ColorEdit3("Shade 0", (float*)&state->shade0_rgb, gb->emuMode == EMU_CGB ? ImGuiColorEditFlags_NoInputs : 0);
+	ImGui::ColorEdit3("Shade 1", (float*)&state->shade1_rgb, gb->emuMode == EMU_CGB ? ImGuiColorEditFlags_NoInputs : 0);
+	ImGui::ColorEdit3("Shade 2", (float*)&state->shade2_rgb, gb->emuMode == EMU_CGB ? ImGuiColorEditFlags_NoInputs : 0);
+	ImGui::ColorEdit3("Shade 3", (float*)&state->shade3_rgb, gb->emuMode == EMU_CGB ? ImGuiColorEditFlags_NoInputs : 0);
+
+	gb->settings.shade0_rgb = (((uint32_t)(state->shade0_rgb[0]*255))<<16)|(((uint32_t)(state->shade0_rgb[1]*255))<<8)|(((uint32_t)(state->shade0_rgb[2]*255)));
+
+	gb->settings.shade1_rgb = (((uint32_t)(state->shade1_rgb[0]*255))<<16)|(((uint32_t)(state->shade1_rgb[1]*255))<<8)|(((uint32_t)(state->shade1_rgb[2]*255)));
+	gb->settings.shade2_rgb = (((uint32_t)(state->shade2_rgb[0]*255))<<16)|(((uint32_t)(state->shade2_rgb[1]*255))<<8)|(((uint32_t)(state->shade2_rgb[2]*255)));
+	gb->settings.shade3_rgb = (((uint32_t)(state->shade3_rgb[0]*255))<<16)|(((uint32_t)(state->shade3_rgb[1]*255))<<8)|(((uint32_t)(state->shade3_rgb[2]*255)));
+
+	/* ----- Pausing ------ */
+	if (ImGui::BeginMenu("Emulator")) {
+		ImGui::EndMenu();
+	}
+	if (ImGui::Checkbox("Pause", &state->pause)) {
+		if (state->pause) {
+			/* Prematurely terminate current frame rendering as emulator enters pause mode,
+			 * after we exit we just return */
+			ImGui::End();
+			ImGui::SetCurrentContext(initialCtx);
+			ImGui::EndFrame();
+			pauseGBEmulator(gb);
+			return;
+		}
+		else unpauseGBEmulator(gb);
+	}
+	/* ------------------------------------- */
 	ImGui::End();
 
-	ImGui::PushStyleColor(ImGuiCol_TitleBg, WinTitleColor);
-	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, WinTitleColor);
+	ImGui::PushStyleColor(ImGuiCol_TitleBg, Color::WinTitleColor);
+	ImGui::PushStyleColor(ImGuiCol_TitleBgActive, Color::WinTitleColor);
 	ImGui::Begin("Instruction Tracer", NULL, windowFlags2);
 	ImGui::PopStyleColor(2);
 
@@ -246,43 +375,7 @@ void renderFrameIMGUI(GB* gb) {
 	ImGui::SetWindowPos(ImVec2(REL_X(0.5), REL_Y(0)));
 	ImGui::SetWindowFontScale(1.25);
 
-	if (ImGui::BeginTable("Instructions", 2, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersV)) {
-		ImGui::TableSetupColumn("Address", 0, 1);
-		ImGui::TableSetupColumn("Disassembly", 0, 2);
-		ImGui::TableHeadersRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("Address");
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Text("Disassambly");
-
-		bool cbcode = false;
-		int offset = 0; 						/* For multi byte instructions */
-
-		for (int i = -10; i < 10; i++) {
-			ImGui::TableNextRow();
-		
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("0x%04x", gb->PC+i+offset);
-
-			ImGui::TableSetColumnIndex(1);
-			uint8_t opcode = readAddr(gb, gb->PC+i+offset);
-			char disasm[30];
-			if (cbcode) disassembleCBInstruction(gb, opcode, (char*)&disasm);
-			else offset += disassembleInstruction(gb, gb->PC+i+offset, (char*)&disasm) - 1;
-
-			ImGui::Text("%s", disasm);
-
-			if (i == 0 || (i == 1 && cbcode)) {
-				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, TraceHighlightColor);
-			}
-
-			if (opcode == 0xCB && !cbcode) cbcode = true;
-			else cbcode = false;
-			
-		}
-
-		ImGui::EndTable();
-	}
+	renderInstructionTraceTable(gb);
 
 	ImGui::End();
 

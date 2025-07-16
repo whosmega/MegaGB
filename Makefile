@@ -2,9 +2,7 @@
 
 INCLUDE=include
 INCLUDE_GB=$(INCLUDE)/gb
-INCLUDE_GBA=$(INCLUDE)/gba
 SRC_GB=gb
-SRC_GBA=gba
 DEBUG=debug
 
 CC = gcc
@@ -14,7 +12,6 @@ LFLAGS = -O3 `sdl2-config --libs` -lm
 EXE = megagb
 
 BIN_GB = cartridge.o gb.o gui.o debug.o display.o cpu.o mbc.o mbc1.o mbc2.o mbc3.o mbc5.o
-BIN_GBA = gamepak.o arm7tdmi.o gba.o debugGBA.o renderer.o
 BIN_IMGUI = imgui.o imgui_tables.o imgui_draw.o imgui_widgets.o imgui_impl_sdlrenderer2.o imgui_impl_sdl2.o
 
 # test suite
@@ -22,7 +19,7 @@ BIN_IMGUI = imgui.o imgui_tables.o imgui_draw.o imgui_widgets.o imgui_impl_sdlre
 ASMFLAGS = -i $(DEBUG)/test_suite/
 
 $(EXE): $(BIN_GB) $(BIN_GBA) $(BIN_IMGUI) main.o
-	$(CPPC) $(BIN_GB) $(BIN_GBA) $(BIN_IMGUI) main.o $(LFLAGS) -o $(EXE)
+	$(CPPC) $(BIN_GB) $(BIN_IMGUI) main.o $(LFLAGS) -o $(EXE)
 # ----------------------------------------------------------------------
 cartridge.o : $(INCLUDE_GB)/cartridge.h \
 			  $(SRC_GB)/cartridge.c
@@ -37,7 +34,7 @@ gb.o : $(INCLUDE_GB)/gb.h $(INCLUDE_GB)/gui.h $(INCLUDE_GB)/cpu.h \
 	   	$(SRC_GB)/gb.c
 	$(CC) -c $(SRC_GB)/gb.c $(CFLAGS)
 
-main.o : $(INCLUDE_GB)/gb.h $(INCLUDE_GBA)/gba.h \
+main.o : $(INCLUDE_GB)/gb.h \
 		 main.c
 	$(CC) -c main.c $(CFLAGS)
 
@@ -73,27 +70,6 @@ display.o : $(INCLUDE_GB)/display.h $(INCLUDE_GB)/gui.h $(INCLUDE_GB)/gb.h $(INC
 debug.o : $(INCLUDE_GB)/debug.h \
 		 $(SRC_GB)/debug.c
 	$(CC) -c $(SRC_GB)/debug.c $(CFLAGS)
-# --------------------------------------------------------------------
-
-gamepak.o: $(INCLUDE_GBA)/gamepak.h \
-		  $(SRC_GBA)/gamepak.c
-	$(CC) -c $(SRC_GBA)/gamepak.c $(CFLAGS)
-
-arm7tdmi.o: $(INCLUDE_GBA)/gamepak.h \
-		  $(SRC_GBA)/arm7tdmi.c
-	$(CC) -c $(SRC_GBA)/arm7tdmi.c $(CFLAGS)
-
-gba.o: $(INCLUDE_GBA)/gba.h \
-		  $(SRC_GBA)/gba.c
-	$(CC) -c $(SRC_GBA)/gba.c $(CFLAGS)
-
-debugGBA.o: $(INCLUDE_GBA)/debugGBA.h \
-		  $(SRC_GBA)/debugGBA.c
-	$(CC) -c $(SRC_GBA)/debugGBA.c $(CFLAGS)
-
-renderer.o: $(INCLUDE_GBA)/renderer.h \
-		  $(SRC_GBA)/renderer.c
-	$(CC) -c $(SRC_GBA)/renderer.c $(CFLAGS)
 
 # --------------------------------------------------------------------
 imgui.o: imgui/imgui.cpp

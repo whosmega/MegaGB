@@ -222,54 +222,43 @@ static void getPixelColor_DMG(GB* gb, FIFO_Pixel pixel, uint8_t* r, uint8_t* g, 
     if (isSprite) paletteReg = pixel.colorPalette == 0 ? R_OBP0 : R_OBP1;
 
     uint8_t shadeId = (gb->IO[paletteReg] >> (pixel.colorID * 2)) & 0b00000011;
-    uint8_t shade = 0x00;
 
     switch (shadeId) {
         case 0: {
-                    /* White */
-                    shade = 0xFF;
-					/*
-					*r = 0xb6;
-					*g = 0xbe;
-					*b = 0xd3;
-					*/
+                    /* White, 0xb6bed3 */
+					uint32_t shade0 = gb->settings.shade0_rgb;
+					*r = (shade0>>16)&0xFF;
+					*g = (shade0>>8)&0xFF;
+					*b = shade0&0xFF;
+
                     break;
                 }
         case 1: {
-                    /* Light Gray */
-                    shade = 0xAA;
-					/*
-					*r = 0x11;
-					*g = 0xa3;
-					*b = 0x96;
-					*/
+                    /* Light Gray, 0x11a396 */
+					uint32_t shade1 = gb->settings.shade1_rgb;
+					*r = (shade1>>16)&0xFF;
+					*g = (shade1>>8)&0xFF;
+					*b = shade1&0xFF;
                     break;
                 }
         case 2: {
-                    /* Dark Gray */
-                    shade = 0x55;
-					/*
-					*r = 0xcf;
-					*g = 0x41;
-					*b = 0x51;
-					*/
+                    /* Dark Gray, 0xcf4151 */
+					uint32_t shade2 = gb->settings.shade2_rgb;
+					*r = (shade2>>16)&0xFF;
+					*g = (shade2>>8)&0xFF;
+					*b = shade2&0xFF;
                     break;
                 }
         case 3: {
-                    /* Black */
-                    shade = 0x00;
-					/*
-					*r = 0x3e;
-					*g = 0x13;
-					*b = 0x18;
-					*/
+                    /* Black, 0x3e1318 */
+                    uint32_t shade3 = gb->settings.shade3_rgb;
+					*r = (shade3>>16)&0xFF;
+					*g = (shade3>>8)&0xFF;
+					*b = shade3&0xFF;
                     break;
                 }
     }
 
-      *r = shade;
-      *g = shade;
-      *b = shade;
 }
 
 static void renderPixel(GB* gb) {

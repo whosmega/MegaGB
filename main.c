@@ -1,12 +1,10 @@
 #include <gb/cartridge.h>
-#include <gba/gamepak.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern void startGBEmulator(Cartridge*);
-extern void startGBAEmulator(GamePak*);
 
 static void runGB(uint8_t* allocation, size_t size) {
 	Cartridge c;
@@ -17,17 +15,6 @@ static void runGB(uint8_t* allocation, size_t size) {
     startGBEmulator(&c);
 
 	freeCartridge(&c);
-}
-
-static void runGBA(uint8_t* allocation, size_t size) {
-	GamePak gamepak;
-	bool result = initGamePak(&gamepak, allocation, size);
-
-	if (!result) exit(3);
-
-	startGBAEmulator(&gamepak);
-
-	freeGamePak(&gamepak);
 }
 
 int main(int argc, char* argv[]) {
@@ -57,26 +44,9 @@ int main(int argc, char* argv[]) {
 	}
     fclose(file);
 
-	/* Figure out emulation type (gb/gbc or gba) */
-	if (argc >= 3) {
-		char* arg = argv[2];
-
-		if ((strlen(arg) == 3) && memcmp(&arg, "-gb", 3)) {
-
-			/* GB/GBC */
-			runGB(allocation, size);
-
-		} else if ((strlen(arg) == 4) && memcmp(&arg, "-gba", 4)) {
-			/* GBA */
-			runGBA(allocation, size);
-		} else {
-			printf("Error : Invalid Argument - %s\n", arg);
-			exit(3);
-		}
-	} else {
-		/* GB/GBC */
-		runGB(allocation, size);
-	}
+	
+	/* GB/GBC */
+	runGB(allocation, size);
 
 	return 0;
 }

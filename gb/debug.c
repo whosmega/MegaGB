@@ -39,22 +39,22 @@ static int simpleInstruction(GB* gb, char* ins, char* output) {
 
 static int d16(GB* gb, char* fins, uint16_t addr, char* output) {
     sprintf(output, fins, read2Bytes(gb, addr));
-	return 2;
+	return 3;
 }
 
 static int d8(GB* gb, char* fins, uint16_t addr, char* output) {
     sprintf(output, fins, readAddr(gb, addr + 1));
-	return 1;
+	return 2;
 }
 
 static int a16(GB* gb, char* fins, uint16_t addr, char* output) {
     sprintf(output, fins, read2Bytes(gb, addr));
-	return 2;
+	return 3;
 }
 
 static int r8(GB* gb, char* fins, uint16_t addr, char* output) {
     sprintf(output, fins, (int8_t)readAddr(gb, addr + 1));
-	return 1;
+	return 2;
 }
 
 /* Disassembly instructions return instruction length in bytes */

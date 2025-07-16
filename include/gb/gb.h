@@ -99,6 +99,16 @@ typedef enum {
     R_SVBK    = 0x70
 } HREG;
 
+/* User-Configurables for the emulator */
+
+typedef struct {
+	/* Shades for DMG mode */
+	uint32_t shade0_rgb;
+	uint32_t shade1_rgb;
+	uint32_t shade2_rgb;
+	uint32_t shade3_rgb;
+} GBSettings;
+
 struct GB {
 	/* ---------------- IMGUI --------------- */
 	void* imgui_main_context; 				/* Main IMGUI Context for MENU */
@@ -117,6 +127,7 @@ struct GB {
     JOYPAD_SELECT joypadSelectedMode;
     /* -------------- Emulator ------------- */
     Cartridge* cartridge;
+	GBSettings settings;
     EMULATION_MODE emuMode;                 /* Which behaviour are we emulating, dmg, cgb, ect */
     bool run;                               /* A flag that when set to false, quits the emulator */
     bool paused;
@@ -154,6 +165,8 @@ struct GB {
                                            dispatch of the next instruction */
     bool haltMode;						/* If set to true, the CPU enters the halt
                                            procedure */
+	uint16_t dispatchedAddresses[11]; 	/* Addresses of the past 10 instructions executed + current */
+	int dispatchedAddressesStart;
     /* ------------- Memory ---------------- */
     uint8_t* vram;                      /* Stores VRAM along with all banks in blocks of 0x2000 */
     uint8_t* wram;                      /* Stores WRAM along with all banks in blocks of 0x1000 */

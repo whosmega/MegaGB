@@ -1975,10 +1975,15 @@ void dispatch(GB* gb) {
 
         byte = readByte(gb);
         gb->PC--;
+		gb->dispatchedAddresses[gb->dispatchedAddressesStart++] = gb->PC;
+		if (gb->dispatchedAddressesStart > 10) gb->dispatchedAddressesStart = 0;
         cyclesSync_4(gb);
     } else {
         /* Normal Read */
         byte = readByte_4C(gb);
+
+		gb->dispatchedAddresses[gb->dispatchedAddressesStart++] = gb->PC-1;
+		if (gb->dispatchedAddressesStart > 10) gb->dispatchedAddressesStart = 0;
     }
 
     /* Do the dispatch */

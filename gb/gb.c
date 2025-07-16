@@ -6,11 +6,6 @@
 #include <gb/mbc.h>
 #include <gb/gui.h>
 
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_pixels.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_scancode.h>
-#include <SDL2/SDL_timer.h>
 #include <stdint.h>
 #include <time.h>
 #include <string.h>
@@ -20,6 +15,7 @@
 static void initGB(GB* gb) {
     gb->cartridge = NULL;
     gb->emuMode = EMU_DMG;
+	memset(&gb->settings, 0, sizeof(GBSettings));
     gb->wram = NULL;
     gb->vram = NULL;
     gb->selectedVRAMBank = 0;
@@ -30,6 +26,8 @@ static void initGB(GB* gb) {
     gb->paused = false;
 
     gb->scheduleInterruptEnable = false;
+	gb->dispatchedAddressesStart = 0;
+	memset(&gb->dispatchedAddresses, 0, 11*sizeof(uint16_t));
     gb->haltMode = false;
     gb->scheduleHaltBug = false;
     gb->scheduleDMA = false;
@@ -185,6 +183,12 @@ static void initGBCartridge(GB* gb, Cartridge* cartridge) {
         gb->cyclesSinceLastMode = 4;		/* ^^^^^^^^ */
         gb->bgColorRAM = NULL;
         gb->spriteColorRAM = NULL;
+
+		/* GB Settings */
+		gb->settings.shade0_rgb = 0xFFFFFF;
+		gb->settings.shade1_rgb = 0xAAAAAA;
+		gb->settings.shade2_rgb = 0x555555;
+		gb->settings.shade3_rgb = 0x000000;
 
         resetGB(gb);
     }
@@ -609,10 +613,6 @@ void handleSDLEvents(GB* gb) {
                     /* Select */
                     CLEAR_BIT(gb->joypadActionBuffer, 2);
                     break;
-                case SDL_SCANCODE_SPACE:
-                    if (!gb->paused) pauseGBEmulator(gb);
-                    else unpauseGBEmulator(gb);
-                    break;
                 default: return;
             }
 
@@ -759,7 +759,7 @@ void pauseGBEmulator(GB* gb) {
     while (true) {
         handleSDLEvents(gb);
 		renderFrameIMGUI(gb);
-        if (!gb->paused) break;
+        if (!gb->paused || !gb->run) break;
     }
 }
 
